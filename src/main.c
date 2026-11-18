@@ -452,6 +452,7 @@ static const int bossWeak[3] = { 0, 1, 2 };
 
 static int chapter = 0, isMobBattle = 0, bossHitFlash = 0;
 static int pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 120;
+static int pLevel = 1, pXp = 0, pNextXp = 60, pBaseAtk = 5;
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
 static int relicDmg = 0, relicVamp = 0, relicShield = 0;
 static int inTitle = 1, inOverworld = 0, inStory = 0, inFFMenu = 0, inDefense = 0, inAttackResolve = 0, inRelic = 0, gameOver = 0, victory = 0;
@@ -494,68 +495,158 @@ static void update_draw_sparks(unsigned int *fb) {
     }
 }
 
-/* PARTE 1: Mapa enorme Modo Aventura (64x48) */
-#define MW 64
-#define MH 48
-static unsigned char worldMap[MH][MW]; /* 0=pasto, 1=bosque, 2=montana, 3=agua, 4=reino, 5=dungeon, 6=puente */
-static int mapX = 10, mapY = 10, prevX1 = 9, prevY1 = 10, prevX2 = 8, prevY2 = 10;
+/* PARTE 1: Super-Mapa Continental estilo Skyrim (256x192 tiles = 49,152 casillas) */
+#define MW 256
+#define MH 192
+static unsigned char worldMap[MH][MW]; /* 0=pasto, 1=bosque, 2=montana, 3=agua, 4=reino, 5=dungeon, 6=puente, 7=camino, 8=muralla, 9=santuario */
+static int mapX = 28, mapY = 84, prevX1 = 27, prevY1 = 84, prevX2 = 26, prevY2 = 84;
 static int bardFlip = 0, band1Flip = 0, band2Flip = 0;
 static int bossDefeated[3] = { 0, 0, 0 };
-static const int dngX[3] = { 24, 44, 52 };
-static const int dngY[3] = { 12, 30, 10 };
-static const int npcX[3] = { 12, 20, 38 };
-static const int npcY[3] = { 11, 18, 26 };
-static const char *npcMsg[3] = {
-    "ANCIANO: El Golem al Este teme al ROCK! (+HP/MP)",
+static int shrineClaimed[2] = { 0, 0 };
+static const int dngX[3] = { 88, 178, 228 };
+static const int dngY[3] = { 36, 138, 28 };
+static const int shrineX[2] = { 132, 206 };
+static const int shrineY[2] = { 24, 168 };
+static const int npcX[8] = { 30, 80, 114, 114, 114, 154, 190, 210 };
+static const int npcY[8] = { 82, 60, 43,  91,  145, 112, 72,  42 };
+static const char *npcMsg[8] = {
+    "CRONISTA: Sube nivel en el Valle antes del Golem!",
+    "HERRERO DE BRUMA: El Golem al Norte teme al ROCK!",
+    "CENTINELA: Al Norte espera la Cordillera Ceniza.",
     "TROVADOR: El Automata tras el puente teme al SYNTH!",
-    "SABIO: Solo lo SINFONICO vence al Dragon Sombrio!"
+    "JUGLAR DEL SUR: Hay un Santuario en el Delta SE!",
+    "TABERNERO: Descansa aqui. (+HP/MP) Sigue al SE!",
+    "EXPLORADOR: Los Espectros golpean muy duro!",
+    "SABIO DEL ABISMO: Solo lo SINFONICO vence al Dragon!"
 };
 static char dlgText[64] = "";
 static int dlgTimer = 0;
 
-static void init_world(void) {
-    for (int y = 0; y < MH; y++) {
-        for (int x = 0; x < MW; x++) {
-            if (x == 0 || y == 0 || x == MW - 1 || y == MH - 1) worldMap[y][x] = 2;
-            else if (x >= 30 && x <= 31) {
-                worldMap[y][x] = (y == 18 || y == 19) ? 6 : 3; /* Rio con puente de madera */
-            } else {
-                /* Natural clustered forest groves & mountains (no straight rows!) */
-                int h = (x * 37 + y * 53 + (x * y) * 7) % 97;
-                if (h < 14 && (abs(y - 18) > 2)) worldMap[y][x] = 1; /* Bosque */
-                else if (h > 90 && (abs(y - 18) > 2)) worldMap[y][x] = 2; /* Montana */
-                else worldMap[y][x] = 0;
-            }
-        }
+static void carve_road(int x0, int y0, int x1, int y1) {
+    int cx = x0, cy = y0;
+    while (cx != x1) {
+        if (worldMap[cy][cx] != 6 && worldMap[cy][cx] != 5) worldMap[cy][cx] = 7;
+        if (cy + 1 < MH - 1 && worldMap[cy + 1][cx] != 6 && worldMap[cy + 1][cx] != 5) worldMap[cy + 1][cx] = 7;
+        cx += (x1 > cx) ? 1 : -1;
     }
-    /* Caminos de tierra (7) conectando Reino -> Puente -> Dungeons */
-    for (int x = 10; x <= 44; x++) {
-        if (worldMap[18][x] != 6) worldMap[18][x] = 7;
-        if (worldMap[19][x] != 6) worldMap[19][x] = 7;
+    while (cy != y1) {
+        if (worldMap[cy][cx] != 6 && worldMap[cy][cx] != 5) worldMap[cy][cx] = 7;
+        if (cx + 1 < MW - 1 && worldMap[cy][cx + 1] != 6 && worldMap[cy][cx + 1] != 5) worldMap[cy][cx + 1] = 7;
+        cy += (y1 > cy) ? 1 : -1;
     }
-    for (int y = 12; y <= 18; y++) worldMap[y][24] = 7;
-    for (int y = 18; y <= 30; y++) worldMap[y][44] = 7;
-    for (int x = 44; x <= 52; x++) worldMap[12][x] = 7;
-    for (int y = 10; y <= 18; y++) worldMap[y][52] = 7;
+}
 
-    /* Reino amurallado inicial (8=muralla, 4=patio, 7=puerta Este) */
-    for (int y = 7; y <= 14; y++) {
-        for (int x = 7; x <= 14; x++) {
-            if (x == 7 || x == 14 || y == 7 || y == 14) worldMap[y][x] = 8;
+static void build_walled_town(int x0, int y0, int x1, int y1) {
+    for (int y = y0; y <= y1; y++) {
+        for (int x = x0; x <= x1; x++) {
+            if (x == x0 || x == x1 || y == y0 || y == y1) worldMap[y][x] = 8;
             else worldMap[y][x] = 4;
         }
     }
-    worldMap[11][14] = 7; /* Puerta del castillo hacia el Este */
-    for (int x = 14; x <= 24; x++) worldMap[11][x] = 7;
+    int mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    worldMap[my][x1] = 7; worldMap[my][x0] = 7;
+    worldMap[y0][mx] = 7; worldMap[y1][mx] = 7;
+}
+
+static void init_world(void) {
+    for (int y = 0; y < MH; y++) {
+        for (int x = 0; x < MW; x++) {
+            if (x <= 1 || y <= 1 || x >= MW - 2 || y >= MH - 2) {
+                worldMap[y][x] = 2; /* Cordillera fronteriza */
+            } else {
+                /* Rio Plateado serpenteando de Norte a Sur alrededor de x=118..122 */
+                int riverX = 119 + (int)(sinf((float)y * 0.09f) * 5.0f);
+                if (x >= riverX && x <= riverX + 2) {
+                    worldMap[y][x] = (y == 44 || y == 45 || y == 92 || y == 93 || y == 146 || y == 147) ? 6 : 3;
+                } else {
+                    int h = (x * 37 + y * 53 + (x * y) * 7) % 101;
+                    /* Cordillera Ceniza en el Noreste (x>165, y<85) tiene muchas mas montanas */
+                    if (x > 165 && y < 85) {
+                        if (h < 22) worldMap[y][x] = 2;
+                        else if (h < 38) worldMap[y][x] = 1;
+                        else worldMap[y][x] = 0;
+                    } else {
+                        if (h < 18) worldMap[y][x] = 1;
+                        else if (h > 93) worldMap[y][x] = 2;
+                        else worldMap[y][x] = 0;
+                    }
+                }
+            }
+        }
+    }
+    /* Lagos escenicos */
+    for (int dy = -6; dy <= 6; dy++) for (int dx = -8; dx <= 8; dx++) {
+        if (dx * dx + dy * dy <= 42) worldMap[142 + dy][66 + dx] = 3;
+        if (dx * dx + dy * dy <= 36) worldMap[120 + dy][214 + dx] = 3;
+    }
+
+    /* 3 Asentamientos Amurallados: Solaria, Aldea de Bruma, Taberna del Trovador */
+    build_walled_town(18, 74, 38, 94);   /* Ciudadela de Solaria */
+    build_walled_town(76, 56, 86, 64);   /* Aldea de Bruma */
+    build_walled_town(150, 108, 160, 116); /* Taberna del Trovador */
+
+    /* Red de carreteras reales conectando Solaria -> Aldeas -> 3 Puentes -> 3 Dungeons */
+    carve_road(38, 84, 81, 64);   /* Solaria -> Aldea de Bruma */
+    carve_road(81, 56, 88, 36);   /* Bruma -> Dungeon 1 (Forja de Hierro) */
+    carve_road(38, 84, 115, 92);  /* Solaria -> Puente Central */
+    carve_road(115, 44, 115, 92); /* Camino ribera Oeste hacia Puente Norte */
+    carve_road(115, 92, 115, 146);/* Camino ribera Oeste hacia Puente Sur */
+    carve_road(88, 36, 115, 44);  /* Forja -> Puente Norte */
+
+    /* Asegurar que los 3 puentes crucen limpiamente el Rio Plateado */
+    int bridgeYs[3] = { 44, 92, 146 };
+    for (int b = 0; b < 3; b++) {
+        for (int by = bridgeYs[b]; by <= bridgeYs[b] + 1; by++) {
+            for (int bx = 112; bx <= 128; bx++) {
+                if (worldMap[by][bx] == 3 || worldMap[by][bx] == 6) worldMap[by][bx] = 6;
+                else worldMap[by][bx] = 7;
+            }
+        }
+    }
+
+    carve_road(128, 92, 150, 112);  /* Puente Central -> Taberna */
+    carve_road(160, 112, 178, 138); /* Taberna -> Dungeon 2 (Observatorio Cristal) */
+    carve_road(128, 44, 190, 72);   /* Puente Norte -> Cordillera Ceniza */
+    carve_road(190, 72, 228, 28);   /* Cordillera Ceniza -> Dungeon 3 (Ciudadela del Abismo) */
+    carve_road(128, 146, 178, 138); /* Puente Sur -> Observatorio */
 
     for (int i = 0; i < 3; i++) {
         worldMap[dngY[i]][dngX[i]] = 5;
-        worldMap[npcY[i]][npcX[i]] = 0;
         bossDefeated[i] = 0;
     }
-    mapX = 10; mapY = 11; prevX1 = 9; prevY1 = 11; prevX2 = 8; prevY2 = 11;
+    for (int i = 0; i < 2; i++) {
+        worldMap[shrineY[i]][shrineX[i]] = 9;
+        shrineClaimed[i] = 0;
+    }
+    for (int i = 0; i < 8; i++) {
+        if (worldMap[npcY[i]][npcX[i]] == 2 || worldMap[npcY[i]][npcX[i]] == 3 || worldMap[npcY[i]][npcX[i]] == 8) {
+            worldMap[npcY[i]][npcX[i]] = 0;
+        }
+    }
+    mapX = 28; mapY = 84; prevX1 = 27; prevY1 = 84; prevX2 = 26; prevY2 = 84;
     bardFlip = 0; band1Flip = 0; band2Flip = 0;
     dlgTimer = 0;
+}
+
+static void gain_xp(int amount) {
+    pXp += amount;
+    int leveled = 0;
+    while (pXp >= pNextXp) {
+        pXp -= pNextXp;
+        pLevel++;
+        pNextXp = (int)((float)pNextXp * 1.45f);
+        pMaxHp += 20;
+        pMaxMp += 8;
+        pBaseAtk += 2;
+        pHp = pMaxHp;
+        pMp = pMaxMp;
+        leveled = 1;
+    }
+    if (leveled) {
+        snprintf(dlgText, sizeof(dlgText), "SUBISTE A NIVEL %d! (+20HP +8MP +2ATQ)", pLevel);
+        dlgTimer = 210;
+        play_sfx(880.0f, 1800);
+    }
 }
 
 static void load_best(void) { FILE *f = fopen("cb_save.dat", "rb"); if (f) { int v=0; if (fread(&v,4,1,f)==1 && v>0) best=v; fclose(f); } }
@@ -563,8 +654,12 @@ static void save_best(void) { if (score > best) { best = score; FILE *f = fopen(
 
 static void start_mob_battle(void) {
     isMobBattle = 1;
-    chapter = xr() % 3;
-    bHp = bMaxHp = 40;
+    /* Region-based difficulty tier: West=Slime(0), East-South=Goblin(1), Ash-NorthEast=Wraith(2) */
+    if (mapX < 118) chapter = 0;
+    else if (mapY >= 85) chapter = 1;
+    else chapter = 2;
+    static const int mobHpTbl[3] = { 55, 115, 190 };
+    bHp = bMaxHp = mobHpTbl[chapter];
     combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
     bardX = 240.0f; bardY = 195.0f;
     memset(notes, 0, sizeof(notes));
@@ -575,7 +670,8 @@ static void start_mob_battle(void) {
 static void start_chapter(int ch) {
     isMobBattle = 0;
     chapter = ch;
-    bHp = bMaxHp = 130 + ch * 65;
+    static const int bossHpTbl[3] = { 240, 420, 680 };
+    bHp = bMaxHp = bossHpTbl[ch];
     combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
     bardX = 240.0f; bardY = 195.0f;
     memset(notes, 0, sizeof(notes));
@@ -584,11 +680,12 @@ static void start_chapter(int ch) {
 }
 
 static void start_game(void) {
+    pLevel = 1; pXp = 0; pNextXp = 60; pBaseAtk = 5;
     pHp = pMaxHp = 100; pMp = pMaxMp = 50; score = 0;
     relicDmg = 0; relicVamp = 0; relicShield = 0;
     init_world();
     inTitle = 0; inOverworld = 1; inStory = 0; inFFMenu = 0; inDefense = 0; inAttackResolve = 0; inRelic = 0; gameOver = 0; victory = 0; pendingDmg = 0;
-    snprintf(dlgText, sizeof(dlgText), "Explora el Reino con tu banda! Habla con los NPCs.");
+    snprintf(dlgText, sizeof(dlgText), "Explora Aethel! Sube nivel antes de retar a los Bosses.");
     dlgTimer = 180;
     play_sfx(660.0f, 2000);
 }
@@ -671,17 +768,26 @@ int main(void) {
                             break;
                         }
                     }
+                    for (int s = 0; s < 2; s++) {
+                        if (!shrineClaimed[s] && mapX == shrineX[s] && mapY == shrineY[s]) {
+                            shrineClaimed[s] = 1;
+                            pMaxHp += 25; pHp = pMaxHp; pBaseAtk += 3;
+                            snprintf(dlgText, sizeof(dlgText), "SANTUARIO ANTIGUO! +25 MaxHP y +3 ATQ!");
+                            dlgTimer = 210;
+                            play_sfx(920.0f, 1800);
+                        }
+                    }
                     if (inOverworld && worldMap[mapY][mapX] == 1 && (xr() % 7) == 0) {
                         start_mob_battle();
                     }
                 }
             }
             if (pressed & PSP_CTRL_CROSS) {
-                for (int i = 0; i < 3; i++) {
+                for (int i = 0; i < 8; i++) {
                     if (abs(mapX - npcX[i]) + abs(mapY - npcY[i]) <= 1) {
                         pHp = pMaxHp; pMp = pMaxMp;
                         snprintf(dlgText, sizeof(dlgText), "%s", npcMsg[i]);
-                        dlgTimer = 200;
+                        dlgTimer = 220;
                         play_sfx(780.0f, 900);
                     }
                 }
@@ -700,12 +806,16 @@ int main(void) {
                 play_sfx(880.0f, 1500);
                 inRelic = 0;
                 bossDefeated[chapter] = 1;
+                static const int bossXpTbl[3] = { 150, 320, 600 };
+                gain_xp(bossXpTbl[chapter]);
                 if (bossDefeated[0] && bossDefeated[1] && bossDefeated[2]) {
                     victory = 1; save_best();
                 } else {
                     inOverworld = 1;
-                    snprintf(dlgText, sizeof(dlgText), "Reliquia obtenida! Busca el siguiente Dungeon.");
-                    dlgTimer = 180;
+                    if (dlgTimer <= 0) {
+                        snprintf(dlgText, sizeof(dlgText), "Reliquia obtenida! (+%d XP) Busca el siguiente Dungeon.", bossXpTbl[chapter]);
+                        dlgTimer = 180;
+                    }
                 }
             }
         } else if (inFFMenu) {
@@ -768,7 +878,9 @@ int main(void) {
                 if (projY[p] > 256) { projAlive[p] = 0; continue; }
                 if (fabsf(projX[p] - bardX) < 11 && fabsf(projY[p] - bardY) < 11) {
                     projAlive[p] = 0;
-                    int baseEdmg = isMobBattle ? 18 : (24 + chapter * 6);
+                    static const int mobEdmg[3]  = { 16, 24, 32 };
+                    static const int bossEdmg[3] = { 28, 36, 46 };
+                    int baseEdmg = isMobBattle ? mobEdmg[chapter] : bossEdmg[chapter];
                     int edmg = relicShield ? ((baseEdmg * 6) / 10) : baseEdmg;
                     pHp -= edmg; play_sfx(140.0f, 1200);
                     snprintf(judge, sizeof(judge), "-%d HP!", edmg);
@@ -803,10 +915,13 @@ int main(void) {
                 if (bHp <= 0) {
                     bHp = 0;
                     if (isMobBattle) {
-                        score += 150;
+                        static const int mobXpTbl[3] = { 25, 55, 110 };
+                        int xpGain = mobXpTbl[chapter];
+                        score += 150 + chapter * 100;
                         inOverworld = 1;
-                        snprintf(dlgText, sizeof(dlgText), "Enemigo vencido! +150 PTS");
-                        dlgTimer = 120;
+                        snprintf(dlgText, sizeof(dlgText), "Enemigo vencido! +%d XP", xpGain);
+                        dlgTimer = 140;
+                        gain_xp(xpGain);
                     } else {
                         inRelic = 1;
                     }
@@ -824,7 +939,9 @@ int main(void) {
             if (missFlash > 0) missFlash--;
             for (int l = 0; l < 4; l++) if (laneFlash[l] > 0) laneFlash[l]--;
 
-            float spd = isMobBattle ? 0.95f : (1.20f + chapter * 0.28f);
+            static const float mobNoteSpd[3]  = { 0.95f, 1.20f, 1.45f };
+            static const float bossNoteSpd[3] = { 1.25f, 1.52f, 1.80f };
+            float spd = isMobBattle ? mobNoteSpd[chapter] : bossNoteSpd[chapter];
             fretScroll += spd;
             if (fretScroll >= 28.0f) fretScroll -= 28.0f;
 
@@ -856,7 +973,7 @@ int main(void) {
                     notes[hit].active = 0; combo++;
                     laneFlash[l] = 14;
                     int isPerf = (bestD < 14.0f);
-                    int base = (isPerf ? 11 : 7) + relicDmg + (combo / 4);
+                    int base = (isPerf ? 9 : 6) + pBaseAtk + relicDmg + (combo / 4);
                     if (curStyle == bossWeak[chapter]) base *= 2;
                     pendingDmg += base;
                     score += base * 10;
@@ -887,7 +1004,9 @@ int main(void) {
                     int ml = notes[i].lane;
                     notes[i].active = 0; combo = 0;
                     pendingDmg -= 10; if (pendingDmg < 0) pendingDmg = 0;
-                    int baseMiss = isMobBattle ? 8 : (10 + chapter * 3);
+                    static const int mobMissTbl[3]  = { 7, 10, 14 };
+                    static const int bossMissTbl[3] = { 12, 15, 18 };
+                    int baseMiss = isMobBattle ? mobMissTbl[chapter] : bossMissTbl[chapter];
                     int edmg = relicShield ? ((baseMiss * 6) / 10) : baseMiss;
                     pHp -= edmg;
                     missFlash = 14;
@@ -944,6 +1063,13 @@ int main(void) {
                                     fill_ellipse_alpha(fb, sx + 12, sy + 13, 13, 11, RGB(170, 60, 255), pulse);
                                     draw_spr24(fb, spr_dungeon, sx, sy);
                                 }
+                            } else if (t == 9) {
+                                int sIdx = (wx == shrineX[1] && wy == shrineY[1]) ? 1 : 0;
+                                if (!shrineClaimed[sIdx]) {
+                                    int pulse = 60 + (int)(sinf((float)animFrame * 0.12f) * 35.0f);
+                                    fill_ellipse_alpha(fb, sx + 12, sy + 12, 12, 10, RGB(70, 225, 255), pulse);
+                                }
+                                draw_spr24(fb, spr_chest, sx, sy);
                             }
                         }
                     }
@@ -961,14 +1087,14 @@ int main(void) {
                     }
                 }
             }
-            /* NPCs dynamically turn to look towards your Bard, with soft drop shadows */
-            for (int i = 0; i < 3; i++) {
+            /* 8 NPCs across the 6 regions dynamically turning to look towards your Bard */
+            for (int i = 0; i < 8; i++) {
                 int sx = (npcX[i] - ox) * 24, sy = (npcY[i] - oy) * 24 - 8;
                 if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
                     int npcFlip = (mapX < npcX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i) & 1);
                     fill_ellipse_alpha(fb, sx + 12, sy + 21, 8, 3, RGB(0, 0, 0), 120);
-                    draw_spr24_dir(fb, (i == 1) ? spr_troubadour : spr_elder, sx, sy - bob, npcFlip);
+                    draw_spr24_dir(fb, (i & 1) ? spr_troubadour : spr_elder, sx, sy - bob, npcFlip);
                     draw_text(fb, sx + 9, sy - 8 - bob, "!", RGB(255, 235, 60));
                 }
             }
@@ -981,26 +1107,35 @@ int main(void) {
             draw_spr24_dir(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8 - (bBob ^ 1), band1Flip);
             draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8 - bBob, bardFlip);
 
-            /* Top Adventure HUD Window with visual HP & MP bars */
+            /* Top Adventure HUD Window with Level, XP, HP & MP bars + Region Name */
             draw_ff_window(fb, 4, 3, 472, 22);
-            draw_text(fb, 12, 10, "REINO AETHEL", RGB(255, 225, 90));
-            draw_text(fb, 94, 10, "HP", RGB(255, 130, 130));
-            fill_rect(fb, 110, 10, 56, 7, RGB(40, 20, 25));
-            fill_rect(fb, 110, 10, (pHp * 56) / pMaxHp, 7, RGB(70, 235, 100));
-            draw_border(fb, 110, 10, 56, 7, RGB(220, 235, 255));
-            draw_text(fb, 174, 10, "MP", RGB(130, 220, 255));
-            fill_rect(fb, 190, 10, 44, 7, RGB(20, 25, 50));
-            fill_rect(fb, 190, 10, (pMp * 44) / pMaxMp, 7, RGB(50, 200, 255));
-            draw_border(fb, 190, 10, 44, 7, RGB(220, 235, 255));
-            sprintf(buf, "BOSSES:%d/3 | %s | %d,%d",
-                    bossDefeated[0]+bossDefeated[1]+bossDefeated[2], styleNames[curStyle], mapX, mapY);
-            draw_text(fb, 244, 10, buf, RGB(255, 255, 255));
+            sprintf(buf, "NV.%d", pLevel);
+            draw_text(fb, 10, 10, buf, RGB(255, 225, 90));
+            draw_text(fb, 42, 10, "HP", RGB(255, 130, 130));
+            fill_rect(fb, 58, 10, 50, 7, RGB(40, 20, 25));
+            fill_rect(fb, 58, 10, (pHp * 50) / pMaxHp, 7, RGB(70, 235, 100));
+            draw_border(fb, 58, 10, 50, 7, RGB(220, 235, 255));
+            draw_text(fb, 114, 10, "MP", RGB(130, 220, 255));
+            fill_rect(fb, 130, 10, 36, 7, RGB(20, 25, 50));
+            fill_rect(fb, 130, 10, (pMp * 36) / pMaxMp, 7, RGB(50, 200, 255));
+            draw_border(fb, 130, 10, 36, 7, RGB(220, 235, 255));
+            draw_text(fb, 172, 10, "XP", RGB(255, 215, 90));
+            fill_rect(fb, 188, 10, 36, 7, RGB(35, 28, 14));
+            fill_rect(fb, 188, 10, (pXp * 36) / (pNextXp > 0 ? pNextXp : 1), 7, RGB(255, 205, 65));
+            draw_border(fb, 188, 10, 36, 7, RGB(220, 235, 255));
 
-            /* Top-Right Corner Mini-Map (64x48) */
+            const char *reg = "VALLE ESMERALDA";
+            if (mapX >= 18 && mapX <= 38 && mapY >= 74 && mapY <= 94) reg = "SOLARIA";
+            else if (mapX >= 165 && mapY < 85) reg = "CORDILLERA CENIZA";
+            else if (mapX >= 118) reg = "BOSQUE ARCANO";
+            sprintf(buf, "%s | BOSS:%d/3 | %d,%d", reg, bossDefeated[0]+bossDefeated[1]+bossDefeated[2], mapX, mapY);
+            draw_text(fb, 232, 10, buf, RGB(255, 255, 255));
+
+            /* Top-Right Continental Mini-Map (64x48 = 4x4 downsampled Skyrim-scale 256x192 world) */
             draw_ff_window(fb, 404, 28, 72, 56);
-            for (int my = 0; my < MH; my++) {
-                for (int mx = 0; mx < MW; mx++) {
-                    unsigned char mt = worldMap[my][mx];
+            for (int my = 0; my < 48; my++) {
+                for (int mx = 0; mx < 64; mx++) {
+                    unsigned char mt = worldMap[my * 4 + 1][mx * 4 + 1];
                     unsigned int mc = RGB(48, 128, 56);
                     if (mt == 1) mc = RGB(24, 82, 34);
                     else if (mt == 2) mc = RGB(115, 115, 125);
@@ -1008,11 +1143,16 @@ int main(void) {
                     else if (mt == 4 || mt == 8) mc = RGB(215, 185, 85);
                     else if (mt == 6) mc = RGB(180, 115, 55);
                     else if (mt == 7) mc = RGB(165, 130, 85);
-                    else if (mt == 5) mc = RGB(205, 70, 255);
                     put_px(fb, 408 + mx, 32 + my, mc);
                 }
             }
-            if ((animFrame / 15) & 1) fill_rect(fb, 408 + mapX - 1, 32 + mapY - 1, 3, 3, RGB(255, 255, 255));
+            for (int i = 0; i < 3; i++) {
+                fill_rect(fb, 408 + dngX[i] / 4 - 1, 32 + dngY[i] / 4 - 1, 3, 3, bossDefeated[i] ? RGB(90, 240, 120) : RGB(215, 65, 255));
+            }
+            for (int s = 0; s < 2; s++) if (!shrineClaimed[s]) {
+                fill_rect(fb, 408 + shrineX[s] / 4, 32 + shrineY[s] / 4, 2, 2, RGB(80, 235, 255));
+            }
+            if ((animFrame / 15) & 1) fill_rect(fb, 408 + mapX / 4 - 1, 32 + mapY / 4 - 1, 3, 3, RGB(255, 255, 255));
 
             if (dlgTimer > 0) {
                 draw_ff_window(fb, 10, 228, 460, 38);
@@ -1119,7 +1259,8 @@ int main(void) {
                 fill_rect(fb, 14, 12, 26, 28, RGB(14, 18, 48));
                 draw_spr24(fb, spr_bard, 15, 14);
                 draw_border(fb, 14, 12, 26, 28, RGB(240, 200, 80));
-                draw_text(fb, 46, 11, "BANDA DEL BARDO", RGB(255, 225, 85));
+                sprintf(buf, "BANDA DEL BARDO  NV.%d", pLevel);
+                draw_text(fb, 46, 11, buf, RGB(255, 225, 85));
                 draw_text(fb, 46, 23, "HP", RGB(120, 255, 140));
                 fill_rect(fb, 62, 23, 80, 7, RGB(20, 35, 25));
                 fill_rect(fb, 62, 23, (pHp * 80) / pMaxHp, 7, RGB(50, 225, 100));
