@@ -772,6 +772,49 @@ int main(void) {
         }
         for (int i = 0; i < MAX_POPS; i++) if (pops[i].timer > 0) pops[i].timer--;
 
+        /* Fast & Dangerous Enemy AI (~2x per second, smart 2-axis chase) */
+        if (frameCnt % 27 == 0) {
+            int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
+            int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
+            unsigned char *curMap = player.inDungeon ? dungeon : world;
+            Mob *curMobs = player.inDungeon ? dungMobs : mobs;
+            for (int i = 0; i < MAX_MOBS; i++) {
+                if (!curMobs[i].alive) continue;
+                int dx = player.x - curMobs[i].x;
+                int dy = player.y - curMobs[i].y;
+                int d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+                int aggro = (curMobs[i].type == MOB_SKELETON) ? 12 : 8;
+
+                if (d == 1 && player.iframes <= 0) {
+                    int edmg = (curMobs[i].type == MOB_SKELETON) ? (8 + player.dungeonFloor * 2) : 6;
+                    player.hp = clampf(player.hp - (float)edmg, 0.0f, (float)maxHp());
+                    player.iframes = 28;
+                    audio_play_sfx(curMobs[i].type == MOB_SKELETON ? SFX_SKEL_ATK : SFX_HURT);
+                    ui.damageFlash = 8; ui.shakeTimer = 5;
+                    char db[16];
+                    snprintf(db, sizeof(db), "-%d HP", edmg);
+                    spawn_pop(player.x, player.y, db, 0xFF4444FF);
+                } else if (d > 1 && d <= aggro) {
+                    int sx = (dx > 0) ? 1 : ((dx < 0) ? -1 : 0);
+                    int sy = (dy > 0) ? 1 : ((dy < 0) ? -1 : 0);
+                    int moved = 0;
+                    int tryXFirst = (dx < 0 ? -dx : dx) >= (dy < 0 ? -dy : dy);
+                    for (int pass = 0; pass < 2 && !moved; pass++) {
+                        int nx = curMobs[i].x + ((pass == 0 ? tryXFirst : !tryXFirst) ? sx : 0);
+                        int ny = curMobs[i].y + ((pass == 0 ? !tryXFirst : tryXFirst) ? sy : 0);
+                        if ((nx != curMobs[i].x || ny != curMobs[i].y) &&
+                            nx > 1 && ny > 1 && nx < mapW - 1 && ny < mapH - 1 &&
+                            is_walkable(curMap[ny * mapW + nx]) && curMap[ny * mapW + nx] != T_WATER &&
+                            !(nx == player.x && ny == player.y) && mob_at(nx, ny) < 0) {
+                            curMobs[i].x = nx;
+                            curMobs[i].y = ny;
+                            moved = 1;
+                        }
+                    }
+                }
+            }
+        }
+
         /* 60 FPS -> 1 game tick per second */
         frameCnt++;
         if (frameCnt >= 60) {
@@ -807,36 +850,6 @@ int main(void) {
             if (player.hp <= 0.0f) {
                 player.hp = (float)mhp; player.hunger = 80.0f; player.thirst = 80.0f; player.stamina = 100.0f;
                 player.inDungeon = 0; player.x = 32; player.y = 32; set_msg("Desmayo!");
-            }
-
-            if (gameTime.ticks % 2 == 0) {
-                int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
-                int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
-                unsigned char *curMap = player.inDungeon ? dungeon : world;
-                Mob *curMobs = player.inDungeon ? dungMobs : mobs;
-                for (int i = 0; i < MAX_MOBS; i++) {
-                    if (!curMobs[i].alive) continue;
-                    int d = (curMobs[i].x > player.x ? curMobs[i].x - player.x : player.x - curMobs[i].x) +
-                            (curMobs[i].y > player.y ? curMobs[i].y - player.y : player.y - curMobs[i].y);
-                    if (d == 1 && player.iframes <= 0) {
-                        int edmg = (curMobs[i].type == MOB_SKELETON) ? (8 + player.dungeonFloor * 2) : 6;
-                        player.hp = clampf(player.hp - (float)edmg, 0.0f, (float)maxHp());
-                        player.iframes = 30;
-                        audio_play_sfx(curMobs[i].type == MOB_SKELETON ? SFX_SKEL_ATK : SFX_HURT);
-                        ui.damageFlash = 8; ui.shakeTimer = 5;
-                        char db[16];
-                        snprintf(db, sizeof(db), "-%d HP", edmg);
-                        spawn_pop(player.x, player.y, db, 0xFF4444FF);
-                    } else if (d < 8 && rnd() < 0.65f) {
-                        int mx = curMobs[i].x + (player.x > curMobs[i].x ? 1 : (player.x < curMobs[i].x ? -1 : 0));
-                        int my = curMobs[i].y + (player.y > curMobs[i].y ? 1 : (player.y < curMobs[i].y ? -1 : 0));
-                        if (rnd() < 0.5f) my = curMobs[i].y; else mx = curMobs[i].x;
-                        if (mx > 1 && my > 1 && mx < mapW - 1 && my < mapH - 1 &&
-                            is_walkable(curMap[my * mapW + mx]) && !(mx == player.x && my == player.y) && mob_at(mx, my) < 0) {
-                            curMobs[i].x = mx; curMobs[i].y = my;
-                        }
-                    }
-                }
             }
         }
 
