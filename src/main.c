@@ -539,6 +539,7 @@ int main(void) {
             if (bardX < 140) bardX = 140; if (bardX > 340) bardX = 340;
             if (bardY < 130) bardY = 130; if (bardY > 245) bardY = 245;
 
+            if (judgeT > 0) judgeT--;
             phaseTimer++;
             int pRate = isMobBattle ? 52 : (42 - chapter * 7);
             if ((phaseTimer % pRate) == 0) {
@@ -556,9 +557,11 @@ int main(void) {
                 if (projY[p] > 256) { projAlive[p] = 0; continue; }
                 if (fabsf(projX[p] - bardX) < 11 && fabsf(projY[p] - bardY) < 11) {
                     projAlive[p] = 0;
-                    int baseEdmg = isMobBattle ? 4 : (5 + chapter);
-                    int edmg = relicShield ? (baseEdmg / 2 + 1) : baseEdmg;
+                    int baseEdmg = isMobBattle ? 18 : (24 + chapter * 6);
+                    int edmg = relicShield ? ((baseEdmg * 6) / 10) : baseEdmg;
                     pHp -= edmg; play_sfx(140.0f, 1200);
+                    snprintf(judge, sizeof(judge), "-%d HP!", edmg);
+                    judgeT = 26;
                     if (pHp <= 0) { pHp = 0; gameOver = 1; save_best(); }
                 }
             }
@@ -569,6 +572,7 @@ int main(void) {
             }
         } else if (inAttackResolve) {
             /* Resolve accumulated Guitar Hero combo damage with sonic beam + impact + floating number! */
+            if (judgeT > 0) judgeT--;
             phaseTimer++;
             if (phaseTimer == 18) {
                 if (pendingDmg > 0) {
@@ -611,6 +615,7 @@ int main(void) {
             fretScroll += spd;
             if (fretScroll >= 28.0f) fretScroll -= 28.0f;
 
+            if (judgeT > 0) judgeT--;
             phaseTimer++;
             if (phaseTimer >= 420) {
                 inAttackResolve = 1;
@@ -927,15 +932,16 @@ int main(void) {
                     fill_rect(fb, 266, 117, ((240 - phaseTimer) * 72) / 240, 7, RGB(255, 185, 50));
                     draw_border(fb, 266, 117, 72, 7, RGB(255, 255, 255));
 
-                    /* Inner Runic Grid Arena */
-                    fill_rect(fb, 138, 130, 204, 130, RGB(14, 11, 28));
+                    /* Inner Runic Grid Arena (flashes crimson when hit!) */
+                    fill_rect(fb, 138, 130, 204, 130, (judgeT > 18) ? RGB(72, 14, 24) : RGB(14, 11, 28));
                     for (int gx = 158; gx < 340; gx += 22) fill_rect(fb, gx, 131, 1, 128, RGB(34, 28, 64));
                     for (int gy = 148; gy < 258; gy += 18) fill_rect(fb, 139, gy, 202, 1, RGB(34, 28, 64));
-                    draw_border(fb, 138, 130, 204, 130, RGB(140, 110, 225));
+                    draw_border(fb, 138, 130, 204, 130, (judgeT > 18) ? RGB(255, 80, 90) : RGB(140, 110, 225));
 
                     /* Glowing Cyan Aegis Shield Ring around Bard */
-                    draw_ellipse_ring(fb, (int)bardX, (int)bardY, 15, 14, RGB(70, 235, 255));
+                    draw_ellipse_ring(fb, (int)bardX, (int)bardY, 15, 14, (judgeT > 16) ? RGB(255, 80, 90) : RGB(70, 235, 255));
                     draw_spr24(fb, spr_bard, (int)bardX - 12, (int)bardY - 12);
+                    if (judgeT > 0) draw_text(fb, (int)bardX - 18, (int)bardY - 24 - (26 - judgeT) / 2, judge, RGB(255, 90, 90));
 
                     /* 32-Bit Layered Fiery Shadow-Flame Orbs with Comet Trails */
                     for (int p = 0; p < 6; p++) if (projAlive[p]) {
