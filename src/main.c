@@ -206,6 +206,8 @@ static void move_player(int dx, int dy) {
     int t = world[ny * WORLD_SIZE + nx];
     if (is_walkable(t)) {
         player.x = nx; player.y = ny;
+        ui.walkTimer = 10;
+        ui.walkFrame ^= 1;
         stats.steps++;
         if (stats.steps % 10 == 0) add_xp(&skills.supervivencia, "Sup", 2, 0);
         player.stamina = clampf(player.stamina - (player.wet > 0 ? 1.5f : 0.6f), 0.0f, 100.0f);
@@ -246,7 +248,8 @@ static void use_tool(void) {
     int t = world[ti];
     int mb = mob_at(tx, ty);
     int mult = player.ironTools ? 2 : 1;
-    ui.lungeTimer = 5;
+    ui.lungeTimer = 10;
+    ui.actionType = (player.slot == 3 || player.slot == 4) ? 2 : 1;
 
     if (t == T_WATER && player.slot < 3) {
         player.thirst = clampf(player.thirst + 35.0f, 0.0f, 100.0f);
@@ -469,6 +472,7 @@ int main(void) {
         if (ui.shakeTimer > 0) ui.shakeTimer--;
         if (ui.damageFlash > 0) ui.damageFlash--;
         if (ui.lungeTimer > 0) ui.lungeTimer--;
+        if (ui.walkTimer > 0) ui.walkTimer--;
         for (int i = 0; i < MAX_POPS; i++) if (pops[i].timer > 0) pops[i].timer--;
 
         /* 60 FPS -> 1 game tick per second */

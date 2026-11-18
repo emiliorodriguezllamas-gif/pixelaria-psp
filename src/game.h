@@ -116,6 +116,9 @@ typedef struct {
     int shakeTimer;
     int damageFlash;
     int lungeTimer;
+    int walkTimer;
+    int walkFrame;
+    int actionType; /* 0=none, 1=break/hit, 2=build */
     char msg[48];
 } UIState;
 

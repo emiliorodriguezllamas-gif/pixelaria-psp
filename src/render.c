@@ -224,13 +224,33 @@ void render_frame(void) {
         }
     }
 
-    /* Player */
+    /* Player with walk bob, step dust, and tool/build animation */
+    int walkBob = (ui.walkTimer > 3) ? -2 : 0;
     int px = ox + (player.x - camX) * TILE_PX + (ui.lungeTimer > 0 ? player.fx * 4 : 0);
-    int py = oy + (player.y - camY) * TILE_PX + (ui.lungeTimer > 0 ? player.fy * 4 : 0);
+    int py = oy + (player.y - camY) * TILE_PX + (ui.lungeTimer > 0 ? player.fy * 4 : 0) + walkBob;
+    if (ui.walkTimer > 0) {
+        int dustX = ox + (player.x - camX) * TILE_PX + (ui.walkFrame ? 6 : 11);
+        int dustY = oy + (player.y - camY) * TILE_PX + 17;
+        fill_rect(dustX, dustY, 3, 2, tint_night(RGB(210, 210, 190), hr));
+    }
     blit_sprite(px, py, spr_player, ui.damageFlash > 0 ? 22 : hr, player.fx < 0, 0);
     if (player.slot < 3) {
-        fill_rect(px + (player.fx < 0 ? 1 : 16), py + 8, 3, ui.lungeTimer > 0 ? 9 : 6,
-                  player.ironTools ? RGB(215, 236, 255) : RGB(205, 210, 220));
+        int toolX = px + (player.fx < 0 ? 1 : 16);
+        int toolY = py + (ui.lungeTimer > 0 ? 4 : 8);
+        unsigned int toolCol = player.ironTools ? RGB(215, 236, 255) : RGB(205, 210, 220);
+        fill_rect(toolX, toolY, 3, ui.lungeTimer > 0 ? 10 : 6, toolCol);
+    }
+
+    /* Break / Build impact particles on target tile */
+    if (ui.lungeTimer > 0) {
+        int ttx = ox + (player.x + player.fx - camX) * TILE_PX;
+        int tty = oy + (player.y + player.fy - camY) * TILE_PX;
+        int sp = 10 - ui.lungeTimer;
+        unsigned int pcol = (ui.actionType == 2) ? RGB(255, 220, 90) : RGB(230, 185, 120);
+        fill_rect(ttx + 8 - sp, tty + 8 - sp, 2, 2, pcol);
+        fill_rect(ttx + 10 + sp, tty + 8 - sp, 2, 2, pcol);
+        fill_rect(ttx + 8 - sp, tty + 11 + sp, 2, 2, pcol);
+        fill_rect(ttx + 10 + sp, tty + 11 + sp, 2, 2, pcol);
     }
 
     /* Weather particles (Rain / Snow) */
