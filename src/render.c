@@ -73,12 +73,14 @@ static void draw_text(int x, int y, const char *s, unsigned int col) {
 
 static unsigned int fog_shade(unsigned int col, float dist, int hitFlash) {
     if (hitFlash > 0) return RGB(255, 90, 90);
-    int mul = (int)(115.0f / (1.0f + dist * 0.22f));
-    if (mul > 100) mul = 100;
+    int flashBoost = (player.fireTimer > 3 && player.weapon != WPN_KNIFE) ? 24 : (ui.explosionTimer > 8 ? 40 : 0);
+    int mul = (int)(115.0f / (1.0f + dist * 0.19f)) + flashBoost;
+    if (mul > 115) mul = 115;
     if (mul < 14) mul = 14;
     int r = ((col & 0xFF) * mul) / 100;
     int g = (((col >> 8) & 0xFF) * mul) / 100;
     int b = (((col >> 16) & 0xFF) * mul) / 100;
+    if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
     return RGB(r, g, b);
 }
 
@@ -167,9 +169,10 @@ void render_frame(void) {
     }
 
     int shakeX = (ui.shakeTimer > 0) ? ((ui.shakeTimer & 1) ? 3 : -3) : 0;
-    int horizon = 132 + (ui.shakeTimer > 0 ? ((ui.shakeTimer & 2) ? 2 : -2) : 0);
     static int rf = 0;
     rf++;
+    int headBob = player.isMoving ? (int)(sinf(rf * 0.28f) * 3.0f) : 0;
+    int horizon = 132 + headBob + (ui.shakeTimer > 0 ? ((ui.shakeTimer & 2) ? 2 : -2) : 0);
 
     if (ui.gameWon) {
         fill_rect(0, 0, SCR_W, SCR_H, RGB(10, 12, 18));
@@ -259,7 +262,7 @@ void render_frame(void) {
         zbuf[col] = perpDist;
         zbuf[col + 1] = perpDist;
 
-        int lineH = (int)(SCR_H / perpDist);
+        int lineH = (int)((SCR_H * 1.25f) / perpDist);
         int drawStart = horizon - lineH / 2;
         int drawEnd = horizon + lineH / 2;
         if (drawStart < 0) drawStart = 0;
@@ -310,10 +313,13 @@ void render_frame(void) {
         if (transY <= 0.25f) continue;
 
         int sprScreenX = (int)((SCR_W / 2) * (1.0f + transX / transY)) + shakeX;
-        int fullH = (int)fabsf(SCR_H / transY);
+        int fullH = (int)fabsf((SCR_H * 1.15f) / transY);
         int sprH = fullH;
         int sprW = (fullH * 3) / 4;
-        if (e->type == ENT_CRATE || e->type >= ENT_HERB_G) {
+        if (e->type == ENT_CHAINSAW || e->type == ENT_BOSS) {
+            sprH = (fullH * 6) / 5;
+            sprW = (fullH * 9) / 10;
+        } else if (e->type == ENT_CRATE || e->type == ENT_BARREL || e->type >= ENT_HERB_G) {
             sprH = (fullH * 3) / 5;
             sprW = (fullH * 3) / 5;
         }
@@ -375,6 +381,17 @@ void render_frame(void) {
         if (e->type == ENT_MERCHANT && transY < 3.5f && sprScreenX > 50 && sprScreenX < SCR_W - 50) {
             fill_rect(sprScreenX - 44, clipStartY - 12, 88, 11, RGB(65, 25, 95));
             draw_text(sprScreenX - 40, clipStartY - 10, "[^] BUHONERO", RGB(230, 180, 255));
+        }
+    }
+
+    /* 3a. Atmospheric Rain (Zones 1-2) / Ash Embers (Zones 3-4) */
+    for (int p = 0; p < 28; p++) {
+        int px = (p * 79 + rf * (player.stage <= 2 ? 2 : 1)) % SCR_W;
+        int py = (p * 53 + rf * (player.stage <= 2 ? 7 : 2)) % (SCR_H - 30);
+        if (player.stage <= 2) {
+            draw_line(px, py, px - 2, py + 6, RGB(110, 130, 160));
+        } else {
+            fill_rect(px, py, 2, 2, (p & 1) ? RGB(230, 110, 45) : RGB(140, 140, 155));
         }
     }
 
@@ -462,6 +479,23 @@ void render_frame(void) {
         }
     }
 
+    /* Hit-Marker Crosshair Flash */
+    if (ui.hitMarkerTimer > 0) {
+        unsigned int hmCol = (ui.hitMarkerTimer > 5) ? RGB(255, 60, 60) : RGB(255, 255, 255);
+        draw_line(aimScrX - 6, aimScrY - 6, aimScrX - 2, aimScrY - 2, hmCol);
+        draw_line(aimScrX + 6, aimScrY - 6, aimScrX + 2, aimScrY - 2, hmCol);
+        draw_line(aimScrX - 6, aimScrY + 6, aimScrX - 2, aimScrY + 2, hmCol);
+        draw_line(aimScrX + 6, aimScrY + 6, aimScrX + 2, aimScrY + 2, hmCol);
+    }
+
+    /* Floating Hit / Loot Popups */
+    for (int i = 0; i < MAX_POPS; i++) {
+        if (pops[i].timer > 0) {
+            int py = pops[i].scrY - (36 - pops[i].timer) / 2;
+            draw_text(pops[i].scrX, py, pops[i].text, pops[i].color);
+        }
+    }
+
     /* Damage Red Vignette */
     if (player.damageFlash > 0 || (player.hp * 100 < player.maxHp * 30 && ((rf / 18) & 1))) {
         fill_rect(0, 0, SCR_W, 8, RGB(200, 20, 20));
@@ -480,9 +514,9 @@ void render_frame(void) {
     sprintf(buf, "ZONA %d: %s | %d Pts", player.stage, stgNames[player.stage], player.pesetas);
     draw_text(12, 13, buf, RGB(240, 215, 130));
 
-    /* Minimap (top-right, 2px per cell) */
+    /* Minimap (top-right, 2px per cell for 32x32) */
     {
-        int mmx = SCR_W - 58, mmy = 6;
+        int mmx = SCR_W - 70, mmy = 6;
         fill_rect(mmx - 2, mmy - 2, MAP_W * 2 + 4, MAP_H * 2 + 4, RGB(10, 12, 16));
         draw_rect_outline(mmx - 2, mmy - 2, MAP_W * 2 + 4, MAP_H * 2 + 4, RGB(95, 85, 70));
         for (int my = 0; my < MAP_H; my++) {

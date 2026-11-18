@@ -11,6 +11,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 unsigned char worldMap[MAP_W * MAP_H];
 Entity ents[MAX_ENTS];
+PopText pops[MAX_POPS];
 Player player;
 UIState ui;
 
@@ -25,6 +26,19 @@ static float rnd(void) {
 static void set_msg(const char *s) {
     snprintf(ui.msg, sizeof(ui.msg), "%s", s);
     ui.msgTimer = 150;
+}
+
+static void spawn_pop(int sx, int sy, const char *txt, unsigned int col) {
+    for (int i = 0; i < MAX_POPS; i++) {
+        if (pops[i].timer <= 0) {
+            pops[i].scrX = sx < 20 ? 20 : (sx > 400 ? 400 : sx);
+            pops[i].scrY = sy < 40 ? 40 : (sy > 210 ? 210 : sy);
+            snprintf(pops[i].text, sizeof(pops[i].text), "%s", txt);
+            pops[i].color = col;
+            pops[i].timer = 36;
+            return;
+        }
+    }
 }
 
 static void spawn_ent(int idx, float x, float y, int type, int hp) {
@@ -69,28 +83,35 @@ void load_stage(int stg) {
         }
     }
 
-    /* Village / Castle buildings & pillars */
-    for (int y = 4; y <= 8; y++) {
-        for (int x = 5; x <= 9; x++) {
-            if (x == 5 || x == 9 || y == 4 || y == 8) {
-                if (!(x == 7 && y == 8)) worldMap[y * MAP_W + x] = wallBase;
+    /* Village / Castle buildings & courtyard pillars (32x32) */
+    for (int y = 4; y <= 9; y++) {
+        for (int x = 6; x <= 11; x++) {
+            if (x == 6 || x == 11 || y == 4 || y == 9) {
+                if (!(x == 8 && y == 9)) worldMap[y * MAP_W + x] = wallBase;
             }
         }
     }
-    for (int y = 14; y <= 19; y++) {
-        for (int x = 5; x <= 10; x++) {
-            if (x == 5 || x == 10 || y == 14 || y == 19) {
-                if (!(x == 7 && y == 14)) worldMap[y * MAP_W + x] = wallBase;
+    for (int y = 18; y <= 24; y++) {
+        for (int x = 6; x <= 12; x++) {
+            if (x == 6 || x == 12 || y == 18 || y == 24) {
+                if (!(x == 9 && y == 18)) worldMap[y * MAP_W + x] = wallBase;
             }
         }
     }
-    for (int y = 5; y <= 17; y += 3) {
+    for (int y = 8; y <= 14; y++) {
+        for (int x = 18; x <= 24; x++) {
+            if (x == 18 || x == 24 || y == 8 || y == 14) {
+                if (!(x == 18 && y == 11) && !(x == 24 && y == 11)) worldMap[y * MAP_W + x] = (stg >= 2) ? W_CHURCH_WALL : wallBase;
+            }
+        }
+    }
+    for (int y = 5; y <= 26; y += 4) {
         worldMap[y * MAP_W + 15] = (stg >= 2) ? W_CHURCH_WALL : W_STONE_WALL;
     }
     /* Exit Gate on far east wall */
-    worldMap[12 * MAP_W + (MAP_W - 1)] = W_GATE_DOOR;
-    worldMap[11 * MAP_W + (MAP_W - 2)] = W_EMPTY;
-    worldMap[12 * MAP_W + (MAP_W - 2)] = W_EMPTY;
+    worldMap[16 * MAP_W + (MAP_W - 1)] = W_GATE_DOOR;
+    worldMap[15 * MAP_W + (MAP_W - 2)] = W_EMPTY;
+    worldMap[16 * MAP_W + (MAP_W - 2)] = W_EMPTY;
 
     memset(ents, 0, sizeof(ents));
     int eIdx = 0;
@@ -99,29 +120,31 @@ void load_stage(int stg) {
 
     /* Supply crates & herbs */
     spawn_ent(eIdx++, 4.5f, 2.5f, ENT_CRATE, 1);
-    spawn_ent(eIdx++, 7.5f, 6.5f, ENT_CRATE, 1);
-    spawn_ent(eIdx++, 7.5f, 17.5f, ENT_CRATE, 1);
-    spawn_ent(eIdx++, 18.5f, 4.5f, ENT_CRATE, 1);
-    spawn_ent(eIdx++, 12.5f, 3.5f, ENT_HERB_G, 1);
-    spawn_ent(eIdx++, 18.5f, 19.5f, ENT_HERB_R, 1);
+    spawn_ent(eIdx++, 8.5f, 6.5f, ENT_CRATE, 1);
+    spawn_ent(eIdx++, 9.5f, 21.5f, ENT_CRATE, 1);
+    spawn_ent(eIdx++, 21.5f, 11.5f, ENT_CRATE, 1);
+    spawn_ent(eIdx++, 26.5f, 6.5f, ENT_CRATE, 1);
+    spawn_ent(eIdx++, 13.5f, 3.5f, ENT_HERB_G, 1);
+    spawn_ent(eIdx++, 25.5f, 26.5f, ENT_HERB_R, 1);
     /* Explosive Red Barrels */
-    spawn_ent(eIdx++, 12.5f, 11.5f, ENT_BARREL, 1);
-    spawn_ent(eIdx++, 19.5f, 11.5f, ENT_BARREL, 1);
+    spawn_ent(eIdx++, 13.5f, 12.5f, ENT_BARREL, 1);
+    spawn_ent(eIdx++, 21.5f, 17.5f, ENT_BARREL, 1);
+    spawn_ent(eIdx++, 27.5f, 15.5f, ENT_BARREL, 1);
 
     /* Infected Villagers (Ganados) */
-    int vCount = 6 + stg * 2;
+    int vCount = 10 + stg * 3;
     for (int i = 0; i < vCount && eIdx < MAX_ENTS - 2; i++) {
-        float vx = 8.5f + rnd() * 13.0f;
-        float vy = 3.5f + rnd() * 17.0f;
+        float vx = 10.5f + rnd() * 18.0f;
+        float vy = 3.5f + rnd() * 24.0f;
         if (worldMap[(int)vy * MAP_W + (int)vx] == W_EMPTY) {
             spawn_ent(eIdx++, vx, vy, ENT_VILLAGER, 14 + stg * 5);
         }
     }
 
-    /* Dr. Salvador (Chainsaw Mini-Boss) guarding the Exit Gate! */
-    spawn_ent(eIdx++, 20.5f, 12.5f, (stg == 4) ? ENT_BOSS : ENT_CHAINSAW, 55 + stg * 25);
+    /* Dr. Salvador (Chainsaw Mini-Boss) / Lord Saddler guarding Exit Gate */
+    spawn_ent(eIdx++, 28.5f, 16.5f, (stg == 4) ? ENT_BOSS : ENT_CHAINSAW, 60 + stg * 25);
     if (stg >= 3 && eIdx < MAX_ENTS) {
-        spawn_ent(eIdx++, 17.5f, 9.5f, ENT_CHAINSAW, 65);
+        spawn_ent(eIdx++, 24.5f, 20.5f, ENT_CHAINSAW, 70);
     }
 
     static const char *sMsg[5] = {"", "Zona 1: El Pueblo Maldito", "Zona 2: Cementerio e Iglesia", "Zona 3: Castillo del Culto", "Zona 4: Laboratorio Final"};
@@ -363,6 +386,7 @@ static void fire_weapon(void) {
         Entity *e = &ents[bestEnt];
         e->hitFlash = 6;
         ui.hitSparkTimer = 7;
+        ui.hitMarkerTimer = 10;
         ui.hitSparkX = aimScrX;
         ui.hitSparkY = aimScrY;
         if (e->type == ENT_BARREL) {
@@ -370,6 +394,7 @@ static void fire_weapon(void) {
             ui.explosionTimer = 15;
             ui.shakeTimer = 12;
             audio_play_sfx(SFX_SHOTGUN);
+            spawn_pop(aimScrX, aimScrY, "BOOM!", 0xFF40C0FF);
             set_msg("BOOM! Barril explosivo!");
             for (int j = 0; j < MAX_ENTS; j++) {
                 Entity *v = &ents[j];
@@ -388,6 +413,7 @@ static void fire_weapon(void) {
             e->alive = 0;
             audio_play_sfx(SFX_CRATE);
             drop_loot(e->x, e->y, 0);
+            spawn_pop(aimScrX, aimScrY, "CAJA!", 0xFF70D8FF);
             set_msg("Caja destruida!");
             return;
         }
@@ -396,10 +422,16 @@ static void fire_weapon(void) {
             finalDmg = (dmg * 5) / 2; /* 2.5x Critical Headshot! */
             e->stunTimer = 110;
             audio_play_sfx(SFX_HEADSHOT);
+            spawn_pop(aimScrX - 18, aimScrY - 12, "HEADSHOT!", 0xFF5555FF);
             set_msg("HEADSHOT CRITICO!");
         } else if (hitZone == 2) {
             e->stunTimer = 160; /* Kneeling stun ready for Roundhouse Kick! */
+            spawn_pop(aimScrX - 14, aimScrY, "RODILLA!", 0xFF70E0FF);
             set_msg("A la rodilla! Acercate y pulsa [X]!");
+        } else {
+            char db[16];
+            snprintf(db, sizeof(db), "-%d", finalDmg);
+            spawn_pop(aimScrX, aimScrY, db, 0xFFFFFFFF);
         }
         e->hp -= finalDmg;
         if (e->hp <= 0) {
@@ -627,6 +659,7 @@ int main(void) {
             if (pad.Buttons & PSP_CTRL_DOWN)  ay =  0.85f;
 
             if (player.aiming) {
+                player.isMoving = 0;
                 /* Move Red Laser Sight dot across enemy head/knees! */
                 player.aimX += (int)(ax * 4.5f);
                 player.aimY += (int)(ay * 3.5f);
@@ -639,7 +672,8 @@ int main(void) {
                 player.aimY = (player.aimY * 3) / 4;
                 player.ang += ax * 0.055f;
                 float moveSpd = -ay * 0.068f;
-                if (fabsf(moveSpd) > 0.001f) {
+                player.isMoving = (fabsf(moveSpd) > 0.001f) ? 1 : 0;
+                if (player.isMoving) {
                     float nx = player.x + cosf(player.ang) * moveSpd;
                     float ny = player.y + sinf(player.ang) * moveSpd;
                     int wtX = worldMap[(int)player.y * MAP_W + (int)(nx + (moveSpd > 0 ? 0.25f : -0.25f))];
@@ -670,7 +704,9 @@ int main(void) {
         if (ui.shakeTimer > 0) ui.shakeTimer--;
         if (ui.explosionTimer > 0) ui.explosionTimer--;
         if (ui.hitSparkTimer > 0) ui.hitSparkTimer--;
+        if (ui.hitMarkerTimer > 0) ui.hitMarkerTimer--;
         if (ui.msgTimer > 0) ui.msgTimer--;
+        for (int pi = 0; pi < MAX_POPS; pi++) if (pops[pi].timer > 0) pops[pi].timer--;
 
         if (player.reloadTimer > 0) {
             player.reloadTimer--;

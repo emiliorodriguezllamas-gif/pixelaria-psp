@@ -5,9 +5,10 @@
 
 #define SCR_W 480
 #define SCR_H 272
-#define MAP_W 24
-#define MAP_H 24
-#define MAX_ENTS 32
+#define MAP_W 32
+#define MAP_H 32
+#define MAX_ENTS 48
+#define MAX_POPS 8
 
 enum WallType {
     W_EMPTY = 0,
@@ -78,6 +79,7 @@ typedef struct {
     int damageFlash;
     int iframes;
     int deadTimer;
+    int isMoving;
 } Player;
 
 typedef struct {
@@ -89,6 +91,13 @@ typedef struct {
     int hitFlash;
     int atkCooldown;
 } Entity;
+
+typedef struct {
+    int scrX, scrY;
+    char text[24];
+    unsigned int color;
+    int timer;
+} PopText;
 
 typedef struct {
     int inTitle;
@@ -103,6 +112,7 @@ typedef struct {
     int headPopTimer;
     int explosionTimer;
     int hitSparkTimer;
+    int hitMarkerTimer;
     int hitSparkX, hitSparkY;
     int gameWon;
     char msg[52];
@@ -111,6 +121,7 @@ typedef struct {
 
 extern unsigned char worldMap[MAP_W * MAP_H];
 extern Entity ents[MAX_ENTS];
+extern PopText pops[MAX_POPS];
 extern Player player;
 extern UIState ui;
 
