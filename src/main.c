@@ -142,7 +142,7 @@ static void draw_spr_lr24(unsigned int *fb, int dx, int dy) {
     }
 }
 
-static void draw_spr24(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+static void draw_spr24_dir(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
     for (int j = 0; j < 24; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
@@ -151,11 +151,15 @@ static void draw_spr24(unsigned int *fb, const unsigned int *spr, int dx, int dy
         for (int i = 0; i < 24; i++) {
             int px = dx + i;
             if ((unsigned)px < SCR_W) {
-                unsigned int c = src[i];
+                unsigned int c = src[flipX ? (23 - i) : i];
                 if (c) dst[px] = c;
             }
         }
     }
+}
+
+static void draw_spr24(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    draw_spr24_dir(fb, spr, dx, dy, 0);
 }
 
 static void draw_spr48(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
@@ -184,7 +188,7 @@ static void draw_ellipse_ring(unsigned int *fb, int cx, int cy, int rx, int ry, 
     }
 }
 
-static void draw_boss64(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flash) {
+static void draw_boss64_dir(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flash, int flipX) {
     for (int j = 0; j < 64; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
@@ -193,11 +197,15 @@ static void draw_boss64(unsigned int *fb, const unsigned int *spr, int dx, int d
         for (int i = 0; i < 64; i++) {
             int px = dx + i;
             if ((unsigned)px < SCR_W) {
-                unsigned int c = src[i];
+                unsigned int c = src[flipX ? (63 - i) : i];
                 if (c) dst[px] = flash ? RGB(255, 255, 255) : c;
             }
         }
     }
+}
+
+static void draw_boss64(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flash) {
+    draw_boss64_dir(fb, spr, dx, dy, flash, 0);
 }
 
 /* Audio: 3 styles (0=Rock, 1=Synth, 2=Symphonic) */
@@ -267,6 +275,7 @@ static int judgeT = 0;
 #define MH 48
 static unsigned char worldMap[MH][MW]; /* 0=pasto, 1=bosque, 2=montana, 3=agua, 4=reino, 5=dungeon, 6=puente */
 static int mapX = 10, mapY = 10, prevX1 = 9, prevY1 = 10, prevX2 = 8, prevY2 = 10;
+static int bardFlip = 0, band1Flip = 0, band2Flip = 0;
 static int bossDefeated[3] = { 0, 0, 0 };
 static const int dngX[3] = { 24, 44, 52 };
 static const int dngY[3] = { 12, 30, 10 };
@@ -321,6 +330,7 @@ static void init_world(void) {
         bossDefeated[i] = 0;
     }
     mapX = 10; mapY = 11; prevX1 = 9; prevY1 = 11; prevX2 = 8; prevY2 = 11;
+    bardFlip = 0; band1Flip = 0; band2Flip = 0;
     dlgTimer = 0;
 }
 
@@ -401,6 +411,10 @@ int main(void) {
                 moveCd = 9;
                 int nx = mapX + dx, ny = mapY + dy;
                 if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && worldMap[ny][nx] != 2 && worldMap[ny][nx] != 3 && worldMap[ny][nx] != 8) {
+                    band2Flip = (prevX2 > prevX1) ? 1 : (prevX2 < prevX1 ? 0 : band1Flip);
+                    band1Flip = (prevX1 > mapX)   ? 1 : (prevX1 < mapX   ? 0 : bardFlip);
+                    if (dx < 0) bardFlip = 1;
+                    else if (dx > 0) bardFlip = 0;
                     prevX2 = prevX1; prevY2 = prevY1;
                     prevX1 = mapX;   prevY1 = mapY;
                     mapX = nx;       mapY = ny;
@@ -625,18 +639,19 @@ int main(void) {
                     }
                 }
             }
-            /* NPCs */
+            /* NPCs dynamically turn to look towards your Bard! */
             for (int i = 0; i < 3; i++) {
                 int sx = (npcX[i] - ox) * 24, sy = (npcY[i] - oy) * 24 - 8;
                 if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
-                    draw_spr24(fb, (i == 1) ? spr_troubadour : spr_elder, sx, sy);
+                    int npcFlip = (mapX < npcX[i]) ? 1 : 0;
+                    draw_spr24_dir(fb, (i == 1) ? spr_troubadour : spr_elder, sx, sy, npcFlip);
                     draw_text(fb, sx + 9, sy - 7, "!", RGB(255, 235, 60));
                 }
             }
-            /* Your 3-Piece Band following in formation */
-            draw_spr24(fb, spr_band2, (prevX2 - ox) * 24, (prevY2 - oy) * 24 - 8);
-            draw_spr24(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8);
-            draw_spr24(fb, spr_bard,  10 * 24, 5 * 24 - 8);
+            /* Your 3-Piece Band following in formation and facing their walking direction */
+            draw_spr24_dir(fb, spr_band2, (prevX2 - ox) * 24, (prevY2 - oy) * 24 - 8, band2Flip);
+            draw_spr24_dir(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8, band1Flip);
+            draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8, bardFlip);
 
             /* Top Adventure HUD Window with visual HP & MP bars */
             draw_ff_window(fb, 4, 3, 472, 22);
@@ -680,7 +695,7 @@ int main(void) {
             } else if (inStory) {
                 draw_ff_window(fb, 64, 56, 352, 160);
                 const unsigned int *bspr = (chapter == 0) ? boss_golem : (chapter == 1 ? boss_automaton : boss_dragon);
-                draw_boss64(fb, bspr, 82, 86, 0);
+                draw_boss64_dir(fb, bspr, 82, 86, 0, 1);
                 sprintf(buf, "DUNGEON %d: %s", chapter + 1, bossNames[chapter]);
                 draw_text(fb, 158, 78, buf, RGB(255, 225, 80));
                 sprintf(buf, "DEBILIDAD: %s (Dano x2)", styleNames[bossWeak[chapter]]);
