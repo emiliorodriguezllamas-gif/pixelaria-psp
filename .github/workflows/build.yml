@@ -1,0 +1,38 @@
+name: Build Galactic Defender PSP
+
+on:
+  push:
+    branches: [ galacticdefender ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: pspdev/pspdev:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Encode SND0.AT3 if needed
+        run: |
+          if [ ! -f SND0.AT3 ] && [ -f snd0.wav ]; then
+            apk add --no-cache cmake g++ make git libsndfile-dev
+            git clone --recursive --depth 1 https://github.com/dcherednik/atracdenc.git /tmp/atracdenc
+            cmake -B /tmp/atracdenc/build /tmp/atracdenc/src
+            cmake --build /tmp/atracdenc/build -j
+            cp /tmp/atracdenc/build/atracdenc /usr/local/bin/
+            atracdenc -e atrac3 -i snd0.wav -o SND0.AT3 --bitrate 132
+          fi
+
+      - name: Build EBOOT.PBP
+        run: |
+          make clean || true
+          make -j$(nproc)
+          ls -lh EBOOT.PBP
+
+      - name: Upload EBOOT.PBP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GalacticDefender-PSP
+          path: EBOOT.PBP
