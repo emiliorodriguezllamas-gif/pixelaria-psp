@@ -9,7 +9,9 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 unsigned char world[WORLD_SIZE * WORLD_SIZE];
 unsigned char biomes[WORLD_SIZE * WORLD_SIZE];
+unsigned char dungeon[DUNG_W * DUNG_H];
 Mob mobs[MAX_MOBS];
+Mob dungMobs[MAX_MOBS];
 Popup pops[MAX_POPS];
 Player player;
 Skills skills;
@@ -69,12 +71,14 @@ static void add_xp(Skill *sk, const char *name, int amt, int is_combat) {
 }
 
 static int is_walkable(int t) {
-    return t == T_GRASS || t == T_FOREST || t == T_SAND || t == T_SNOW || t == T_WATER || t == T_FIRE;
+    return t == T_GRASS || t == T_FOREST || t == T_SAND || t == T_SNOW ||
+           t == T_WATER || t == T_FIRE || t == T_DFLOOR || t == T_DUNGEON_DOOR || t == T_EXIT;
 }
 
 static int mob_at(int x, int y) {
+    Mob *arr = player.inDungeon ? dungMobs : mobs;
     for (int i = 0; i < MAX_MOBS; i++) {
-        if (mobs[i].alive && mobs[i].x == x && mobs[i].y == y) return i;
+        if (arr[i].alive && arr[i].x == x && arr[i].y == y) return i;
     }
     return -1;
 }
@@ -147,14 +151,53 @@ static void generate_world(void) {
     world[32 * WORLD_SIZE + 30] = T_BERRY;
     world[33 * WORLD_SIZE + 34] = T_ROCK;
     world[34 * WORLD_SIZE + 31] = T_WATER;
+    world[32 * WORLD_SIZE + 36] = T_DUNGEON_DOOR;
+    world[49 * WORLD_SIZE + 48] = T_DUNGEON_DOOR;
 
     memset(mobs, 0, sizeof(mobs));
     for (int i = 0; i < 10; i++) {
         int mx = 10 + (int)(rnd() * 44.0f);
         int my = 10 + (int)(rnd() * 44.0f);
         if ((mx < 28 || mx > 36 || my < 28 || my > 36) && is_walkable(world[my * WORLD_SIZE + mx])) {
-            mobs[i].x = mx; mobs[i].y = my; mobs[i].hp = 2; mobs[i].alive = 1;
+            mobs[i].x = mx; mobs[i].y = my; mobs[i].hp = 2; mobs[i].alive = 1; mobs[i].type = MOB_SLIME;
         }
+    }
+}
+
+static void generate_dungeon(void) {
+    for (int y = 0; y < DUNG_H; y++) {
+        for (int x = 0; x < DUNG_W; x++) {
+            int i = y * DUNG_W + x;
+            if (x == 0 || y == 0 || x == DUNG_W - 1 || y == DUNG_H - 1) {
+                dungeon[i] = T_DWALL;
+            } else {
+                dungeon[i] = T_DFLOOR;
+            }
+        }
+    }
+    /* Interior stone pillars & chambers */
+    for (int y = 3; y < DUNG_H - 3; y++) {
+        if (y != 9 && y != 10) {
+            dungeon[y * DUNG_W + 10] = T_DWALL;
+            dungeon[y * DUNG_W + 21] = T_DWALL;
+        }
+    }
+    dungeon[2 * DUNG_W + 2] = T_FIRE;
+    dungeon[2 * DUNG_W + 29] = T_FIRE;
+    dungeon[17 * DUNG_W + 29] = T_FIRE;
+    dungeon[10 * DUNG_W + 2] = T_EXIT;
+    dungeon[5 * DUNG_W + 15] = T_CHEST;
+    dungeon[14 * DUNG_W + 16] = T_CHEST;
+    dungeon[10 * DUNG_W + 28] = T_CHEST;
+
+    memset(dungMobs, 0, sizeof(dungMobs));
+    int sx[6] = {8, 13, 17, 24, 26, 27};
+    int sy[6] = {6, 4, 14, 6, 13, 10};
+    for (int i = 0; i < 6; i++) {
+        dungMobs[i].x = sx[i]; dungMobs[i].y = sy[i];
+        dungMobs[i].hp = 4 + (i >= 4 ? 2 : 0);
+        dungMobs[i].alive = 1;
+        dungMobs[i].type = MOB_SKELETON;
     }
 }
 
@@ -166,7 +209,9 @@ static void save_game(void) {
         sceIoWrite(fd, &stats, sizeof(stats));
         sceIoWrite(fd, &gameTime, sizeof(gameTime));
         sceIoWrite(fd, world, sizeof(world));
+        sceIoWrite(fd, dungeon, sizeof(dungeon));
         sceIoWrite(fd, mobs, sizeof(mobs));
+        sceIoWrite(fd, dungMobs, sizeof(dungMobs));
         sceIoClose(fd);
         audio_play_sfx(SFX_CRAFT);
         set_msg("Partida guardada!");
@@ -183,27 +228,35 @@ static void load_game(void) {
         sceIoRead(fd, &stats, sizeof(stats));
         sceIoRead(fd, &gameTime, sizeof(gameTime));
         sceIoRead(fd, world, sizeof(world));
+        sceIoRead(fd, dungeon, sizeof(dungeon));
         sceIoRead(fd, mobs, sizeof(mobs));
+        sceIoRead(fd, dungMobs, sizeof(dungMobs));
         sceIoClose(fd);
         set_msg("Partida cargada!");
     }
 }
 
-static void move_player(int dx, int dy) {
-    if (player.fx != dx || player.fy != dy) {
+static void move_player(int dx, int dy, int direct) {
+    if (!direct && (player.fx != dx || player.fy != dy)) {
         player.fx = dx;
         player.fy = dy;
         audio_play_sfx(SFX_UI);
         return;
     }
-    int nx = clampi(player.x + dx, 0, WORLD_SIZE - 1);
-    int ny = clampi(player.y + dy, 0, WORLD_SIZE - 1);
+    player.fx = dx;
+    player.fy = dy;
+    int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
+    int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
+    unsigned char *curMap = player.inDungeon ? dungeon : world;
+
+    int nx = clampi(player.x + dx, 0, mapW - 1);
+    int ny = clampi(player.y + dy, 0, mapH - 1);
     if (mob_at(nx, ny) >= 0) {
         audio_play_sfx(SFX_BLOCKED);
-        set_msg("Slime! Pulsa [X]");
+        set_msg("Enemigo! Pulsa [X]");
         return;
     }
-    int t = world[ny * WORLD_SIZE + nx];
+    int t = curMap[ny * mapW + nx];
     if (is_walkable(t)) {
         player.x = nx; player.y = ny;
         ui.walkTimer = 10;
@@ -211,6 +264,23 @@ static void move_player(int dx, int dy) {
         stats.steps++;
         if (stats.steps % 10 == 0) add_xp(&skills.supervivencia, "Sup", 2, 0);
         player.stamina = clampf(player.stamina - (player.wet > 0 ? 1.5f : 0.6f), 0.0f, 100.0f);
+
+        if (t == T_DUNGEON_DOOR) {
+            player.savedX = nx; player.savedY = ny;
+            player.inDungeon = 1;
+            player.x = 3; player.y = 10; player.fx = 1; player.fy = 0;
+            audio_play_sfx(SFX_CRAFT);
+            set_msg("Entraste al Dungeon!");
+            return;
+        }
+        if (t == T_EXIT) {
+            player.inDungeon = 0;
+            player.x = player.savedX; player.y = player.savedY + 1;
+            player.fx = 0; player.fy = 1;
+            audio_play_sfx(SFX_CRAFT);
+            set_msg("Saliste del Dungeon!");
+            return;
+        }
         if (t == T_WATER) {
             player.wet = 20;
             audio_play_sfx(SFX_SPLASH);
@@ -222,7 +292,45 @@ static void move_player(int dx, int dy) {
         audio_play_sfx(SFX_BLOCKED);
         set_msg("Bloqueado");
     }
-    check_near_fire();
+    if (!player.inDungeon) check_near_fire();
+}
+
+static void hit_mob_at(int hx, int hy, int dmg) {
+    int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
+    int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
+    unsigned char *curMap = player.inDungeon ? dungeon : world;
+    Mob *curMobs = player.inDungeon ? dungMobs : mobs;
+    if (hx < 0 || hy < 0 || hx >= mapW || hy >= mapH) return;
+
+    int mb = mob_at(hx, hy);
+    if (mb < 0) return;
+    curMobs[mb].hp -= dmg;
+    audio_play_sfx(SFX_HIT);
+    ui.shakeTimer = 4;
+    if (curMobs[mb].hp <= 0) {
+        curMobs[mb].alive = 0;
+        if (curMobs[mb].type == MOB_SKELETON) {
+            player.bones += 2; player.iron += 1;
+            spawn_pop(hx, hy, "+2 Hue +1 Hie", 0xFF7AE2FF);
+            set_msg("Esqueleto derrotado!");
+        } else {
+            player.food++; player.iron++;
+            spawn_pop(hx, hy, "+1 Bay +1 Hie", 0xFF7AE2FF);
+            set_msg("Slime derrotado!");
+        }
+        stats.slimes++;
+        add_xp(&skills.combate, "Comb", 15, 1);
+        audio_play_sfx(SFX_PICKUP);
+    } else {
+        /* Zelda Game Boy knockback */
+        int kx = clampi(curMobs[mb].x + player.fx, 0, mapW - 1);
+        int ky = clampi(curMobs[mb].y + player.fy, 0, mapH - 1);
+        if (is_walkable(curMap[ky * mapW + kx]) && mob_at(kx, ky) < 0 && !(kx == player.x && ky == player.y)) {
+            curMobs[mb].x = kx; curMobs[mb].y = ky;
+        }
+        add_xp(&skills.combate, "Comb", 4, 1);
+        spawn_pop(hx, hy, "HIT!", 0xFF8C8CFF);
+    }
 }
 
 static void use_tool(void) {
@@ -242,14 +350,37 @@ static void use_tool(void) {
         return;
     }
 
-    int tx = clampi(player.x + player.fx, 0, WORLD_SIZE - 1);
-    int ty = clampi(player.y + player.fy, 0, WORLD_SIZE - 1);
-    int ti = ty * WORLD_SIZE + tx;
-    int t = world[ti];
-    int mb = mob_at(tx, ty);
+    int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
+    int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
+    unsigned char *curMap = player.inDungeon ? dungeon : world;
+
+    int tx = clampi(player.x + player.fx, 0, mapW - 1);
+    int ty = clampi(player.y + player.fy, 0, mapH - 1);
+    int ti = ty * mapW + tx;
+    int t = curMap[ti];
     int mult = player.ironTools ? 2 : 1;
     ui.lungeTimer = 10;
     ui.actionType = (player.slot == 3 || player.slot == 4) ? 2 : 1;
+
+    /* Zelda Game Boy sweeping sword slash (hits 3 tiles in front!) */
+    if (player.slot == 0) {
+        ui.slashTimer = 8;
+        int dmg = 2 + player.swordTier * 2 + (skills.combate.lv - 1) / 3;
+        int hitAny = 0;
+        for (int a = -1; a <= 1; a++) {
+            int hx = player.x + player.fx + (player.fy != 0 ? a : 0);
+            int hy = player.y + player.fy + (player.fx != 0 ? a : 0);
+            if (mob_at(hx, hy) >= 0) {
+                hit_mob_at(hx, hy, dmg);
+                hitAny = 1;
+            }
+        }
+        if (hitAny) return;
+        if (t != T_BERRY && t != T_CHEST && t != T_WATER && t != T_TREE && t != T_PINE && t != T_CACTUS) {
+            audio_play_sfx(SFX_STEP);
+            return;
+        }
+    }
 
     if (t == T_WATER && player.slot < 3) {
         player.thirst = clampf(player.thirst + 35.0f, 0.0f, 100.0f);
@@ -260,38 +391,35 @@ static void use_tool(void) {
         return;
     }
 
-    if (mb >= 0) {
-        int dmg = ((player.slot == 0 ? 2 : 1) * mult) + (skills.combate.lv - 1) / 3;
-        mobs[mb].hp -= dmg;
-        audio_play_sfx(SFX_HIT);
-        ui.shakeTimer = 4;
-        if (mobs[mb].hp <= 0) {
-            mobs[mb].alive = 0;
-            player.food++; player.iron++; stats.slimes++;
-            add_xp(&skills.combate, "Comb", 15, 1);
-            audio_play_sfx(SFX_PICKUP);
-            spawn_pop(tx, ty, "+1 Bay +1 Hie", 0xFF7AE2FF);
-            set_msg("Slime derrotado!");
-        } else {
-            add_xp(&skills.combate, "Comb", 4, 1);
-            spawn_pop(tx, ty, "HIT!", 0xFF8C8CFF);
-        }
+    if (mob_at(tx, ty) >= 0) {
+        hit_mob_at(tx, ty, mult + (skills.combate.lv - 1) / 3);
         return;
     }
 
     if (t == T_BERRY) {
-        world[ti] = T_GRASS; player.food += 2;
+        curMap[ti] = T_GRASS; player.food += 2;
         add_xp(&skills.supervivencia, "Sup", 5, 0);
         audio_play_sfx(SFX_PICKUP);
         spawn_pop(tx, ty, "+2 Bayas", 0xFFB899FF);
         set_msg("+2 Bayas");
     } else if (t == T_CHEST) {
-        world[ti] = T_SAND; player.iron += 5; player.food += 3; player.wood += 4; stats.chests++;
+        curMap[ti] = player.inDungeon ? T_DFLOOR : T_SAND;
+        player.iron += 5; player.food += 3; player.bones += 2; stats.chests++;
+        if (player.inDungeon && player.swordTier < 3) {
+            player.swordTier++;
+            spawn_pop(tx, ty, "ESPADA +1!", 0xFF7AE2FF);
+            set_msg("Arma mejorada en cofre!");
+        } else {
+            spawn_pop(tx, ty, "COFRE!", 0xFF7AE2FF);
+            set_msg("Cofre! +5 Hie +2 Hue");
+        }
         add_xp(&skills.supervivencia, "Sup", 25, 0);
         audio_play_sfx(SFX_CRAFT);
         ui.shakeTimer = 5;
-        spawn_pop(tx, ty, "COFRE!", 0xFF7AE2FF);
-        set_msg("Cofre! +5 Hierro");
+    } else if (player.inDungeon) {
+        audio_play_sfx(SFX_BLOCKED);
+        set_msg("Piedra de mazmorra");
+        return;
     } else if ((t == T_TREE || t == T_PINE) && player.slot <= 1) {
         world[ti] = (biomes[ti] == B_FOREST) ? T_FOREST : (biomes[ti] == B_TUNDRA ? T_SNOW : T_GRASS);
         int gain = 2 * mult + (rnd() < (skills.tala.lv - 1) * 0.08f ? 1 : 0);
@@ -369,12 +497,20 @@ static void craft_selected(int sel) {
             audio_play_sfx(SFX_CRAFT); set_msg("Equipo de HIERRO!");
         } else { audio_play_sfx(SFX_BLOCKED); set_msg("Falta 4 Hie, 2 Mad"); }
     } else if (sel == 4) {
-        if (player.warm) {
+        if (player.swordTier >= 3) {
+            audio_play_sfx(SFX_BLOCKED); set_msg("Espada al maximo!");
+        } else if (player.iron >= 3 && player.bones >= 3) {
+            player.iron -= 3; player.bones -= 3; player.swordTier++; stats.crafted++;
+            add_xp(&skills.combate, "Comb", 25, 1);
+            audio_play_sfx(SFX_LEVELUP); set_msg("Espada mejorada!");
+        } else { audio_play_sfx(SFX_BLOCKED); set_msg("Falta 3 Hie, 3 Hue"); }
+    } else if (sel == 5) {
+        if (player.warm && !player.inDungeon) {
             player.stamina = 100.0f; player.hp = clampf(player.hp + 30.0f, 0.0f, (float)maxHp());
             gameTime.day++; gameTime.minute = 420; gameTime.season = ((gameTime.day - 1) / 3) % 4;
             add_xp(&skills.supervivencia, "Sup", 15, 0);
             ui.craftOpen = 0; save_game();
-        } else { audio_play_sfx(SFX_BLOCKED); set_msg("Necesitas Hoguera!"); }
+        } else { audio_play_sfx(SFX_BLOCKED); set_msg("Necesitas Hoguera fuera!"); }
     }
 }
 
@@ -412,6 +548,7 @@ int main(void) {
     set_msg("Explora Pixelaria!");
 
     generate_world();
+    generate_dungeon();
     load_game();
 
     SceCtrlData pad, oldPad;
@@ -440,8 +577,8 @@ int main(void) {
         }
 
         if (ui.craftOpen) {
-            if (pressed & PSP_CTRL_UP) { ui.menuSel = (ui.menuSel + 4) % 5; audio_play_sfx(SFX_UI); }
-            if (pressed & PSP_CTRL_DOWN) { ui.menuSel = (ui.menuSel + 1) % 5; audio_play_sfx(SFX_UI); }
+            if (pressed & PSP_CTRL_UP) { ui.menuSel = (ui.menuSel + 5) % 6; audio_play_sfx(SFX_UI); }
+            if (pressed & PSP_CTRL_DOWN) { ui.menuSel = (ui.menuSel + 1) % 6; audio_play_sfx(SFX_UI); }
             if (pressed & PSP_CTRL_CROSS) craft_selected(ui.menuSel);
         } else if (!ui.statsOpen) {
             if (pressed & (PSP_CTRL_SQUARE | PSP_CTRL_RTRIGGER)) {
@@ -456,14 +593,18 @@ int main(void) {
 
             if (moveCd > 0) moveCd--;
             else {
-                int dx = 0, dy = 0;
-                if ((pad.Buttons & PSP_CTRL_UP) || pad.Ly < 60) dy = -1;
-                else if ((pad.Buttons & PSP_CTRL_DOWN) || pad.Ly > 195) dy = 1;
-                else if ((pad.Buttons & PSP_CTRL_LEFT) || pad.Lx < 60) dx = -1;
-                else if ((pad.Buttons & PSP_CTRL_RIGHT) || pad.Lx > 195) dx = 1;
+                int dx = 0, dy = 0, direct = 0;
+                if (pad.Ly < 60) { dy = -1; direct = 1; }
+                else if (pad.Ly > 195) { dy = 1; direct = 1; }
+                else if (pad.Lx < 60) { dx = -1; direct = 1; }
+                else if (pad.Lx > 195) { dx = 1; direct = 1; }
+                else if (pad.Buttons & PSP_CTRL_UP) dy = -1;
+                else if (pad.Buttons & PSP_CTRL_DOWN) dy = 1;
+                else if (pad.Buttons & PSP_CTRL_LEFT) dx = -1;
+                else if (pad.Buttons & PSP_CTRL_RIGHT) dx = 1;
                 if (dx != 0 || dy != 0) {
-                    move_player(dx, dy);
-                    moveCd = 8;
+                    move_player(dx, dy, direct);
+                    moveCd = direct ? 7 : 9;
                 }
             }
         }
@@ -473,6 +614,8 @@ int main(void) {
         if (ui.damageFlash > 0) ui.damageFlash--;
         if (ui.lungeTimer > 0) ui.lungeTimer--;
         if (ui.walkTimer > 0) ui.walkTimer--;
+        if (ui.slashTimer > 0) ui.slashTimer--;
+        if (player.iframes > 0) player.iframes--;
         for (int i = 0; i < MAX_POPS; i++) if (pops[i].timer > 0) pops[i].timer--;
 
         /* 60 FPS -> 1 game tick per second */
@@ -509,26 +652,32 @@ int main(void) {
 
             if (player.hp <= 0.0f) {
                 player.hp = (float)mhp; player.hunger = 80.0f; player.thirst = 80.0f; player.stamina = 100.0f;
-                player.x = 32; player.y = 32; set_msg("Desmayo!");
+                player.inDungeon = 0; player.x = 32; player.y = 32; set_msg("Desmayo!");
             }
 
             if (gameTime.ticks % 2 == 0) {
+                int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
+                int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
+                unsigned char *curMap = player.inDungeon ? dungeon : world;
+                Mob *curMobs = player.inDungeon ? dungMobs : mobs;
                 for (int i = 0; i < MAX_MOBS; i++) {
-                    if (!mobs[i].alive) continue;
-                    int d = (mobs[i].x > player.x ? mobs[i].x - player.x : player.x - mobs[i].x) +
-                            (mobs[i].y > player.y ? mobs[i].y - player.y : player.y - mobs[i].y);
-                    if (d == 1) {
-                        player.hp = clampf(player.hp - 6.0f, 0.0f, (float)maxHp());
+                    if (!curMobs[i].alive) continue;
+                    int d = (curMobs[i].x > player.x ? curMobs[i].x - player.x : player.x - curMobs[i].x) +
+                            (curMobs[i].y > player.y ? curMobs[i].y - player.y : player.y - curMobs[i].y);
+                    if (d == 1 && player.iframes <= 0) {
+                        int edmg = (curMobs[i].type == MOB_SKELETON) ? 10 : 6;
+                        player.hp = clampf(player.hp - (float)edmg, 0.0f, (float)maxHp());
+                        player.iframes = 30;
                         audio_play_sfx(SFX_HURT);
                         ui.damageFlash = 8; ui.shakeTimer = 5;
-                        spawn_pop(player.x, player.y, "-6 HP", 0xFF4444FF);
-                    } else if (d < 7 && rnd() < 0.6f) {
-                        int mx = mobs[i].x + (player.x > mobs[i].x ? 1 : (player.x < mobs[i].x ? -1 : 0));
-                        int my = mobs[i].y + (player.y > mobs[i].y ? 1 : (player.y < mobs[i].y ? -1 : 0));
-                        if (rnd() < 0.5f) my = mobs[i].y; else mx = mobs[i].x;
-                        if (mx > 2 && my > 2 && mx < WORLD_SIZE - 2 && my < WORLD_SIZE - 2 &&
-                            is_walkable(world[my * WORLD_SIZE + mx]) && !(mx == player.x && my == player.y) && mob_at(mx, my) < 0) {
-                            mobs[i].x = mx; mobs[i].y = my;
+                        spawn_pop(player.x, player.y, edmg == 10 ? "-10 HP" : "-6 HP", 0xFF4444FF);
+                    } else if (d < 8 && rnd() < 0.65f) {
+                        int mx = curMobs[i].x + (player.x > curMobs[i].x ? 1 : (player.x < curMobs[i].x ? -1 : 0));
+                        int my = curMobs[i].y + (player.y > curMobs[i].y ? 1 : (player.y < curMobs[i].y ? -1 : 0));
+                        if (rnd() < 0.5f) my = curMobs[i].y; else mx = curMobs[i].x;
+                        if (mx > 1 && my > 1 && mx < mapW - 1 && my < mapH - 1 &&
+                            is_walkable(curMap[my * mapW + mx]) && !(mx == player.x && my == player.y) && mob_at(mx, my) < 0) {
+                            curMobs[i].x = mx; curMobs[i].y = my;
                         }
                     }
                 }

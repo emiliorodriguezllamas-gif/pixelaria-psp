@@ -27,7 +27,16 @@ enum TileType {
     T_RUIN = 11,
     T_CHEST = 12,
     T_WALL = 13,
-    T_FIRE = 14
+    T_FIRE = 14,
+    T_DUNGEON_DOOR = 15,
+    T_DFLOOR = 16,
+    T_DWALL = 17,
+    T_EXIT = 18
+};
+
+enum MobType {
+    MOB_SLIME = 0,
+    MOB_SKELETON = 1
 };
 
 enum BiomeType {
@@ -63,8 +72,12 @@ typedef struct {
     int warm;
     int slot;
     int ironTools;
-    int wood, stone, iron;
+    int swordTier; /* 0=Madera, 1=Hierro, 2=Acero, 3=Real */
+    int wood, stone, iron, bones;
     int campfires, walls, food;
+    int inDungeon;
+    int savedX, savedY;
+    int iframes;
 } Player;
 
 typedef struct {
@@ -90,7 +103,7 @@ typedef struct {
 } Stats;
 
 typedef struct {
-    int x, y, hp, alive;
+    int x, y, hp, alive, type;
 } Mob;
 
 typedef struct {
@@ -119,12 +132,18 @@ typedef struct {
     int walkTimer;
     int walkFrame;
     int actionType; /* 0=none, 1=break/hit, 2=build */
+    int slashTimer;
     char msg[48];
 } UIState;
 
+#define DUNG_W 32
+#define DUNG_H 20
+
 extern unsigned char world[WORLD_SIZE * WORLD_SIZE];
 extern unsigned char biomes[WORLD_SIZE * WORLD_SIZE];
+extern unsigned char dungeon[DUNG_W * DUNG_H];
 extern Mob mobs[MAX_MOBS];
+extern Mob dungMobs[MAX_MOBS];
 extern Popup pops[MAX_POPS];
 extern Player player;
 extern Skills skills;

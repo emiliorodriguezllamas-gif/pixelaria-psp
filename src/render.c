@@ -1,6 +1,7 @@
 #include "game.h"
 #include "font5x7.h"
 #include "sprites.h"
+#include "sprites_extra.h"
 #include <pspdisplay.h>
 #include <stdio.h>
 #include <string.h>
@@ -126,7 +127,24 @@ static void draw_textured_ground(int sx, int sy, int wx, int wy, int t, int b, i
     }
 }
 
-static void draw_tile_art(int sx, int sy, int t, int hr) {
+static int is_wall_at(int wx, int wy) {
+    if (wx < 0 || wy < 0 || wx >= WORLD_SIZE || wy >= WORLD_SIZE) return 0;
+    return world[wy * WORLD_SIZE + wx] == T_WALL;
+}
+
+static void draw_wood_wall(int sx, int sy, int wx, int wy, int hr) {
+    int u = is_wall_at(wx, wy - 1);
+    int d = is_wall_at(wx, wy + 1);
+    int l = is_wall_at(wx - 1, wy);
+    int r = is_wall_at(wx + 1, wy);
+    if (l || r) blit_sprite(sx, sy, spr_wall_h, hr, 0, 0);
+    if (u || d) blit_sprite(sx, sy, spr_wall_v, hr, 0, 0);
+    if ((!l && !r && !u && !d) || ((l || r) && (u || d)) || (l != r && !u && !d)) {
+        blit_sprite(sx, sy, spr_wall_s, hr, 0, 0);
+    }
+}
+
+static void draw_tile_art(int sx, int sy, int wx, int wy, int t, int hr) {
     int flick = (gameTime.ticks & 1) ? 1 : 0;
     switch (t) {
         case T_TREE:   blit_sprite(sx, sy, spr_tree, hr, 0, 0); break;
@@ -137,8 +155,27 @@ static void draw_tile_art(int sx, int sy, int t, int hr) {
         case T_BERRY:  blit_sprite(sx, sy, spr_berry, hr, 0, 0); break;
         case T_RUIN:   blit_sprite(sx, sy, spr_ruin, hr, 0, 0); break;
         case T_CHEST:  blit_sprite(sx, sy, spr_chest, hr, 0, 0); break;
-        case T_WALL:   blit_sprite(sx, sy, spr_wall, hr, 0, 0); break;
+        case T_WALL:   draw_wood_wall(sx, sy, wx, wy, hr); break;
         case T_FIRE:   blit_sprite(sx, sy, spr_fire, hr, flick, -flick); break;
+        case T_DUNGEON_DOOR:
+            fill_rect(sx + 2, sy + 2, 16, 17, tint_night(RGB(90, 86, 98), hr));
+            fill_rect(sx + 5, sy + 6, 10, 13, RGB(16, 14, 22));
+            draw_rect_outline(sx + 2, sy + 2, 16, 17, tint_night(RGB(145, 138, 155), hr));
+            fill_rect(sx + 9, sy + 3, 2, 2, RGB(255, 180, 60));
+            break;
+        case T_DWALL:
+            fill_rect(sx, sy, 20, 20, RGB(58, 56, 68));
+            fill_rect(sx + 1, sy + 1, 8, 8, RGB(78, 76, 90));
+            fill_rect(sx + 11, sy + 1, 8, 8, RGB(72, 70, 84));
+            fill_rect(sx + 5, sy + 11, 10, 8, RGB(76, 74, 88));
+            draw_rect_outline(sx, sy, 20, 20, RGB(34, 32, 42));
+            break;
+        case T_EXIT:
+            fill_rect(sx + 2, sy + 3, 16, 14, RGB(40, 38, 48));
+            fill_rect(sx + 4, sy + 5, 12, 3, RGB(140, 120, 85));
+            fill_rect(sx + 4, sy + 9, 12, 3, RGB(115, 98, 70));
+            fill_rect(sx + 4, sy + 13, 12, 3, RGB(90, 76, 54));
+            break;
         default: break;
     }
 }
@@ -194,50 +231,88 @@ void render_frame(void) {
     int ox = 4 + (ui.shakeTimer > 0 ? ((ui.shakeTimer & 1) ? 2 : -2) : 0);
     int oy = 34 + (ui.shakeTimer > 0 ? ((ui.shakeTimer & 2) ? 1 : -1) : 0);
 
+    int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
+    int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
+    unsigned char *curMap = player.inDungeon ? dungeon : world;
+    Mob *curMobs = player.inDungeon ? dungMobs : mobs;
+    int renderHr = player.inDungeon ? 12 : hr;
+
     int camX = player.x - VIEW_W / 2;
     int camY = player.y - VIEW_H / 2;
     if (camX < 0) camX = 0;
     if (camY < 0) camY = 0;
-    if (camX > WORLD_SIZE - VIEW_W) camX = WORLD_SIZE - VIEW_W;
-    if (camY > WORLD_SIZE - VIEW_H) camY = WORLD_SIZE - VIEW_H;
+    if (camX > mapW - VIEW_W) camX = mapW - VIEW_W;
+    if (camY > mapH - VIEW_H) camY = mapH - VIEW_H;
 
     for (int vy = 0; vy < VIEW_H; vy++) {
         for (int vx = 0; vx < VIEW_W; vx++) {
             int wx = camX + vx;
             int wy = camY + vy;
-            int idx = wy * WORLD_SIZE + wx;
+            int idx = wy * mapW + wx;
             int sx = ox + vx * TILE_PX;
             int sy = oy + vy * TILE_PX;
-            draw_textured_ground(sx, sy, wx, wy, world[idx], biomes[idx], hr);
-            draw_tile_art(sx, sy, world[idx], hr);
+            if (player.inDungeon) {
+                unsigned int dcol = ((wx + wy) & 1) ? RGB(36, 34, 44) : RGB(42, 40, 52);
+                fill_rect(sx, sy, TILE_PX, TILE_PX, dcol);
+            } else {
+                draw_textured_ground(sx, sy, wx, wy, curMap[idx], biomes[idx], renderHr);
+            }
+            draw_tile_art(sx, sy, wx, wy, curMap[idx], renderHr);
         }
     }
 
-    /* Slimes */
-    int slimeBob = (gameTime.ticks & 1) ? -1 : 0;
+    /* Enemies (Slimes & Dungeon Skeletons) */
+    int mobBob = (gameTime.ticks & 1) ? -1 : 0;
     for (int i = 0; i < MAX_MOBS; i++) {
-        if (!mobs[i].alive) continue;
-        int sx = ox + (mobs[i].x - camX) * TILE_PX;
-        int sy = oy + (mobs[i].y - camY) * TILE_PX;
+        if (!curMobs[i].alive) continue;
+        int sx = ox + (curMobs[i].x - camX) * TILE_PX;
+        int sy = oy + (curMobs[i].y - camY) * TILE_PX;
         if (sx >= ox && sx < ox + 320 && sy >= oy && sy < oy + 200) {
-            blit_sprite(sx, sy, spr_slime, hr, (i & 1), slimeBob);
+            const unsigned int *mspr = (curMobs[i].type == MOB_SKELETON) ? spr_skeleton : spr_slime;
+            blit_sprite(sx, sy, mspr, renderHr, (i & 1), mobBob);
         }
     }
 
-    /* Player with walk bob, step dust, and tool/build animation */
+    /* Player (4-directional sprites + walk bob + step dust + Zelda slash) */
     int walkBob = (ui.walkTimer > 3) ? -2 : 0;
     int px = ox + (player.x - camX) * TILE_PX + (ui.lungeTimer > 0 ? player.fx * 4 : 0);
     int py = oy + (player.y - camY) * TILE_PX + (ui.lungeTimer > 0 ? player.fy * 4 : 0) + walkBob;
     if (ui.walkTimer > 0) {
         int dustX = ox + (player.x - camX) * TILE_PX + (ui.walkFrame ? 6 : 11);
         int dustY = oy + (player.y - camY) * TILE_PX + 17;
-        fill_rect(dustX, dustY, 3, 2, tint_night(RGB(210, 210, 190), hr));
+        fill_rect(dustX, dustY, 3, 2, tint_night(RGB(210, 210, 190), renderHr));
     }
-    blit_sprite(px, py, spr_player, ui.damageFlash > 0 ? 22 : hr, player.fx < 0, 0);
-    if (player.slot < 3) {
+    const unsigned int *pspr = spr_p_down;
+    if (player.fy < 0) pspr = spr_p_up;
+    else if (player.fx < 0) pspr = spr_p_left;
+    else if (player.fx > 0) pspr = spr_p_right;
+    if ((player.iframes & 2) == 0) {
+        blit_sprite(px, py, pspr, ui.damageFlash > 0 ? 22 : renderHr, 0, 0);
+    }
+
+    /* Zelda Game Boy wide sweeping sword slash arc */
+    if (ui.slashTimer > 0) {
+        static const unsigned int swCols[4] = {
+            RGB(210, 165, 95),  /* Madera */
+            RGB(215, 232, 250), /* Hierro */
+            RGB(130, 215, 255), /* Acero */
+            RGB(255, 225, 70)   /* Real */
+        };
+        unsigned int sc = swCols[player.swordTier & 3];
+        int cx = ox + (player.x - camX) * TILE_PX + 10;
+        int cy = oy + (player.y - camY) * TILE_PX + 10;
+        int phase = 8 - ui.slashTimer; /* 0..7 sweep */
+        for (int a = -1; a <= 1; a++) {
+            int sx = cx + player.fx * 18 + (player.fy != 0 ? a * (10 + phase) : 0);
+            int sy = cy + player.fy * 18 + (player.fx != 0 ? a * (10 + phase) : 0);
+            fill_rect(sx - 2, sy - 2, 5, 5, sc);
+            fill_rect(sx - 1, sy - 1, 3, 3, RGB(255, 255, 255));
+        }
+    } else if (player.slot < 3) {
         int toolX = px + (player.fx < 0 ? 1 : 16);
         int toolY = py + (ui.lungeTimer > 0 ? 4 : 8);
-        unsigned int toolCol = player.ironTools ? RGB(215, 236, 255) : RGB(205, 210, 220);
+        unsigned int toolCol = (player.slot == 0 && player.swordTier >= 2) ? RGB(130, 215, 255) :
+                               (player.ironTools ? RGB(215, 236, 255) : RGB(205, 210, 220));
         fill_rect(toolX, toolY, 3, ui.lungeTimer > 0 ? 10 : 6, toolCol);
     }
 
@@ -253,8 +328,8 @@ void render_frame(void) {
         fill_rect(ttx + 10 + sp, tty + 11 + sp, 2, 2, pcol);
     }
 
-    /* Weather particles (Rain / Snow) */
-    if (gameTime.weather > 0) {
+    /* Weather particles (Overworld only) */
+    if (!player.inDungeon && gameTime.weather > 0) {
         static int wf = 0;
         wf++;
         for (int p = 0; p < 24; p++) {
@@ -271,7 +346,7 @@ void render_frame(void) {
     /* Target cursor */
     int tx = player.x + player.fx;
     int ty = player.y + player.fy;
-    if (tx >= 0 && tx < WORLD_SIZE && ty >= 0 && ty < WORLD_SIZE) {
+    if (tx >= 0 && tx < mapW && ty >= 0 && ty < mapH) {
         draw_rect_outline(ox + (tx - camX) * TILE_PX, oy + (ty - camY) * TILE_PX, TILE_PX, TILE_PX, RGB(255, 226, 77));
     }
 
@@ -312,15 +387,18 @@ void render_frame(void) {
         draw_text(402, 70, "Hoguera OK", RGB(255, 255, 255));
     }
 
+    static const char *swNames[4] = {"Mad", "Hie", "Ace", "Real"};
     sprintf(buf, "Mad:%d Pie:%d", player.wood, player.stone);
     draw_text(332, 110, buf, RGB(230, 235, 245));
-    sprintf(buf, "Hie:%d", player.iron);
+    sprintf(buf, "Hie:%d Hue:%d", player.iron, player.bones);
     draw_text(332, 122, buf, RGB(255, 210, 158));
+    sprintf(buf, "Esp:%s %s", swNames[player.swordTier & 3], player.inDungeon ? "[DUNGEON]" : "");
+    draw_text(332, 134, buf, RGB(255, 226, 122));
 
-    draw_text(332, 144, "[X] Usar   [L/R] Slot", RGB(160, 175, 200));
-    draw_text(332, 158, "[^] Craft  [O] Stats", RGB(160, 175, 200));
-    draw_text(332, 172, "[START] Guardar", RGB(160, 175, 200));
-    draw_text(332, 186, "[SEL] SFX On/Off", RGB(160, 175, 200));
+    draw_text(332, 150, "[X] Usar   [L/R] Slot", RGB(160, 175, 200));
+    draw_text(332, 163, "[^] Craft  [O] Stats", RGB(160, 175, 200));
+    draw_text(332, 176, "[START] Guardar", RGB(160, 175, 200));
+    draw_text(332, 189, "[SEL] SFX On/Off", RGB(160, 175, 200));
 
     /* BOTTOM HOTBAR */
     fill_rect(4, 237, 472, 32, RGB(19, 22, 29));
@@ -345,21 +423,22 @@ void render_frame(void) {
 
     /* CRAFT MODAL */
     if (ui.craftOpen) {
-        fill_rect(50, 42, 380, 180, RGB(22, 26, 36));
-        draw_rect_outline(50, 42, 380, 180, RGB(255, 226, 122));
-        draw_text(60, 50, "CRAFTEO & EQUIPO ([X] Crear, [^] Cerrar)", RGB(255, 226, 122));
-        const char *items[5] = {
+        fill_rect(44, 38, 392, 192, RGB(22, 26, 36));
+        draw_rect_outline(44, 38, 392, 192, RGB(255, 226, 122));
+        draw_text(54, 46, "CRAFTEO & FORJA ([X] Crear, [^] Cerrar)", RGB(255, 226, 122));
+        const char *items[6] = {
             "Hoguera (3 Mad, 2 Pie) - Seca ropa y cura",
-            "Muro x2 (2 Mad, 1 Pie) - Refugio",
+            "Muro x2 (2 Mad, 1 Pie) - Refugio conectable",
             "Racion (2 Bayas, 1 Mad) - +45 Hambre",
             "Herramientas Hierro (4 Hie, 2 Mad) - 2x",
+            "Mejorar Espada (3 Hie, 3 Hue) - Sube Tier!",
             "Descansar (Junto a Hoguera) - +Energia/Dia"
         };
-        for (int i = 0; i < 5; i++) {
-            int iy = 72 + i * 26;
-            fill_rect(60, iy, 360, 22, i == ui.menuSel ? RGB(54, 65, 89) : RGB(35, 41, 56));
-            draw_rect_outline(60, iy, 360, 22, i == ui.menuSel ? RGB(255, 226, 122) : RGB(75, 86, 112));
-            draw_text(66, iy + 7, items[i], RGB(240, 240, 240));
+        for (int i = 0; i < 6; i++) {
+            int iy = 64 + i * 26;
+            fill_rect(54, iy, 372, 22, i == ui.menuSel ? RGB(54, 65, 89) : RGB(35, 41, 56));
+            draw_rect_outline(54, iy, 372, 22, i == ui.menuSel ? RGB(255, 226, 122) : RGB(75, 86, 112));
+            draw_text(60, iy + 7, items[i], RGB(240, 240, 240));
         }
     }
 
