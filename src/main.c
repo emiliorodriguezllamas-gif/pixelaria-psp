@@ -126,6 +126,32 @@ static void draw_spr24_scaled(unsigned int *fb, const unsigned int *spr, int dx,
     }
 }
 
+static void draw_spr48(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int j = 0; j < 48; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr[j * 48];
+        for (int i = 0; i < 48; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
+static void draw_ellipse_ring(unsigned int *fb, int cx, int cy, int rx, int ry, unsigned int col) {
+    for (int deg = 0; deg < 360; deg += 4) {
+        float rad = (float)deg * 0.01745329f;
+        int px = cx + (int)(cosf(rad) * (float)rx);
+        int py = cy + (int)(sinf(rad) * (float)ry);
+        put_px(fb, px, py, col);
+        put_px(fb, px, py + 1, col);
+    }
+}
+
 static void draw_boss64(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flash) {
     for (int j = 0; j < 64; j++) {
         int py = dy + j;
@@ -645,49 +671,99 @@ int main(void) {
                 draw_text(fb, 148, 140, buf, RGB(140, 255, 160));
                 draw_text(fb, 148, 172, "Pulsa [X] para Nueva Partida", RGB(255, 255, 255));
             } else {
-                /* Battle Scene: Top Status Windows + 32-bit Character & Boss Sprites */
-                draw_ff_window(fb, 8, 6, 184, 36);
-                fill_rect(fb, 16, 14, 168, 8, RGB(30, 20, 35));
-                fill_rect(fb, 16, 14, (pHp * 168) / pMaxHp, 8, RGB(60, 215, 255));
-                sprintf(buf, "BANDA HP:%d/%d MP:%d", pHp, pMaxHp, pMp);
-                draw_text(fb, 16, 26, buf, RGB(220, 240, 255));
+                /* Battle Scene: Top Status Windows + 32-bit High-Res Band (48x48) & Boss (64x64) */
+                draw_ff_window(fb, 8, 6, 206, 42);
+                fill_rect(fb, 14, 12, 26, 28, RGB(14, 18, 48));
+                draw_spr24(fb, spr_bard, 15, 14);
+                draw_border(fb, 14, 12, 26, 28, RGB(240, 200, 80));
+                draw_text(fb, 46, 11, "BANDA DEL BARDO", RGB(255, 225, 85));
+                draw_text(fb, 46, 23, "HP", RGB(120, 255, 140));
+                fill_rect(fb, 62, 23, 80, 7, RGB(20, 35, 25));
+                fill_rect(fb, 62, 23, (pHp * 80) / pMaxHp, 7, RGB(50, 225, 100));
+                draw_border(fb, 62, 23, 80, 7, RGB(230, 240, 255));
+                sprintf(buf, "%d/%d", pHp, pMaxHp);
+                draw_text(fb, 146, 23, buf, RGB(255, 255, 255));
 
-                draw_ff_window(fb, 288, 6, 184, 36);
-                fill_rect(fb, 296, 14, 168, 8, RGB(30, 20, 35));
-                fill_rect(fb, 296, 14, (bHp * 168) / bMaxHp, 8, RGB(255, 55, 85));
-                draw_text(fb, 296, 26, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 180, 180));
+                draw_text(fb, 46, 34, "MP", RGB(100, 225, 255));
+                fill_rect(fb, 62, 34, 80, 6, RGB(16, 28, 48));
+                fill_rect(fb, 62, 34, (pMp * 80) / pMaxMp, 6, RGB(45, 195, 255));
+                draw_border(fb, 62, 34, 80, 6, RGB(200, 235, 255));
+                sprintf(buf, "%d/%d", pMp, pMaxMp);
+                draw_text(fb, 146, 34, buf, RGB(140, 235, 255));
 
-                /* Draw Band on Left & Boss/Monster on Right */
-                draw_spr24_scaled(fb, spr_band2, 14, 70, 2);
-                draw_spr24_scaled(fb, spr_band1, 36, 92, 2);
-                draw_spr24_scaled(fb, spr_bard,  64, 82, 2);
+                /* Top-Right Boss/Enemy Status Window */
+                draw_ff_window(fb, 266, 6, 206, 42);
+                draw_text(fb, 276, 11, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 255, 255));
+                draw_text(fb, 276, 23, "HP", RGB(255, 130, 140));
+                fill_rect(fb, 294, 23, 104, 7, RGB(45, 14, 20));
+                fill_rect(fb, 294, 23, (bHp * 104) / bMaxHp, 7, RGB(240, 50, 70));
+                draw_border(fb, 294, 23, 104, 7, RGB(255, 230, 235));
+                sprintf(buf, "%d/%d", bHp, bMaxHp);
+                draw_text(fb, 402, 23, buf, RGB(255, 255, 255));
+                sprintf(buf, "DEBILIDAD: %s (x2!)", styleNames[bossWeak[chapter]]);
+                draw_text(fb, 276, 35, buf, RGB(255, 215, 80));
 
+                /* Individual Runic Summoning Circles + Staggered 3-Piece 48x48 Band on Left */
+                draw_ellipse_ring(fb, 42,  144, 22, 6, RGB(175, 105, 255));
+                draw_ellipse_ring(fb, 122, 148, 22, 6, RGB(65, 225, 255));
+                draw_ellipse_ring(fb, 82,  158, 22, 6, RGB(80, 235, 145));
+
+                draw_spr48(fb, spr_band2_48, 18, 100);
+                draw_spr48(fb, spr_bard_48,  98, 104);
+                draw_spr48(fb, spr_band1_48, 58, 114);
+
+                /* Boss Summoning Circle & Flood-Filled 64x64 Boss on Right */
+                draw_ellipse_ring(fb, 390, 148, 42, 11, RGB(255, 65, 85));
+                draw_ellipse_ring(fb, 390, 148, 32, 8,  RGB(255, 185, 90));
                 const unsigned int *espr;
                 if (isMobBattle) espr = (chapter == 0) ? mob_slime : (chapter == 1 ? mob_goblin : mob_wraith);
                 else             espr = (chapter == 0) ? boss_golem : (chapter == 1 ? boss_automaton : boss_dragon);
-                draw_boss64(fb, espr, 376, 72, bossHitFlash > 0);
+                draw_boss64(fb, espr, 358, 86, bossHitFlash > 0);
 
                 if (inFFMenu) {
-                    /* Classic Final Fantasy Turn-Based Command Menu */
-                    draw_ff_window(fb, 12, 162, 224, 102);
-                    draw_ff_window(fb, 244, 162, 224, 102);
+                    /* Classic Final Fantasy Turn-Based Command Menu + Partitura Preview */
+                    draw_ff_window(fb, 8, 170, 224, 96);
+                    fill_rect(fb, 12, 174, 216, 12, RGB(38, 52, 128));
+                    draw_text(fb, 16, 176, "COMANDOS DE BATALLA [TURNO]", RGB(255, 220, 80));
+
+                    fill_rect(fb, 14, 189 + ffCursor * 18, 212, 15, RGB(65, 85, 185));
+                    draw_border(fb, 14, 189 + ffCursor * 18, 212, 15, RGB(255, 215, 85));
+
                     const char *opts[4] = {
-                        "ATACAR (Melodia)",
-                        "CAMBIAR ESTILO",
-                        "CURAR (+45HP / 15MP)",
-                        "HUIR"
+                        "ATACAR (Tocar Melodia)",
+                        "CAMBIAR ESTILO MUSICAL",
+                        "HIMNO CURATIVO (+45 HP)",
+                        "HUIR DEL COMBATE"
                     };
+                    const char *hotkeys[4] = { "[X]", "[L/R]", "15MP", "[O]" };
                     for (int i = 0; i < 4; i++) {
-                        draw_text(fb, 24, 174 + i * 21, ffCursor == i ? ">" : " ", RGB(255, 235, 80));
-                        draw_text(fb, 36, 174 + i * 21, opts[i], ffCursor == i ? RGB(255, 235, 80) : RGB(255, 255, 255));
+                        int ry = 193 + i * 18;
+                        draw_text(fb, 18, ry, ffCursor == i ? ">" : " ", RGB(255, 235, 80));
+                        draw_text(fb, 28, ry, opts[i], ffCursor == i ? RGB(255, 240, 90) : RGB(255, 255, 255));
+                        draw_text(fb, 196, ry, hotkeys[i], RGB(130, 230, 255));
                     }
-                    sprintf(buf, "ESTILO: %s", styleNames[curStyle]);
-                    draw_text(fb, 256, 176, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 225, 90));
-                    sprintf(buf, "DEBIL A: %s", styleNames[bossWeak[chapter]]);
-                    draw_text(fb, 256, 198, buf, RGB(180, 220, 255));
-                    sprintf(buf, "ENEMIGO HP: %d/%d", bHp, bMaxHp);
-                    draw_text(fb, 256, 220, buf, RGB(255, 170, 170));
-                    draw_text(fb, 256, 242, "TURNO DE TU BANDA [X]", RGB(255, 255, 255));
+
+                    /* Right Tactical & Partitura Window */
+                    draw_ff_window(fb, 238, 170, 234, 96);
+                    fill_rect(fb, 242, 174, 226, 12, RGB(38, 52, 128));
+                    draw_text(fb, 248, 176, "ARMONIA Y PARTITURA ENEMIGA", RGB(100, 235, 255));
+
+                    fill_rect(fb, 246, 190, 218, 16, curStyle == bossWeak[chapter] ? RGB(18, 52, 36) : RGB(44, 34, 18));
+                    draw_border(fb, 246, 190, 218, 16, curStyle == bossWeak[chapter] ? RGB(80, 235, 135) : RGB(240, 190, 75));
+                    sprintf(buf, curStyle == bossWeak[chapter] ? "ESTILO: %s -> CRITICO x2!" : "ESTILO: %s (Pulsa L/R)", styleNames[curStyle]);
+                    draw_text(fb, 252, 194, buf, curStyle == bossWeak[chapter] ? RGB(120, 255, 150) : RGB(255, 225, 95));
+
+                    draw_text(fb, 246, 212, isMobBattle ? "MELODIA: SENCILLA (LENTA):" : "MELODIA BOSS (RAPIDA):", RGB(180, 225, 255));
+                    unsigned int pcols[4] = { RGB(235,70,180), RGB(60,215,110), RGB(240,75,75), RGB(65,165,255) };
+                    for (int n = 0; n < 6; n++) {
+                        int nl = (chapter + n * 3) & 3;
+                        int nx = 248 + n * 36;
+                        fill_rect(fb, nx, 224, 28, 15, pcols[nl]);
+                        draw_border(fb, nx, 224, 28, 15, RGB(255, 255, 255));
+                        draw_text(fb, nx + (nl == 0 ? 8 : 11), 228, laneLabels[nl], RGB(255, 255, 255));
+                    }
+                    sprintf(buf, "RELIQUIAS: +%dDMG  +%dVAMP  %s", relicDmg, relicVamp, relicShield ? "ESCUDO" : "-");
+                    draw_text(fb, 246, 248, buf, RGB(255, 215, 85));
                 } else if (inDefense) {
                     /* Enemy Turn: Dodge Box */
                     draw_ff_window(fb, 128, 114, 224, 150);
