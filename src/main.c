@@ -1,6 +1,8 @@
 #include <pspkernel.h>
 #include <pspctrl.h>
 #include <pspdisplay.h>
+#include <pspgu.h>
+#include <pspge.h>
 #include <pspaudio.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,11 +21,8 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define HIT_Y 232
 #define RGB(r,g,b) ((unsigned int)(0xFF000000u | ((unsigned int)(b)<<16) | ((unsigned int)(g)<<8) | (unsigned int)(r)))
 
-/* Pure double-buffered uncached VRAM: zero flicker, zero Gu/CPU desync */
-static unsigned int * const vram_bufs[2] = {
-    (unsigned int *)0x44000000,
-    (unsigned int *)(0x44000000 + BUF_W * SCR_H * 4)
-};
+static unsigned int __attribute__((aligned(16))) gulist[262144];
+static unsigned int *vram_bufs[2];
 static int cur_fb = 0;
 
 static int running = 1;
@@ -375,8 +374,25 @@ int main(void) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
-    sceDisplaySetMode(0, SCR_W, SCR_H);
-    sceDisplaySetFrameBuf(vram_bufs[0], BUF_W, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
+    unsigned int vram_base = ((unsigned int)sceGeEdramGetAddr()) | 0x40000000u;
+    vram_bufs[0] = (unsigned int *)vram_base;
+    vram_bufs[1] = (unsigned int *)(vram_base + BUF_W * SCR_H * 4);
+    memset((void *)vram_base, 0, BUF_W * SCR_H * 4 * 2);
+
+    sceGuInit();
+    sceGuStart(GU_DIRECT, gulist);
+    sceGuDrawBuffer(GU_PSM_8888, (void *)0, BUF_W);
+    sceGuDispBuffer(SCR_W, SCR_H, (void *)(BUF_W * SCR_H * 4), BUF_W);
+    sceGuOffset(2048 - (SCR_W / 2), 2048 - (SCR_H / 2));
+    sceGuViewport(2048, 2048, SCR_W, SCR_H);
+    sceGuScissor(0, 0, SCR_W, SCR_H);
+    sceGuEnable(GU_SCISSOR_TEST);
+    sceGuDisable(GU_DEPTH_TEST);
+    sceGuShadeModel(GU_FLAT);
+    sceGuFinish();
+    sceGuSync(0, 0);
+    sceDisplayWaitVblankStart();
+    sceGuDisplay(GU_TRUE);
 
     load_best();
     ach = sceAudioChReserve(PSP_AUDIO_NEXT_CHANNEL, 1024, PSP_AUDIO_FORMAT_STEREO);
@@ -910,7 +926,7 @@ int main(void) {
         }
 
         sceDisplayWaitVblankStart();
-        sceDisplaySetFrameBuf(fb, BUF_W, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
+        sceGuSwapBuffers();
         cur_fb ^= 1;
     }
 
@@ -918,6 +934,7 @@ int main(void) {
     arun = 0;
     if (ath >= 0) sceKernelWaitThreadEnd(ath, NULL);
     if (ach >= 0) sceAudioChRelease(ach);
+    sceGuTerm();
     sceKernelExitGame();
     return 0;
 }
