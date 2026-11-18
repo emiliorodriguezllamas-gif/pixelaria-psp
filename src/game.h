@@ -61,7 +61,11 @@ enum SfxId {
     SFX_LEVELUP,
     SFX_HURT,
     SFX_BLOCKED,
-    SFX_UI
+    SFX_UI,
+    SFX_SLASH,
+    SFX_BONE_HIT,
+    SFX_SKEL_ATK,
+    SFX_DOOR
 };
 
 typedef struct {

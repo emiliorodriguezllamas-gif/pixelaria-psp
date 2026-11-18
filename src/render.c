@@ -355,6 +355,35 @@ void render_frame(void) {
         }
     }
 
+    /* Built-in Player Lantern Darkness Pass (Dungeon & Night) */
+    if (player.inDungeon || hr >= 20 || hr < 5) {
+        int lcx = px + 10;
+        int lcy = py + 10;
+        int r1 = player.inDungeon ? 2025 : 3600; /* 45px / 60px full light */
+        int r2 = player.inDungeon ? 7225 : 10000; /* 85px / 100px outer fade */
+        int minMul = player.inDungeon ? 14 : 45;
+        for (int yy = 34; yy < 234; yy++) {
+            unsigned int *row = &backbuf[yy * SCR_W];
+            int dy = yy - lcy;
+            int dy2 = dy * dy;
+            for (int xx = 4; xx < 324; xx++) {
+                int dx = xx - lcx;
+                int d2 = dx * dx + dy2;
+                if (d2 > r1) {
+                    int mul = minMul;
+                    if (d2 < r2) {
+                        mul = minMul + ((100 - minMul) * (r2 - d2)) / (r2 - r1);
+                    }
+                    unsigned int c = row[xx];
+                    int r = ((c & 0xFF) * mul) / 100;
+                    int g = (((c >> 8) & 0xFF) * mul) / 100;
+                    int b = (((c >> 16) & 0xFF) * mul) / 100;
+                    row[xx] = RGB(r, g, b);
+                }
+            }
+        }
+    }
+
     /* Target cursor */
     int tx = player.x + player.fx;
     int ty = player.y + player.fy;

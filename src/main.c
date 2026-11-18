@@ -291,7 +291,7 @@ static void move_player(int dx, int dy, int direct) {
             player.savedX = nx; player.savedY = ny;
             player.inDungeon = 1; player.inBoat = 0;
             player.x = 3; player.y = 10; player.fx = 1; player.fy = 0;
-            audio_play_sfx(SFX_CRAFT);
+            audio_play_sfx(SFX_DOOR);
             set_msg("Entraste al Dungeon!");
             return;
         }
@@ -299,7 +299,7 @@ static void move_player(int dx, int dy, int direct) {
             player.inDungeon = 0; player.inBoat = 0;
             player.x = player.savedX; player.y = player.savedY + 1;
             player.fx = 0; player.fy = 1;
-            audio_play_sfx(SFX_CRAFT);
+            audio_play_sfx(SFX_DOOR);
             set_msg("Saliste del Dungeon!");
             return;
         }
@@ -325,7 +325,7 @@ static void hit_mob_at(int hx, int hy, int dmg) {
     int mb = mob_at(hx, hy);
     if (mb < 0) return;
     curMobs[mb].hp -= dmg;
-    audio_play_sfx(SFX_HIT);
+    audio_play_sfx(curMobs[mb].type == MOB_SKELETON ? SFX_BONE_HIT : SFX_HIT);
     ui.shakeTimer = 4;
     if (curMobs[mb].hp <= 0) {
         curMobs[mb].alive = 0;
@@ -385,6 +385,7 @@ static void use_tool(void) {
     /* Zelda Game Boy sweeping sword slash (hits 3 tiles in front!) */
     if (player.slot == 0) {
         ui.slashTimer = 8;
+        audio_play_sfx(SFX_SLASH);
         int dmg = 2 + player.swordTier * 2 + (skills.combate.lv - 1) / 3;
         int hitAny = 0;
         for (int a = -1; a <= 1; a++) {
@@ -696,7 +697,7 @@ int main(void) {
                         int edmg = (curMobs[i].type == MOB_SKELETON) ? 10 : 6;
                         player.hp = clampf(player.hp - (float)edmg, 0.0f, (float)maxHp());
                         player.iframes = 30;
-                        audio_play_sfx(SFX_HURT);
+                        audio_play_sfx(curMobs[i].type == MOB_SKELETON ? SFX_SKEL_ATK : SFX_HURT);
                         ui.damageFlash = 8; ui.shakeTimer = 5;
                         spawn_pop(player.x, player.y, edmg == 10 ? "-10 HP" : "-6 HP", 0xFF4444FF);
                     } else if (d < 8 && rnd() < 0.65f) {

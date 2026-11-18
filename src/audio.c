@@ -26,6 +26,9 @@ static const float day_bass[4] = {130.81f, 110.00f, 87.31f, 98.00f};
 static const float day_bell[8] = {523.25f, 659.25f, 587.33f, 440.00f, 783.99f, 659.25f, 523.25f, 392.00f};
 static const float night_bass[4] = {110.00f, 87.31f, 73.42f, 82.41f};
 static const float night_bell[8] = {440.00f, 523.25f, 392.00f, 329.63f, 493.88f, 440.00f, 349.23f, 329.63f};
+/* Spooky Cemetery / Dungeon theme (D minor / diminished) */
+static const float dung_bass[4]  = {73.42f, 58.27f, 55.00f, 49.00f}; /* D2, Bb1, A1, G1 */
+static const float dung_bell[8]  = {293.66f, 349.23f, 277.18f, 220.00f, 311.13f, 293.66f, 233.08f, 220.00f};
 
 static float bgm_env1 = 0.0f;
 static float bgm_env2 = 0.0f;
@@ -49,6 +52,10 @@ void audio_play_sfx(int id) {
         case SFX_HURT:    sfx_freq = 190.0f; sfx_dfreq = -0.004f; sfx_env = 0.32f; sfx_decay = 0.9985f; sfx_wave = 0; break;
         case SFX_BLOCKED: sfx_freq =  95.0f; sfx_dfreq = -0.002f; sfx_env = 0.16f; sfx_decay = 0.996f; sfx_wave = 0; break;
         case SFX_UI:      sfx_freq = 640.0f; sfx_dfreq =  0.003f; sfx_env = 0.14f; sfx_decay = 0.995f; sfx_wave = 1; break;
+        case SFX_SLASH:   sfx_freq = 720.0f; sfx_dfreq = -0.045f; sfx_env = 0.24f; sfx_decay = 0.9965f; sfx_wave = 1; break;
+        case SFX_BONE_HIT:sfx_freq = 980.0f; sfx_dfreq = -0.030f; sfx_env = 0.28f; sfx_decay = 0.996f; sfx_wave = 0; break;
+        case SFX_SKEL_ATK:sfx_freq = 280.0f; sfx_dfreq = -0.015f; sfx_env = 0.28f; sfx_decay = 0.9975f; sfx_wave = 0; break;
+        case SFX_DOOR:    sfx_freq = 110.0f; sfx_dfreq = -0.002f; sfx_env = 0.30f; sfx_decay = 0.9990f; sfx_wave = 1; break;
         default: break;
     }
 }
@@ -68,12 +75,12 @@ static int audio_thread(SceSize args, void *argp) {
                     int bar = (bgm_beat / 8) % 4;
                     int b = bgm_beat % 8;
                     if (b == 0) {
-                        bgm_f1 = isNight ? night_bass[bar] : day_bass[bar];
-                        bgm_env1 = 0.08f;
+                        bgm_f1 = player.inDungeon ? dung_bass[bar] : (isNight ? night_bass[bar] : day_bass[bar]);
+                        bgm_env1 = player.inDungeon ? 0.11f : 0.08f;
                     }
-                    if (b == 3 || (b == 6 && (bgm_beat % 16 == 6))) {
-                        bgm_f2 = isNight ? night_bell[(bar + bgm_beat) % 8] : day_bell[(bar + bgm_beat) % 8];
-                        bgm_env2 = isNight ? 0.05f : 0.07f;
+                    if (b == 3 || (b == 6 && (bgm_beat % 16 == 6)) || (player.inDungeon && b == 4)) {
+                        bgm_f2 = player.inDungeon ? dung_bell[(bar + bgm_beat) % 8] : (isNight ? night_bell[(bar + bgm_beat) % 8] : day_bell[(bar + bgm_beat) % 8]);
+                        bgm_env2 = player.inDungeon ? 0.06f : (isNight ? 0.05f : 0.07f);
                     }
                     bgm_beat++;
                 }
