@@ -116,12 +116,47 @@ static const int bossWeak[3] = { 0, 1, 2 };
 static int chapter = 0, pHp = 100, pMaxHp = 100, bHp = 120, bMaxHp = 120;
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
 static int relicDmg = 0, relicVamp = 0, relicShield = 0;
-static int inTitle = 1, inStory = 0, inDefense = 0, inRelic = 0, gameOver = 0, victory = 0;
+static int inTitle = 1, inOverworld = 0, inStory = 0, inDefense = 0, inRelic = 0, gameOver = 0, victory = 0;
 static float bardX = 240.0f, bardY = 210.0f;
 static float projX[6], projY[6], projVx[6], projVy[6];
 static int projAlive[6];
 static char judge[32] = "";
 static int judgeT = 0;
+
+/* PARTE 1: Mapa enorme Modo Aventura (64x48) */
+#define MW 64
+#define MH 48
+static unsigned char worldMap[MH][MW]; /* 0=pasto, 1=bosque, 2=montana, 3=agua, 4=reino, 5=dungeon */
+static int mapX = 10, mapY = 10, prevX1 = 9, prevY1 = 10, prevX2 = 8, prevY2 = 10;
+static int bossDefeated[3] = { 0, 0, 0 };
+static const int dngX[3] = { 26, 48, 54 };
+static const int dngY[3] = { 14, 34, 10 };
+static const int npcX[3] = { 12, 22, 42 };
+static const int npcY[3] = { 12, 22, 30 };
+static const char *npcMsg[3] = {
+    "ANCIONO: El Golem teme al ROCK! Ve al Este.",
+    "TROVADOR: El Automata cae ante el SYNTH!",
+    "SABIO: Solo lo SINFONICO vence al Dragon!"
+};
+static char dlgText[64] = "";
+static int dlgTimer = 0;
+
+static void init_world(void) {
+    for (int y = 0; y < MH; y++) {
+        for (int x = 0; x < MW; x++) {
+            if (x == 0 || y == 0 || x == MW - 1 || y == MH - 1) worldMap[y][x] = 2;
+            else if (x > 30 && x < 34 && y != 20 && y != 21) worldMap[y][x] = 3; /* Rio con puente en y=20 */
+            else if (((x * 7 + y * 13) % 11) == 0) worldMap[y][x] = 1; /* Bosque */
+            else if (((x * 11 + y * 5) % 19) == 0) worldMap[y][x] = 2; /* Montana */
+            else worldMap[y][x] = 0;
+        }
+    }
+    /* Reino inicial */
+    for (int y = 8; y <= 13; y++) for (int x = 8; x <= 13; x++) worldMap[y][x] = 4;
+    for (int i = 0; i < 3; i++) { worldMap[dngY[i]][dngX[i]] = 5; bossDefeated[i] = 0; }
+    mapX = 10; mapY = 10; prevX1 = 9; prevY1 = 10; prevX2 = 8; prevY2 = 10;
+    dlgTimer = 0;
+}
 
 static void load_best(void) { FILE *f = fopen("cb_save.dat", "rb"); if (f) { int v=0; if (fread(&v,4,1,f)==1 && v>0) best=v; fclose(f); } }
 static void save_best(void) { if (score > best) { best = score; FILE *f = fopen("cb_save.dat", "wb"); if (f) { fwrite(&best,4,1,f); fclose(f); } } }
@@ -139,8 +174,10 @@ static void start_chapter(int ch) {
 static void start_game(void) {
     pHp = pMaxHp = 100; score = 0;
     relicDmg = 0; relicVamp = 0; relicShield = 0;
-    inTitle = 0; gameOver = 0; victory = 0; inRelic = 0;
-    start_chapter(0);
+    init_world();
+    inTitle = 0; inOverworld = 1; inStory = 0; inDefense = 0; inRelic = 0; gameOver = 0; victory = 0;
+    snprintf(dlgText, sizeof(dlgText), "Explora el reino con tu banda! Busca los Dungeons.");
+    dlgTimer = 180;
     play_sfx(660.0f, 2000);
 }
 
@@ -179,12 +216,45 @@ int main(void) {
 
         if (inTitle || gameOver || victory) {
             if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) start_game();
+        } else if (inOverworld) {
+            if (dlgTimer > 0) dlgTimer--;
+            int dx = 0, dy = 0;
+            if (pressed & PSP_CTRL_LEFT) dx = -1;
+            else if (pressed & PSP_CTRL_RIGHT) dx = 1;
+            else if (pressed & PSP_CTRL_UP) dy = -1;
+            else if (pressed & PSP_CTRL_DOWN) dy = 1;
+            if (dx != 0 || dy != 0) {
+                int nx = mapX + dx, ny = mapY + dy;
+                if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && worldMap[ny][nx] != 2 && worldMap[ny][nx] != 3) {
+                    prevX2 = prevX1; prevY2 = prevY1;
+                    prevX1 = mapX; prevY1 = mapY;
+                    mapX = nx; mapY = ny;
+                    for (int i = 0; i < 3; i++) {
+                        if (!bossDefeated[i] && mapX == dngX[i] && mapY == dngY[i]) {
+                            inOverworld = 0;
+                            start_chapter(i);
+                            break;
+                        }
+                    }
+                }
+            }
+            if (pressed & PSP_CTRL_CROSS) {
+                for (int i = 0; i < 3; i++) {
+                    if (abs(mapX - npcX[i]) + abs(mapY - npcY[i]) <= 1) {
+                        pHp = pMaxHp;
+                        snprintf(dlgText, sizeof(dlgText), "%s", npcMsg[i]);
+                        dlgTimer = 180;
+                        play_sfx(780.0f, 900);
+                    }
+                }
+            }
         } else if (inStory) {
             if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) { inStory = 0; play_sfx(520.0f, 1200); }
         } else if (inRelic) {
-            if (pressed & PSP_CTRL_SQUARE) { relicDmg += 4; inRelic = 0; start_chapter(chapter + 1); }
-            else if (pressed & PSP_CTRL_TRIANGLE) { relicVamp += 3; inRelic = 0; start_chapter(chapter + 1); }
-            else if (pressed & PSP_CTRL_CIRCLE) { relicShield = 1; pHp = pMaxHp; inRelic = 0; start_chapter(chapter + 1); }
+            if (pressed & PSP_CTRL_SQUARE) { relicDmg += 4; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
+            else if (pressed & PSP_CTRL_TRIANGLE) { relicVamp += 3; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
+            else if (pressed & PSP_CTRL_CIRCLE) { relicShield = 1; pHp = pMaxHp; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
+            if (bossDefeated[0] && bossDefeated[1] && bossDefeated[2]) { victory = 1; inOverworld = 0; save_best(); }
         } else if (inDefense) {
             float ax = ((float)pad.Lx - 128.0f) / 128.0f, ay = ((float)pad.Ly - 128.0f) / 128.0f;
             if (fabsf(ax) < 0.18f) ax = 0; if (fabsf(ay) < 0.18f) ay = 0;
@@ -257,8 +327,7 @@ int main(void) {
                     play_sfx(523.25f + l * 75.0f, 800);
                     if (bHp <= 0) {
                         bHp = 0;
-                        if (chapter < 2) inRelic = 1;
-                        else { victory = 1; save_best(); }
+                        inRelic = 1;
                     }
                 }
             }
@@ -286,6 +355,35 @@ int main(void) {
 
         if (inTitle || gameOver || victory || inStory || inRelic) {
             gu_rect(70, 58, 340, 156, RGB(14, 12, 28));
+        } else if (inOverworld) {
+            /* Render 20x12 visible tiles around (mapX, mapY) */
+            int ox = mapX - 10, oy = mapY - 6;
+            for (int ty = 0; ty < 12; ty++) {
+                for (int tx = 0; tx < 20; tx++) {
+                    int wx = ox + tx, wy = oy + ty;
+                    unsigned int tc = RGB(45, 115, 55);
+                    if (wx < 0 || wy < 0 || wx >= MW || wy >= MH) tc = RGB(20, 20, 30);
+                    else {
+                        unsigned char t = worldMap[wy][wx];
+                        if (t == 1) tc = RGB(25, 75, 35);
+                        else if (t == 2) tc = RGB(95, 90, 105);
+                        else if (t == 3) tc = RGB(35, 95, 195);
+                        else if (t == 4) tc = RGB(140, 115, 85);
+                        else if (t == 5) tc = RGB(140, 30, 160);
+                    }
+                    gu_rect(tx * 24, ty * 22, 24, 22, tc);
+                }
+            }
+            /* NPCs */
+            for (int i = 0; i < 3; i++) {
+                int sx = (npcX[i] - ox) * 24 + 5, sy = (npcY[i] - oy) * 22 + 4;
+                if (sx >= 0 && sx < SCR_W && sy >= 0 && sy < SCR_H) gu_rect(sx, sy, 14, 14, RGB(255, 220, 60));
+            }
+            /* Band (3 musicians) */
+            gu_rect((prevX2 - ox) * 24 + 6, (prevY2 - oy) * 22 + 5, 12, 12, RGB(180, 90, 255));
+            gu_rect((prevX1 - ox) * 24 + 6, (prevY1 - oy) * 22 + 5, 12, 12, RGB(80, 230, 140));
+            gu_rect(10 * 24 + 5, 6 * 22 + 4, 14, 14, RGB(60, 210, 255));
+            if (dlgTimer > 0) gu_rect(16, 226, 448, 36, RGB(14, 12, 28));
         } else if (inDefense) {
             gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
             gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
@@ -319,6 +417,10 @@ int main(void) {
         char buf[64];
         if (inTitle) {
             draw_text(fb, 118, 76, "S Y M P H O N Y   O F   T H E   A B Y S S", RGB(255, 225, 80));
+        } else if (inOverworld) {
+            sprintf(buf, "MODO AVENTURA | HP:%d | BOSSES:%d/3 | POS:(%d,%d)", pHp, bossDefeated[0]+bossDefeated[1]+bossDefeated[2], mapX, mapY);
+            draw_text(fb, 10, 8, buf, RGB(255, 235, 100));
+            if (dlgTimer > 0) draw_text(fb, 24, 238, dlgText, RGB(255, 255, 255));
             draw_text(fb, 145, 96, "32-BIT GUITAR HERO + RPG ROGUELIKE", RGB(0, 235, 255));
             sprintf(buf, "RECORD: %d PTS", best);
             draw_text(fb, 190, 126, buf, RGB(140, 255, 160));
