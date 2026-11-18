@@ -11,7 +11,7 @@ ASFLAGS = $(CFLAGS)
 LIBS = -lpspgu -lpspgum -lpspaudio -lpspdisplay -lpspge -lpspctrl -lm
 
 EXTRA_TARGETS = EBOOT.PBP
-PSP_EBOOT_TITLE = Chordbreaker: Aria of Steel
+PSP_EBOOT_TITLE = Symphony of the Abyss
 PSP_EBOOT_ICON = ICON0.PNG
 PSP_EBOOT_PIC1 = PIC1.PNG
 PSP_EBOOT_SND0 = SND0.AT3

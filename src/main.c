@@ -11,7 +11,7 @@
 #include "font5x7.h"
 #include "bg_arena.h"
 
-PSP_MODULE_INFO("Chordbreaker", 0, 1, 0);
+PSP_MODULE_INFO("SymphonyAbyss", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 #define SCR_W 480
@@ -264,7 +264,7 @@ int main(void) {
 
         char buf[64];
         if (inTitle) {
-            draw_text(fb, 135, 76, "C H O R D B R E A K E R :  A R I A", RGB(255, 225, 80));
+            draw_text(fb, 118, 76, "S Y M P H O N Y   O F   T H E   A B Y S S", RGB(255, 225, 80));
             draw_text(fb, 145, 96, "32-BIT GUITAR HERO + RPG ROGUELIKE", RGB(0, 235, 255));
             sprintf(buf, "RECORD: %d PTS", best);
             draw_text(fb, 190, 126, buf, RGB(140, 255, 160));
