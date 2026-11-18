@@ -1,6 +1,9 @@
 TARGET = chordbreaker
 OBJS = src/main.o
 
+BUILD_PRX = 1
+PSP_FW_VERSION = 500
+
 CFLAGS = -O2 -G0 -Wall -std=gnu99
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 ASFLAGS = $(CFLAGS)
