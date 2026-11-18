@@ -493,6 +493,17 @@ void render_frame(void) {
         }
     }
 
+    /* Gathering Progress Bar (Chopping / Mining) */
+    if (ui.gatherTimer > 0 && ui.gatherMax > 0) {
+        int gx = ox + (ui.gatherX - camX) * TILE_PX;
+        int gy = oy + (ui.gatherY - camY) * TILE_PX - 5;
+        if (gy < 35) gy = 35;
+        int gw = ((ui.gatherMax - ui.gatherTimer) * 18) / ui.gatherMax;
+        if (gw < 0) gw = 0; if (gw > 18) gw = 18;
+        fill_rect(gx, gy, 20, 5, RGB(18, 22, 30));
+        fill_rect(gx + 1, gy + 1, gw, 3, ui.gatherKind == 1 ? RGB(110, 215, 90) : RGB(140, 205, 255));
+    }
+
     /* Target cursor */
     int tx = player.x + player.fx;
     int ty = player.y + player.fy;

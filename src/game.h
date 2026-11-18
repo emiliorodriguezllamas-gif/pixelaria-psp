@@ -154,6 +154,7 @@ typedef struct {
     int actionType; /* 0=none, 1=break/hit, 2=build */
     int slashTimer;
     int spinTimer;
+    int gatherX, gatherY, gatherTimer, gatherMax, gatherKind;
     char msg[48];
 } UIState;
 

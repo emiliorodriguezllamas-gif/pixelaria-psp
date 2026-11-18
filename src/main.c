@@ -311,6 +311,7 @@ static void move_player(int dx, int dy, int direct) {
         return;
     }
     if (is_walkable(t)) {
+        ui.gatherTimer = 0;
         player.x = nx; player.y = ny;
         player.inBoat = (t == T_WATER) ? 1 : 0;
         ui.walkTimer = 10;
@@ -485,6 +486,54 @@ static void drink_potion(void) {
     set_msg(msg);
 }
 
+static void start_gather(int tx, int ty, int kind, int baseFrames, int skLv) {
+    float toolMul = player.ironTools ? 0.65f : 1.0f;
+    float skillMul = 1.0f - (float)(skLv - 1) * 0.0001f; /* 0.01% per level */
+    if (skillMul < 0.25f) skillMul = 0.25f;
+    int dur = (int)((float)baseFrames * toolMul * skillMul);
+    if (dur < 15) dur = 15;
+    ui.gatherX = tx; ui.gatherY = ty;
+    ui.gatherKind = kind;
+    ui.gatherMax = dur;
+    ui.gatherTimer = dur;
+    audio_play_sfx(kind == 1 ? SFX_CHOP : SFX_MINE);
+    set_msg(kind == 1 ? "Talando..." : "Picando...");
+}
+
+static void complete_gather(int tx, int ty) {
+    int ti = ty * WORLD_SIZE + tx;
+    int t = world[ti];
+    int mult = player.ironTools ? 2 : 1;
+    if (t == T_TREE || t == T_PINE) {
+        world[ti] = (biomes[ti] == B_FOREST) ? T_FOREST : (biomes[ti] == B_TUNDRA ? T_SNOW : T_GRASS);
+        int gain = 2 * mult + (rnd() < (skills.tala.lv - 1) * 0.08f ? 1 : 0);
+        player.wood += gain; player.stamina = clampf(player.stamina - 3.0f, 0.0f, 100.0f); stats.trees++;
+        add_xp(&skills.tala, "Tala", 8, 0);
+        audio_play_sfx(SFX_CHOP);
+        ui.shakeTimer = 4;
+        spawn_pop(tx, ty, "+Mad", 0xFF66A0D9);
+        set_msg("Talaste madera");
+    } else if (t == T_ROCK || t == T_RUIN) {
+        world[ti] = (biomes[ti] == B_DESERT) ? T_SAND : (biomes[ti] == B_TUNDRA ? T_SNOW : T_GRASS);
+        int gain = 2 * mult + (rnd() < (skills.mineria.lv - 1) * 0.08f ? 1 : 0);
+        player.stone += gain; player.stamina = clampf(player.stamina - 3.0f, 0.0f, 100.0f); stats.ores++;
+        add_xp(&skills.mineria, "Min", 8, 0);
+        audio_play_sfx(SFX_MINE);
+        ui.shakeTimer = 4;
+        spawn_pop(tx, ty, "+Pie", 0xFFE6D6CF);
+        set_msg("Picaste piedra");
+    } else if (t == T_IRON) {
+        world[ti] = T_SNOW;
+        int gain = 2 * mult + (rnd() < (skills.mineria.lv - 1) * 0.08f ? 1 : 0);
+        player.iron += gain; player.stone++; player.stamina = clampf(player.stamina - 4.0f, 0.0f, 100.0f); stats.ores++;
+        add_xp(&skills.mineria, "Min", 14, 0);
+        audio_play_sfx(SFX_MINE);
+        ui.shakeTimer = 4;
+        spawn_pop(tx, ty, "+Hierro", 0xFF9ED2FF);
+        set_msg("Minaste hierro!");
+    }
+}
+
 static void use_tool(void) {
     if (player.slot == 6) {
         drink_potion();
@@ -621,14 +670,7 @@ static void use_tool(void) {
         set_msg("Piedra de mazmorra");
         return;
     } else if ((t == T_TREE || t == T_PINE) && player.slot <= 1) {
-        world[ti] = (biomes[ti] == B_FOREST) ? T_FOREST : (biomes[ti] == B_TUNDRA ? T_SNOW : T_GRASS);
-        int gain = 2 * mult + (rnd() < (skills.tala.lv - 1) * 0.08f ? 1 : 0);
-        player.wood += gain; player.stamina = clampf(player.stamina - 3.0f, 0.0f, 100.0f); stats.trees++;
-        add_xp(&skills.tala, "Tala", 8, 0);
-        audio_play_sfx(SFX_CHOP);
-        ui.shakeTimer = 4;
-        spawn_pop(tx, ty, "+Mad", 0xFF66A0D9);
-        set_msg("Talaste madera");
+        if (ui.gatherTimer <= 0) start_gather(tx, ty, 1, 180, skills.tala.lv);
     } else if (t == T_CACTUS && player.slot <= 1) {
         world[ti] = T_SAND; player.thirst = clampf(player.thirst + 20.0f, 0.0f, 100.0f); player.wood++;
         add_xp(&skills.supervivencia, "Sup", 5, 0);
@@ -636,23 +678,9 @@ static void use_tool(void) {
         spawn_pop(tx, ty, "+20 Sed", 0xFFFFA959);
         set_msg("Cactus +20 Sed");
     } else if ((t == T_ROCK || t == T_RUIN) && player.slot == 2) {
-        world[ti] = (biomes[ti] == B_DESERT) ? T_SAND : (biomes[ti] == B_TUNDRA ? T_SNOW : T_GRASS);
-        int gain = 2 * mult + (rnd() < (skills.mineria.lv - 1) * 0.08f ? 1 : 0);
-        player.stone += gain; player.stamina = clampf(player.stamina - 3.0f, 0.0f, 100.0f); stats.ores++;
-        add_xp(&skills.mineria, "Min", 8, 0);
-        audio_play_sfx(SFX_MINE);
-        ui.shakeTimer = 4;
-        spawn_pop(tx, ty, "+Pie", 0xFFE6D6CF);
-        set_msg("Picaste piedra");
+        if (ui.gatherTimer <= 0) start_gather(tx, ty, 2, 180, skills.mineria.lv);
     } else if (t == T_IRON && player.slot == 2) {
-        world[ti] = T_SNOW;
-        int gain = 2 * mult + (rnd() < (skills.mineria.lv - 1) * 0.08f ? 1 : 0);
-        player.iron += gain; player.stone++; player.stamina = clampf(player.stamina - 4.0f, 0.0f, 100.0f); stats.ores++;
-        add_xp(&skills.mineria, "Min", 14, 0);
-        audio_play_sfx(SFX_MINE);
-        ui.shakeTimer = 4;
-        spawn_pop(tx, ty, "+Hierro", 0xFF9ED2FF);
-        set_msg("Minaste hierro!");
+        if (ui.gatherTimer <= 0) start_gather(tx, ty, 2, 240, skills.mineria.lv);
     } else if (player.slot == 3 && player.campfires > 0 && is_walkable(t) && t != T_WATER) {
         world[ti] = T_FIRE; player.campfires--; check_near_fire();
         add_xp(&skills.construccion, "Cons", 10, 0);
@@ -856,6 +884,17 @@ int main(void) {
         if (ui.slashTimer > 0) ui.slashTimer--;
         if (ui.spinTimer > 0) ui.spinTimer--;
         if (player.iframes > 0) player.iframes--;
+        if (ui.gatherTimer > 0) {
+            ui.gatherTimer--;
+            if (ui.gatherTimer > 0 && (ui.gatherTimer % 30 == 0)) {
+                audio_play_sfx(ui.gatherKind == 1 ? SFX_CHOP : SFX_MINE);
+                ui.lungeTimer = 6;
+                ui.shakeTimer = 2;
+            }
+            if (ui.gatherTimer == 0) {
+                complete_gather(ui.gatherX, ui.gatherY);
+            }
+        }
         if (proj.active && (frameCnt % 3 == 0)) {
             int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
             int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
