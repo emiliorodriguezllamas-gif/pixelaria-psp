@@ -357,23 +357,23 @@ int main(void) {
         unsigned int *fb = (unsigned int*)(0x44000000 + (cur_fb ? (BUF_W * SCR_H * 4) : 0));
         char buf[64];
         if (inTitle) {
-            draw_text(145, 90, "C R I M S O N   S U R V I V O R S", RGB(255, 70, 90));
+            draw_text(fb, 145, 90, "C R I M S O N   S U R V I V O R S", RGB(255, 70, 90));
             sprintf(buf, "RECORD BAJAS: %d", bestKills);
-            draw_text(185, 122, buf, RGB(255, 230, 100));
-            draw_text(148, 152, "Pulsa [X] o [START] para Sobrevivir", RGB(255, 255, 255));
+            draw_text(fb, 185, 122, buf, RGB(255, 230, 100));
+            draw_text(fb, 148, 152, "Pulsa [X] o [START] para Sobrevivir", RGB(255, 255, 255));
         } else if (gameOver) {
-            draw_text(190, 92, "HAS CAIDO...", RGB(255, 70, 90));
+            draw_text(fb, 190, 92, "HAS CAIDO...", RGB(255, 70, 90));
             sprintf(buf, "BAJAS:%d  NIVEL:%d  RECORD:%d", kills, lv, bestKills);
-            draw_text(140, 126, buf, RGB(255, 255, 255));
-            draw_text(155, 158, "Pulsa [X] para Reintentar", RGB(160, 225, 255));
+            draw_text(fb, 140, 126, buf, RGB(255, 255, 255));
+            draw_text(fb, 155, 158, "Pulsa [X] para Reintentar", RGB(160, 225, 255));
         } else if (levelUp) {
-            draw_text(175, 80, "SUBISTE DE NIVEL!", RGB(255, 230, 80));
-            draw_text(110, 112, "[[]] +1 Orbe Giratorio", RGB(0, 235, 255));
-            draw_text(110, 136, "[Tri] +Dano y Velocidad Cuchillos", RGB(255, 240, 120));
-            draw_text(110, 160, "[O] Curar Vida al 100%", RGB(120, 255, 140));
+            draw_text(fb, 175, 80, "SUBISTE DE NIVEL!", RGB(255, 230, 80));
+            draw_text(fb, 110, 112, "[[]] +1 Orbe Giratorio", RGB(0, 235, 255));
+            draw_text(fb, 110, 136, "[Tri] +Dano y Velocidad Cuchillos", RGB(255, 240, 120));
+            draw_text(fb, 110, 160, "[O] Curar Vida al 100%", RGB(120, 255, 140));
         } else {
             sprintf(buf, "HP:%d  NV:%d  BAJAS:%d", hp, lv, kills);
-            draw_text(10, 10, buf, RGB(255, 235, 100));
+            draw_text(fb, 10, 10, buf, RGB(255, 235, 100));
         }
 
         sceDisplayWaitVblankStart();
