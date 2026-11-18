@@ -155,7 +155,7 @@ void render3d_frame(void) {
     sceGuFinish();
     sceGuSync(0, 0);
 
-    unsigned int *fb = (unsigned int*)(0x04000000 + (cur_fb ? (BUF_W * SCR_H * 4) : 0));
+    unsigned int *fb = (unsigned int*)(0x44000000 + (cur_fb ? (BUF_W * SCR_H * 4) : 0));
     char buf[64];
 
     if (ui.inTitle) {
