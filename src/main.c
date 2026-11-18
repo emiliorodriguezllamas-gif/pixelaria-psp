@@ -113,10 +113,11 @@ static const char *bossNames[3] = { "GOLEM DE HIERRO", "AUTOMATA ARCANO", "DRAGO
 static const char *styleNames[3] = { "ROCK", "SYNTH", "SINFONICO" };
 static const int bossWeak[3] = { 0, 1, 2 };
 
-static int chapter = 0, pHp = 100, pMaxHp = 100, bHp = 120, bMaxHp = 120;
+static int chapter = 0, pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 120;
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
 static int relicDmg = 0, relicVamp = 0, relicShield = 0;
-static int inTitle = 1, inOverworld = 0, inStory = 0, inDefense = 0, inRelic = 0, gameOver = 0, victory = 0;
+static int inTitle = 1, inOverworld = 0, inStory = 0, inFFMenu = 0, inDefense = 0, inRelic = 0, gameOver = 0, victory = 0;
+static int ffCursor = 0;
 static float bardX = 240.0f, bardY = 210.0f;
 static float projX[6], projY[6], projVx[6], projVy[6];
 static int projAlive[6];
@@ -173,7 +174,7 @@ static void start_mob_battle(void) {
     bardX = 240.0f; bardY = 210.0f;
     memset(notes, 0, sizeof(notes));
     memset(projAlive, 0, sizeof(projAlive));
-    inOverworld = 0; inStory = 0; inDefense = 0;
+    inOverworld = 0; inStory = 0; inFFMenu = 1; ffCursor = 0; inDefense = 0;
 }
 
 static void start_chapter(int ch) {
@@ -184,7 +185,7 @@ static void start_chapter(int ch) {
     bardX = 240.0f; bardY = 210.0f;
     memset(notes, 0, sizeof(notes));
     memset(projAlive, 0, sizeof(projAlive));
-    inStory = 1; inDefense = 0;
+    inStory = 1; inFFMenu = 0; ffCursor = 0; inDefense = 0;
 }
 
 static void start_game(void) {
@@ -268,12 +269,50 @@ int main(void) {
                 }
             }
         } else if (inStory) {
-            if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) { inStory = 0; play_sfx(520.0f, 1200); }
+            if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) { inStory = 0; inFFMenu = 1; ffCursor = 0; play_sfx(520.0f, 1200); }
+        } else if (inFFMenu) {
+            if (pressed & PSP_CTRL_UP) { ffCursor = (ffCursor + 3) % 4; play_sfx(440.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { ffCursor = (ffCursor + 1) % 4; play_sfx(440.0f, 400); }
+            if (pressed & PSP_CTRL_CROSS) {
+                if (ffCursor == 0) {
+                    inFFMenu = 0; phaseTimer = 0; memset(notes, 0, sizeof(notes));
+                    play_sfx(660.0f, 800);
+                } else if (ffCursor == 1) {
+                    curStyle = (curStyle + 1) % 3;
+                    play_sfx(520.0f, 600);
+                } else if (ffCursor == 2 && pMp >= 15) {
+                    pMp -= 15; pHp = (pHp + 40 > pMaxHp) ? pMaxHp : pHp + 40;
+                    inFFMenu = 0; inDefense = 1; phaseTimer = 0;
+                    play_sfx(880.0f, 1200);
+                } else if (ffCursor == 3 && isMobBattle) {
+                    inFFMenu = 0; inOverworld = 1;
+                    snprintf(dlgText, sizeof(dlgText), "Escapaste del combate!"); dlgTimer = 90;
+                    play_sfx(300.0f, 800);
+                }
+            }
         } else if (inRelic) {
             if (pressed & PSP_CTRL_SQUARE) { relicDmg += 4; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
             else if (pressed & PSP_CTRL_TRIANGLE) { relicVamp += 3; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
             else if (pressed & PSP_CTRL_CIRCLE) { relicShield = 1; pHp = pMaxHp; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
             if (bossDefeated[0] && bossDefeated[1] && bossDefeated[2]) { victory = 1; inOverworld = 0; save_best(); }
+        } else if (inFFMenu) {
+            gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
+            gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
+            gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
+            gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
+            gu_rect(16, 162, 220, 96, RGB(14, 22, 68)); /* Ventana azul clasica FF */
+            gu_rect(244, 162, 220, 96, RGB(14, 22, 68));
+        } else if (inFFMenu) {
+            sprintf(buf, "HP:%d  MP:%d", pHp, pMp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
+            draw_text(fb, 306, 28, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 140, 140));
+            const char *opts[4] = { "ATACAR (Melodia)", "ESTILO MUSICAL", "CURAR (+40HP 15MP)", "HUIR" };
+            for (int i = 0; i < 4; i++) {
+                draw_text(fb, 28, 174 + i * 20, ffCursor == i ? ">" : " ", RGB(255, 235, 80));
+                draw_text(fb, 40, 174 + i * 20, opts[i], ffCursor == i ? RGB(255, 235, 80) : RGB(255, 255, 255));
+            }
+            sprintf(buf, "ESTILO: %s", styleNames[curStyle]);
+            draw_text(fb, 258, 176, buf, RGB(120, 255, 160));
+            draw_text(fb, 258, 200, "Elige accion [X]", RGB(200, 220, 255));
         } else if (inDefense) {
             float ax = ((float)pad.Lx - 128.0f) / 128.0f, ay = ((float)pad.Ly - 128.0f) / 128.0f;
             if (fabsf(ax) < 0.18f) ax = 0; if (fabsf(ay) < 0.18f) ay = 0;
@@ -304,8 +343,9 @@ int main(void) {
                     if (pHp <= 0) { pHp = 0; gameOver = 1; save_best(); }
                 }
             }
-            if (phaseTimer >= 360) {
-                inDefense = 0; phaseTimer = 0;
+            if (phaseTimer >= 240) { /* 4s de defensa -> vuelve al Menu Final Fantasy */
+                inDefense = 0; inFFMenu = 1; phaseTimer = 0;
+                pMp = (pMp + 5 > pMaxMp) ? pMaxMp : pMp + 5;
                 memset(projAlive, 0, sizeof(projAlive));
             }
         } else {
@@ -314,7 +354,7 @@ int main(void) {
             if (judgeT > 0) judgeT--;
 
             phaseTimer++;
-            if (phaseTimer >= 720) {
+            if (phaseTimer >= 360) { /* 6s de ataque melodico -> turno del boss */
                 inDefense = 1; phaseTimer = 0;
                 memset(notes, 0, sizeof(notes));
             }
@@ -410,6 +450,24 @@ int main(void) {
             gu_rect((prevX1 - ox) * 24 + 6, (prevY1 - oy) * 22 + 5, 12, 12, RGB(80, 230, 140));
             gu_rect(10 * 24 + 5, 6 * 22 + 4, 14, 14, RGB(60, 210, 255));
             if (dlgTimer > 0) gu_rect(16, 226, 448, 36, RGB(14, 12, 28));
+        } else if (inFFMenu) {
+            gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
+            gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
+            gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
+            gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
+            gu_rect(16, 162, 220, 96, RGB(14, 22, 68)); /* Ventana azul clasica FF */
+            gu_rect(244, 162, 220, 96, RGB(14, 22, 68));
+        } else if (inFFMenu) {
+            sprintf(buf, "HP:%d  MP:%d", pHp, pMp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
+            draw_text(fb, 306, 28, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 140, 140));
+            const char *opts[4] = { "ATACAR (Melodia)", "ESTILO MUSICAL", "CURAR (+40HP 15MP)", "HUIR" };
+            for (int i = 0; i < 4; i++) {
+                draw_text(fb, 28, 174 + i * 20, ffCursor == i ? ">" : " ", RGB(255, 235, 80));
+                draw_text(fb, 40, 174 + i * 20, opts[i], ffCursor == i ? RGB(255, 235, 80) : RGB(255, 255, 255));
+            }
+            sprintf(buf, "ESTILO: %s", styleNames[curStyle]);
+            draw_text(fb, 258, 176, buf, RGB(120, 255, 160));
+            draw_text(fb, 258, 200, "Elige accion [X]", RGB(200, 220, 255));
         } else if (inDefense) {
             gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
             gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
@@ -469,6 +527,24 @@ int main(void) {
             sprintf(buf, "PUNTOS: %d   RECORD: %d", score, best);
             draw_text(fb, 148, 128, buf, RGB(255, 255, 255));
             draw_text(fb, 155, 164, "Pulsa [X] para Reintentar", RGB(160, 225, 255));
+        } else if (inFFMenu) {
+            gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
+            gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
+            gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
+            gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
+            gu_rect(16, 162, 220, 96, RGB(14, 22, 68)); /* Ventana azul clasica FF */
+            gu_rect(244, 162, 220, 96, RGB(14, 22, 68));
+        } else if (inFFMenu) {
+            sprintf(buf, "HP:%d  MP:%d", pHp, pMp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
+            draw_text(fb, 306, 28, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 140, 140));
+            const char *opts[4] = { "ATACAR (Melodia)", "ESTILO MUSICAL", "CURAR (+40HP 15MP)", "HUIR" };
+            for (int i = 0; i < 4; i++) {
+                draw_text(fb, 28, 174 + i * 20, ffCursor == i ? ">" : " ", RGB(255, 235, 80));
+                draw_text(fb, 40, 174 + i * 20, opts[i], ffCursor == i ? RGB(255, 235, 80) : RGB(255, 255, 255));
+            }
+            sprintf(buf, "ESTILO: %s", styleNames[curStyle]);
+            draw_text(fb, 258, 176, buf, RGB(120, 255, 160));
+            draw_text(fb, 258, 200, "Elige accion [X]", RGB(200, 220, 255));
         } else if (inDefense) {
             sprintf(buf, "HP:%d", pHp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
             draw_text(fb, 306, 28, bossNames[chapter], RGB(255, 140, 140));
