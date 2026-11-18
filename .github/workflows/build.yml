@@ -23,7 +23,7 @@ jobs:
               elif command -v apt-get >/dev/null 2>&1; then
                 apt-get update && apt-get install -y cmake g++ make git libsndfile1-dev
               fi
-              git clone --depth 1 https://github.com/dcherednik/atracdenc.git /tmp/atracdenc
+              git clone --recursive --depth 1 https://github.com/dcherednik/atracdenc.git /tmp/atracdenc
               cmake -B /tmp/atracdenc/build /tmp/atracdenc/src
               cmake --build /tmp/atracdenc/build -j
               cp /tmp/atracdenc/build/atracdenc /usr/local/bin/
