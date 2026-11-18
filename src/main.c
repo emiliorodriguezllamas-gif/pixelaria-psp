@@ -113,10 +113,11 @@ static const char *bossNames[3] = { "GOLEM DE HIERRO", "AUTOMATA ARCANO", "DRAGO
 static const char *styleNames[3] = { "ROCK", "SYNTH", "SINFONICO" };
 static const int bossWeak[3] = { 0, 1, 2 };
 
-static int chapter = 0, pHp = 100, pMaxHp = 100, bHp = 120, bMaxHp = 120;
+static int chapter = 0, pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 120;
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
 static int relicDmg = 0, relicVamp = 0, relicShield = 0;
-static int inTitle = 1, inOverworld = 0, inStory = 0, inDefense = 0, inRelic = 0, gameOver = 0, victory = 0;
+static int inTitle = 1, inOverworld = 0, inStory = 0, inFFMenu = 0, inDefense = 0, inRelic = 0, gameOver = 0, victory = 0;
+static int ffCursor = 0;
 static float bardX = 240.0f, bardY = 210.0f;
 static float projX[6], projY[6], projVx[6], projVy[6];
 static int projAlive[6];
