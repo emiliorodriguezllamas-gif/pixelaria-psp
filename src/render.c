@@ -168,6 +168,23 @@ void render_frame(void) {
 
     int shakeX = (ui.shakeTimer > 0) ? ((ui.shakeTimer & 1) ? 3 : -3) : 0;
     int horizon = 132 + (ui.shakeTimer > 0 ? ((ui.shakeTimer & 2) ? 2 : -2) : 0);
+    static int rf = 0;
+    rf++;
+
+    if (ui.gameWon) {
+        fill_rect(0, 0, SCR_W, SCR_H, RGB(10, 12, 18));
+        draw_rect_outline(40, 40, 400, 190, RGB(235, 200, 90));
+        draw_text(150, 70, "MISION COMPLETADA", RGB(255, 225, 120));
+        draw_text(110, 100, "Escapaste de las Sombras del Pueblo!", RGB(230, 235, 240));
+        sprintf(buf, "Bajas: %d   Pesetas: %d", player.kills, player.pesetas);
+        draw_text(130, 130, buf, RGB(150, 235, 170));
+        draw_text(120, 170, "Pulsa [X] para volver al menu", RGB(200, 205, 215));
+        sceDisplayWaitVblankStart();
+        for (int y = 0; y < SCR_H; y++) {
+            memcpy(&vram_base[y * VRAM_STRIDE], &backbuf[y * SCR_W], SCR_W * 4);
+        }
+        return;
+    }
 
     /* 1. Ceiling (Foggy Night Sky) & Cobblestone Floor */
     for (int y = 0; y < SCR_H; y++) {
@@ -288,8 +305,12 @@ void render_frame(void) {
             sprW = (fullH * 3) / 5;
         }
         int crouchOff = (e->stunTimer > 0) ? (sprH / 5) : 0;
-        int drawStartY = horizon + fullH / 2 - sprH + crouchOff;
-        int drawEndY = horizon + fullH / 2;
+        int bobOff = 0;
+        if (e->type == ENT_VILLAGER || e->type == ENT_CHAINSAW || e->type == ENT_BOSS) {
+            if (e->stunTimer <= 0) bobOff = (int)(sinf(rf * 0.22f + e->x * 3.0f) * (float)sprH * 0.035f);
+        }
+        int drawStartY = horizon + fullH / 2 - sprH + crouchOff + bobOff;
+        int drawEndY = horizon + fullH / 2 + bobOff;
         int drawStartX = sprScreenX - sprW / 2;
         int drawEndX = sprScreenX + sprW / 2;
 
@@ -382,7 +403,7 @@ void render_frame(void) {
     }
 
     /* Damage Red Vignette */
-    if (player.damageFlash > 0) {
+    if (player.damageFlash > 0 || (player.hp * 100 < player.maxHp * 30 && ((rf / 18) & 1))) {
         fill_rect(0, 0, SCR_W, 8, RGB(200, 20, 20));
         fill_rect(0, SCR_H - 8, SCR_W, 8, RGB(200, 20, 20));
         fill_rect(0, 0, 8, SCR_H, RGB(200, 20, 20));
@@ -398,6 +419,44 @@ void render_frame(void) {
     draw_rect_outline(6, 6, 195, 22, RGB(95, 85, 70));
     sprintf(buf, "ZONA %d: %s | %d Pts", player.stage, stgNames[player.stage], player.pesetas);
     draw_text(12, 13, buf, RGB(240, 215, 130));
+
+    /* Minimap (top-right, 2px per cell) */
+    {
+        int mmx = SCR_W - 58, mmy = 6;
+        fill_rect(mmx - 2, mmy - 2, MAP_W * 2 + 4, MAP_H * 2 + 4, RGB(10, 12, 16));
+        draw_rect_outline(mmx - 2, mmy - 2, MAP_W * 2 + 4, MAP_H * 2 + 4, RGB(95, 85, 70));
+        for (int my = 0; my < MAP_H; my++) {
+            for (int mx = 0; mx < MAP_W; mx++) {
+                int wt = worldMap[my * MAP_W + mx];
+                if (wt == W_EMPTY) continue;
+                unsigned int mc = (wt == W_GATE_DOOR) ? RGB(220, 60, 60) : RGB(105, 100, 110);
+                fill_rect(mmx + mx * 2, mmy + my * 2, 2, 2, mc);
+            }
+        }
+        for (int i = 0; i < MAX_ENTS; i++) {
+            if (!ents[i].alive) continue;
+            unsigned int ec = 0;
+            int sz = 2;
+            if (ents[i].type == ENT_VILLAGER) ec = RGB(220, 70, 60);
+            else if (ents[i].type == ENT_CHAINSAW || ents[i].type == ENT_BOSS) { ec = RGB(255, 140, 30); sz = 3; }
+            else if (ents[i].type == ENT_MERCHANT) ec = RGB(190, 120, 255);
+            if (ec) fill_rect(mmx + (int)(ents[i].x * 2.0f), mmy + (int)(ents[i].y * 2.0f), sz, sz, ec);
+        }
+        int pmx = mmx + (int)(player.x * 2.0f);
+        int pmy = mmy + (int)(player.y * 2.0f);
+        fill_rect(pmx - 1, pmy - 1, 3, 3, RGB(250, 235, 90));
+        draw_line(pmx, pmy, pmx + (int)(cosf(player.ang) * 5.0f), pmy + (int)(sinf(player.ang) * 5.0f), RGB(250, 235, 90));
+    }
+
+    /* Objective line */
+    {
+        int bossUp = 0;
+        for (int i = 0; i < MAX_ENTS; i++) {
+            if (ents[i].alive && (ents[i].type == ENT_CHAINSAW || ents[i].type == ENT_BOSS)) bossUp = 1;
+        }
+        fill_rect(6, 31, 195, 13, RGB(18, 20, 26));
+        draw_text(12, 34, bossUp ? "OBJETIVO: Derrota al Jefe" : "OBJETIVO: Cruza la puerta roja", bossUp ? RGB(255, 150, 90) : RGB(150, 240, 170));
+    }
 
     /* Bottom-right RE4 Health Gauge & Ammo Counter */
     fill_rect(SCR_W - 156, SCR_H - 42, 150, 36, RGB(18, 22, 26));
@@ -460,6 +519,23 @@ void render_frame(void) {
             draw_rect_outline(70, iy, 340, 22, i == ui.invSel ? RGB(150, 245, 170) : RGB(70, 90, 80));
             draw_text(76, iy + 7, iitems[i], RGB(235, 245, 235));
         }
+    }
+
+    if (player.deadTimer > 0) {
+        int a = 160 - player.deadTimer;
+        int shade = (a > 100) ? 100 : a;
+        for (int y = 0; y < SCR_H; y++) {
+            unsigned int *row = &backbuf[y * SCR_W];
+            for (int x = 0; x < SCR_W; x++) {
+                unsigned int c = row[x];
+                int r = ((c & 0xFF) * (100 - shade)) / 100 + (shade * 90) / 100;
+                int g = (((c >> 8) & 0xFF) * (100 - shade)) / 100;
+                int b = (((c >> 16) & 0xFF) * (100 - shade)) / 100;
+                row[x] = RGB(r, g, b);
+            }
+        }
+        draw_text(176, 120, "H A S   M U E R T O", RGB(255, 235, 220));
+        draw_text(150, 140, "Reapareceras en esta zona...", RGB(235, 200, 190));
     }
 
     sceDisplayWaitVblankStart();

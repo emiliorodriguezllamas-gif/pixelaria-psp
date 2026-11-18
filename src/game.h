@@ -76,6 +76,7 @@ typedef struct {
     int kickTimer;
     int damageFlash;
     int iframes;
+    int deadTimer;
 } Player;
 
 typedef struct {
@@ -99,6 +100,7 @@ typedef struct {
     int sfxOn;
     int shakeTimer;
     int headPopTimer;
+    int gameWon;
     char msg[52];
     int msgTimer;
 } UIState;

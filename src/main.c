@@ -185,6 +185,31 @@ static void drop_loot(float x, float y, int guaranteedBig) {
     else                spawn_ent(slot, x, y, ENT_HERB_R, 1);
 }
 
+static int merchant_near(void) {
+    for (int i = 0; i < MAX_ENTS; i++) {
+        if (ents[i].alive && ents[i].type == ENT_MERCHANT) {
+            float dx = ents[i].x - player.x;
+            float dy = ents[i].y - player.y;
+            if (dx * dx + dy * dy < 3.4f * 3.4f) return 1;
+        }
+    }
+    return 0;
+}
+
+static int boss_alive(void) {
+    for (int i = 0; i < MAX_ENTS; i++) {
+        if (ents[i].alive && (ents[i].type == ENT_CHAINSAW || ents[i].type == ENT_BOSS)) return 1;
+    }
+    return 0;
+}
+
+static void on_enemy_killed(Entity *e) {
+    e->alive = 0;
+    player.kills++;
+    player.pesetas += (e->type == ENT_VILLAGER) ? 200 : 1000;
+    drop_loot(e->x, e->y, e->type == ENT_CHAINSAW || e->type == ENT_BOSS);
+}
+
 static int try_roundhouse_kick(void) {
     int kicked = 0;
     for (int i = 0; i < MAX_ENTS; i++) {
@@ -305,6 +330,27 @@ static void fire_weapon(void) {
             if (relY < 0.28f) hitZone = 1;      /* HEADSHOT! */
             else if (relY > 0.70f) hitZone = 2; /* KNEE SHOT! */
             else hitZone = 0;
+        }
+    }
+
+    if (w == WPN_SHOTGUN) {
+        /* Shotgun spread: pellets also hit nearby enemies around the aim point */
+        for (int i = 0; i < MAX_ENTS; i++) {
+            Entity *o = &ents[i];
+            if (!o->alive || i == bestEnt) continue;
+            if (o->type != ENT_VILLAGER && o->type != ENT_CHAINSAW && o->type != ENT_BOSS) continue;
+            float osx = o->x - player.x;
+            float osy = o->y - player.y;
+            float otX = invDet * (dirY * osx - dirX * osy);
+            float otY = invDet * (-planeY * osx + planeX * osy);
+            if (otY <= 0.25f || otY > 6.0f) continue;
+            int oScrX = (int)((SCR_W / 2) * (1.0f + otX / otY));
+            if (abs(aimScrX - oScrX) < 90) {
+                o->hp -= dmg / 2;
+                o->hitFlash = 6;
+                o->stunTimer = 40;
+                if (o->hp <= 0) on_enemy_killed(o);
+            }
         }
     }
 
@@ -473,6 +519,32 @@ int main(void) {
             continue;
         }
 
+        if (ui.gameWon) {
+            if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_START)) {
+                ui.gameWon = 0;
+                ui.inTitle = 1;
+                init_new_game();
+                audio_play_sfx(SFX_UI);
+            }
+            oldPad = pad;
+            render_frame();
+            continue;
+        }
+
+        if (player.deadTimer > 0) {
+            player.deadTimer--;
+            if (player.deadTimer == 0) {
+                int stg = player.stage;
+                player.hp = player.maxHp;
+                player.pesetas = player.pesetas / 2;
+                load_stage(stg);
+                set_msg("Reaparecido. Perdiste la mitad de Pesetas");
+            }
+            oldPad = pad;
+            render_frame();
+            continue;
+        }
+
         if (pressed & PSP_CTRL_SELECT) {
             ui.sfxOn = !ui.sfxOn;
             set_msg(ui.sfxOn ? "Audio: ON" : "Audio: OFF");
@@ -481,8 +553,13 @@ int main(void) {
 
         if (pressed & PSP_CTRL_TRIANGLE) {
             ui.invOpen = 0;
-            ui.shopOpen = !ui.shopOpen;
-            audio_play_sfx(ui.shopOpen ? SFX_MERCHANT : SFX_UI);
+            if (!ui.shopOpen && !merchant_near()) {
+                set_msg("Acercate al Buhonero (zona segura)");
+                audio_play_sfx(SFX_UI);
+            } else {
+                ui.shopOpen = !ui.shopOpen;
+                audio_play_sfx(ui.shopOpen ? SFX_MERCHANT : SFX_UI);
+            }
         }
         if (pressed & PSP_CTRL_CIRCLE) {
             ui.shopOpen = 0;
@@ -532,7 +609,15 @@ int main(void) {
                     int wtX = worldMap[(int)player.y * MAP_W + (int)(nx + (moveSpd > 0 ? 0.25f : -0.25f))];
                     int wtY = worldMap[(int)(ny + (moveSpd > 0 ? 0.25f : -0.25f)) * MAP_W + (int)player.x];
                     if (wtX == W_GATE_DOOR || wtY == W_GATE_DOOR) {
-                        load_stage(player.stage + 1);
+                        if (boss_alive()) {
+                            set_msg("Puerta sellada: derrota al Jefe!");
+                        } else if (player.stage >= 4) {
+                            ui.gameWon = 1;
+                            audio_play_sfx(SFX_MERCHANT);
+                        } else {
+                            load_stage(player.stage + 1);
+                            audio_play_sfx(SFX_MERCHANT);
+                        }
                     } else {
                         if (wtX == W_EMPTY) player.x = nx;
                         if (wtY == W_EMPTY) player.y = ny;
@@ -616,9 +701,10 @@ int main(void) {
                 audio_play_sfx(SFX_HURT);
                 set_msg(e->type == ENT_VILLAGER ? "Un Aldeano te ataco!" : "Motosierra! Cuidado!");
                 if (player.hp <= 0) {
-                    player.hp = player.maxHp;
-                    player.x = 2.5f; player.y = 2.5f;
-                    set_msg("HAS MUERTO... Reintentando zona");
+                    player.hp = 0;
+                    player.deadTimer = 160;
+                    audio_play_sfx(SFX_HURT);
+                    set_msg("HAS MUERTO...");
                 }
             }
         }
