@@ -13,7 +13,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake g++ libsndfile1-dev git
-          git clone --depth 1 https://github.com/dcherednik/atracdenc.git /tmp/atracdenc
+          git clone --depth 1 --recursive https://github.com/dcherednik/atracdenc.git /tmp/atracdenc
           cmake -S /tmp/atracdenc/src -B /tmp/atracdenc/build
           cmake --build /tmp/atracdenc/build -j
           /tmp/atracdenc/build/atracdenc -e atrac3 -i snd0.wav -o SND0.AT3 --bitrate 132
