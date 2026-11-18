@@ -161,7 +161,23 @@ static void init_world(void) {
 static void load_best(void) { FILE *f = fopen("cb_save.dat", "rb"); if (f) { int v=0; if (fread(&v,4,1,f)==1 && v>0) best=v; fclose(f); } }
 static void save_best(void) { if (score > best) { best = score; FILE *f = fopen("cb_save.dat", "wb"); if (f) { fwrite(&best,4,1,f); fclose(f); } } }
 
+static int isMobBattle = 0;
+static const char *mobNames[3] = { "SLIME DEL BOSQUE", "TRASGO ERRANTE", "ESPECTRO MENOR" };
+static const char *laneLabels[4] = { "[]", "^", "O", "X" };
+
+static void start_mob_battle(void) {
+    isMobBattle = 1;
+    chapter = xr() % 3;
+    bHp = bMaxHp = 35;
+    combo = 0; tick = 0; judgeT = 0; phaseTimer = 0;
+    bardX = 240.0f; bardY = 210.0f;
+    memset(notes, 0, sizeof(notes));
+    memset(projAlive, 0, sizeof(projAlive));
+    inOverworld = 0; inStory = 0; inDefense = 0;
+}
+
 static void start_chapter(int ch) {
+    isMobBattle = 0;
     chapter = ch;
     bHp = bMaxHp = 120 + ch * 60;
     combo = 0; tick = 0; judgeT = 0; phaseTimer = 0;
@@ -236,6 +252,9 @@ int main(void) {
                             break;
                         }
                     }
+                    if (inOverworld && worldMap[mapY][mapX] == 1 && (xr() % 9) == 0) {
+                        start_mob_battle();
+                    }
                 }
             }
             if (pressed & PSP_CTRL_CROSS) {
@@ -301,7 +320,7 @@ int main(void) {
             }
 
             tick++;
-            int rate = 26 - chapter * 3;
+            int rate = isMobBattle ? 36 : (20 - chapter * 3);
             if ((tick % rate) == 0) {
                 for (int i = 0; i < 24; i++) if (!notes[i].active) {
                     notes[i].active = 1; notes[i].lane = xr() & 3; notes[i].y = 120; break;
@@ -327,12 +346,19 @@ int main(void) {
                     play_sfx(523.25f + l * 75.0f, 800);
                     if (bHp <= 0) {
                         bHp = 0;
-                        inRelic = 1;
+                        if (isMobBattle) {
+                            score += 150;
+                            inOverworld = 1;
+                            snprintf(dlgText, sizeof(dlgText), "Enemigo vencido! +150 PTS");
+                            dlgTimer = 120;
+                        } else {
+                            inRelic = 1;
+                        }
                     }
                 }
             }
 
-            float spd = 2.1f + chapter * 0.35f;
+            float spd = isMobBattle ? 1.5f : (2.4f + chapter * 0.45f);
             for (int i = 0; i < 24; i++) if (notes[i].active) {
                 notes[i].y += spd;
                 if (notes[i].y > SCR_H) {
@@ -449,7 +475,10 @@ int main(void) {
             draw_text(fb, 130, 56, "FASE 3: ESQUIVA EL ATAQUE DEL BOSS!", RGB(255, 90, 90));
         } else {
             sprintf(buf, "HP:%d", pHp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
-            draw_text(fb, 306, 28, bossNames[chapter], RGB(255, 140, 140));
+            draw_text(fb, 306, 28, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 140, 140));
+            for (int l = 0; l < 4; l++) {
+                draw_text(fb, 162 + l * 46, HIT_Y - 3, laneLabels[l], RGB(255, 255, 255));
+            }
             sprintf(buf, "ESTILO:%s  COMBO:x%d", styleNames[curStyle], combo);
             draw_text(fb, 165, 102, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
             if (judgeT > 0) draw_text(fb, 190, 122, judge, RGB(255, 255, 255));
