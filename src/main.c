@@ -186,7 +186,6 @@ int main(void) {
             else if (pressed & PSP_CTRL_TRIANGLE) { relicVamp += 3; inRelic = 0; start_chapter(chapter + 1); }
             else if (pressed & PSP_CTRL_CIRCLE) { relicShield = 1; pHp = pMaxHp; inRelic = 0; start_chapter(chapter + 1); }
         } else if (inDefense) {
-            /* PARTE 3: Defensa / Esquiva del Boss */
             float ax = ((float)pad.Lx - 128.0f) / 128.0f, ay = ((float)pad.Ly - 128.0f) / 128.0f;
             if (fabsf(ax) < 0.18f) ax = 0; if (fabsf(ay) < 0.18f) ay = 0;
             if (pad.Buttons & PSP_CTRL_LEFT) ax = -1; if (pad.Buttons & PSP_CTRL_RIGHT) ax = 1;
@@ -216,34 +215,17 @@ int main(void) {
                     if (pHp <= 0) { pHp = 0; gameOver = 1; save_best(); }
                 }
             }
-            if (phaseTimer >= 360) { /* 6 segundos de defensa -> vuelve a Fase Melodia */
+            if (phaseTimer >= 360) {
                 inDefense = 0; phaseTimer = 0;
                 memset(projAlive, 0, sizeof(projAlive));
             }
-        } else if (inDefense) {
-            /* HP Bars */
-            gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
-            gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
-
-            /* Bard & Boss Projectiles */
-            gu_rect((int)bardX - 8, (int)bardY - 10, 16, 20, RGB(60, 210, 255));
-            for (int p = 0; p < 6; p++) if (projAlive[p]) {
-                gu_rect((int)projX[p] - 5, (int)projY[p] - 5, 10, 10, RGB(255, 60, 80));
-            }
-        } else if (inDefense) {
-            sprintf(buf, "HP:%d", pHp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
-            draw_text(fb, 306, 28, bossNames[chapter], RGB(255, 140, 140));
-            draw_text(fb, 130, 56, "FASE 3: ESQUIVA EL ATAQUE DEL BOSS!", RGB(255, 90, 90));
         } else {
-            /* PARTE 2: Melodia / Ataque Guitar Hero */
             if (pressed & PSP_CTRL_LTRIGGER) { curStyle = (curStyle + 2) % 3; play_sfx(440.0f, 600); }
             if (pressed & PSP_CTRL_RTRIGGER) { curStyle = (curStyle + 1) % 3; play_sfx(440.0f, 600); }
             if (judgeT > 0) judgeT--;
 
             phaseTimer++;
-            if (phaseTimer >= 720) { /* cada 12s el boss lanza su fase de Defensa */
+            if (phaseTimer >= 720) {
                 inDefense = 1; phaseTimer = 0;
                 memset(notes, 0, sizeof(notes));
             }
@@ -305,21 +287,14 @@ int main(void) {
         if (inTitle || gameOver || victory || inStory || inRelic) {
             gu_rect(70, 58, 340, 156, RGB(14, 12, 28));
         } else if (inDefense) {
-            /* HP Bars */
             gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
             gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
             gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
             gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
-
-            /* Bard & Boss Projectiles */
             gu_rect((int)bardX - 8, (int)bardY - 10, 16, 20, RGB(60, 210, 255));
             for (int p = 0; p < 6; p++) if (projAlive[p]) {
                 gu_rect((int)projX[p] - 5, (int)projY[p] - 5, 10, 10, RGB(255, 60, 80));
             }
-        } else if (inDefense) {
-            sprintf(buf, "HP:%d", pHp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
-            draw_text(fb, 306, 28, bossNames[chapter], RGB(255, 140, 140));
-            draw_text(fb, 130, 56, "FASE 3: ESQUIVA EL ATAQUE DEL BOSS!", RGB(255, 90, 90));
         } else {
             /* HP Bars */
             gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
@@ -366,18 +341,6 @@ int main(void) {
             sprintf(buf, "PUNTOS: %d   RECORD: %d", score, best);
             draw_text(fb, 148, 128, buf, RGB(255, 255, 255));
             draw_text(fb, 155, 164, "Pulsa [X] para Reintentar", RGB(160, 225, 255));
-        } else if (inDefense) {
-            /* HP Bars */
-            gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
-            gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
-
-            /* Bard & Boss Projectiles */
-            gu_rect((int)bardX - 8, (int)bardY - 10, 16, 20, RGB(60, 210, 255));
-            for (int p = 0; p < 6; p++) if (projAlive[p]) {
-                gu_rect((int)projX[p] - 5, (int)projY[p] - 5, 10, 10, RGB(255, 60, 80));
-            }
         } else if (inDefense) {
             sprintf(buf, "HP:%d", pHp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
             draw_text(fb, 306, 28, bossNames[chapter], RGB(255, 140, 140));
