@@ -94,12 +94,44 @@ static void draw_tile24(unsigned int *fb, const unsigned int *tile, int dx, int 
     }
 }
 
-static void draw_spr24(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
-    for (int j = 0; j < 24; j++) {
+static void draw_spr16(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int j = 0; j < 16; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
         unsigned int *dst = &fb[py * BUF_W];
-        const unsigned int *src = &spr[j * 24];
+        const unsigned int *src = &spr[j * 16];
+        for (int i = 0; i < 16; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
+static void draw_spr20(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int j = 0; j < 20; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr[j * 20];
+        for (int i = 0; i < 20; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
+static void draw_spr_lr24(unsigned int *fb, int dx, int dy) {
+    for (int j = 0; j < 14; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr_btn_lr24[j * 24];
         for (int i = 0; i < 24; i++) {
             int px = dx + i;
             if ((unsigned)px < SCR_W) {
@@ -110,16 +142,16 @@ static void draw_spr24(unsigned int *fb, const unsigned int *spr, int dx, int dy
     }
 }
 
-static void draw_spr24_scaled(unsigned int *fb, const unsigned int *spr, int dx, int dy, int scale) {
-    for (int j = 0; j < 24 * scale; j++) {
+static void draw_spr24(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int j = 0; j < 24; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
         unsigned int *dst = &fb[py * BUF_W];
-        const unsigned int *src = &spr[(j / scale) * 24];
-        for (int i = 0; i < 24 * scale; i++) {
+        const unsigned int *src = &spr[j * 24];
+        for (int i = 0; i < 24; i++) {
             int px = dx + i;
             if ((unsigned)px < SCR_W) {
-                unsigned int c = src[i / scale];
+                unsigned int c = src[i];
                 if (c) dst[px] = c;
             }
         }
@@ -216,7 +248,6 @@ static Note notes[24];
 static const char *bossNames[3] = { "GOLEM DE HIERRO", "AUTOMATA ARCANO", "DRAGON SOMBRIO" };
 static const char *mobNames[3]  = { "SLIME DEL BOSQUE", "TRASGO ERRANTE", "ESPECTRO MENOR" };
 static const char *styleNames[3] = { "ROCK", "SYNTH", "SINFONICO" };
-static const char *laneLabels[4] = { "[]", "^", "O", "X" };
 static const int bossWeak[3] = { 0, 1, 2 };
 
 static int chapter = 0, isMobBattle = 0, bossHitFlash = 0;
@@ -323,7 +354,7 @@ static void start_game(void) {
     relicDmg = 0; relicVamp = 0; relicShield = 0;
     init_world();
     inTitle = 0; inOverworld = 1; inStory = 0; inFFMenu = 0; inDefense = 0; inRelic = 0; gameOver = 0; victory = 0;
-    snprintf(dlgText, sizeof(dlgText), "Explora el mundo con tu banda! [X] Hablar con NPCs.");
+    snprintf(dlgText, sizeof(dlgText), "Explora el Reino con tu banda! Habla con los NPCs.");
     dlgTimer = 180;
     play_sfx(660.0f, 2000);
 }
@@ -643,7 +674,8 @@ int main(void) {
                 draw_spr24(fb, spr_band2, 264, 110);
                 sprintf(buf, "RECORD MAXIMO: %d PTS", best);
                 draw_text(fb, 174, 144, buf, RGB(140, 255, 160));
-                draw_text(fb, 136, 170, "> PULSA [X] O [START] PARA JUGAR <", RGB(255, 255, 255));
+                draw_text(fb, 148, 170, "PULSA     PARA EMPEZAR AVENTURA", RGB(255, 255, 255));
+                draw_spr16(fb, spr_btn_cr16, 187, 166);
                 draw_text(fb, 92, 194, "Explora el Reino, Toca Melodias y Vence al Mal", RGB(190, 205, 235));
             } else if (inStory) {
                 draw_ff_window(fb, 64, 56, 352, 160);
@@ -655,9 +687,10 @@ int main(void) {
                 draw_text(fb, 158, 104, buf, RGB(100, 255, 160));
                 draw_text(fb, 158, 130, "Combate por turnos clasico FF.", RGB(220, 230, 255));
                 draw_text(fb, 158, 146, "Toca las notas para atacar!", RGB(220, 230, 255));
-                draw_text(fb, 165, 182, "> PULSA [X] PARA LUCHAR <", RGB(255, 235, 90));
+                draw_text(fb, 172, 182, "PULSA     PARA LUCHAR", RGB(255, 235, 90));
+                draw_spr16(fb, spr_btn_cr16, 211, 178);
             } else if (inRelic) {
-                /* 32-Bit Roguelike Relic Selection Cards (Band & Boss visible above!) */
+                /* 32-Bit Roguelike Relic Selection Cards with Real 20x20 PSP Button Sprites! */
                 draw_spr48(fb, spr_band2_48, 18, 76);
                 draw_spr48(fb, spr_bard_48,  98, 80);
                 draw_spr48(fb, spr_band1_48, 58, 88);
@@ -667,7 +700,7 @@ int main(void) {
                 draw_spr24(fb, spr_chest, 78, 54);
                 draw_text(fb, 108, 63, "4. BOTIN ROGUELIKE (ELIGE 1 RELIQUIA):", RGB(255, 225, 80));
 
-                /* Card 1: Amplificador Runico [[]] */
+                /* Card 1: Amplificador Runico (Square Button Sprite) */
                 fill_rect(fb, 78, 84, 324, 46, RGB(42, 18, 48));
                 draw_border(fb, 78, 84, 324, 46, RGB(255, 130, 210));
                 fill_rect(fb, 84, 91, 32, 32, RGB(14, 12, 26));
@@ -676,11 +709,9 @@ int main(void) {
                 fill_rect(fb, 96, 103, 8, 8, RGB(255, 240, 90));
                 draw_text(fb, 126, 93, "AMPLIFICADOR RUNICO", RGB(255, 255, 255));
                 draw_text(fb, 126, 109, "+4 DANO POR CADA NOTA ACERTADA", RGB(255, 155, 220));
-                fill_rect(fb, 358, 96, 34, 22, RGB(235, 70, 180));
-                draw_border(fb, 358, 96, 34, 22, RGB(255, 255, 255));
-                draw_text(fb, 369, 104, "[]", RGB(255, 255, 255));
+                draw_spr20(fb, spr_btn_sq20, 368, 97);
 
-                /* Card 2: Pua Vampirica Carmesi [^] */
+                /* Card 2: Pua Vampirica Carmesi (Triangle Button Sprite) */
                 fill_rect(fb, 78, 138, 324, 46, RGB(16, 44, 30));
                 draw_border(fb, 78, 138, 324, 46, RGB(95, 245, 145));
                 fill_rect(fb, 84, 145, 32, 32, RGB(14, 12, 26));
@@ -689,11 +720,9 @@ int main(void) {
                 fill_rect(fb, 97, 156, 6, 6, RGB(255, 230, 80));
                 draw_text(fb, 126, 147, "PUA VAMPIRICA CARMESI", RGB(255, 255, 255));
                 draw_text(fb, 126, 163, "+3 HP CURADOS POR NOTA PERFECT", RGB(120, 255, 165));
-                fill_rect(fb, 358, 150, 34, 22, RGB(50, 205, 105));
-                draw_border(fb, 358, 150, 34, 22, RGB(255, 255, 255));
-                draw_text(fb, 372, 158, "^", RGB(255, 255, 255));
+                draw_spr20(fb, spr_btn_tr20, 368, 151);
 
-                /* Card 3: Escudo Ritmico Astral [O] */
+                /* Card 3: Escudo Ritmico Astral (Circle Button Sprite) */
                 fill_rect(fb, 78, 192, 324, 46, RGB(16, 32, 58));
                 draw_border(fb, 78, 192, 324, 46, RGB(100, 215, 255));
                 fill_rect(fb, 84, 199, 32, 32, RGB(14, 12, 26));
@@ -703,17 +732,17 @@ int main(void) {
                 fill_rect(fb, 94, 213, 12, 4, RGB(255, 255, 255));
                 draw_text(fb, 126, 201, "ESCUDO RITMICO ASTRAL", RGB(255, 255, 255));
                 draw_text(fb, 126, 217, "-40% DANO RECIBIDO + CURA 100%", RGB(130, 225, 255));
-                fill_rect(fb, 358, 204, 34, 22, RGB(55, 160, 255));
-                draw_border(fb, 358, 204, 34, 22, RGB(255, 255, 255));
-                draw_text(fb, 372, 212, "O", RGB(255, 255, 255));
+                draw_spr20(fb, spr_btn_ci20, 368, 205);
             } else if (gameOver || victory) {
                 draw_ff_window(fb, 80, 66, 320, 140);
                 draw_text(fb, 168, 90, victory ? "LEYENDA DEL ROCK!" : "CAISTE EN EL ABISMO", victory ? RGB(255,230,80) : RGB(255,80,90));
                 draw_text(fb, 118, 112, victory ? "Has liberado los 3 Reinos del Mal!" : "Muerte permanente: la historia reinicia.", RGB(210, 225, 255));
                 sprintf(buf, "PUNTOS: %d   RECORD: %d", score, best);
                 draw_text(fb, 148, 140, buf, RGB(140, 255, 160));
-                draw_text(fb, 148, 172, "Pulsa [X] para Nueva Partida", RGB(255, 255, 255));
+                draw_text(fb, 148, 172, "Pulsa     para Nueva Partida", RGB(255, 255, 255));
+                draw_spr16(fb, spr_btn_cr16, 187, 168);
             } else {
+                const unsigned int * const btns20_arr[4] = { spr_btn_sq20, spr_btn_tr20, spr_btn_ci20, spr_btn_cr20 };
                 /* Battle Scene: Top Status Windows + 32-bit High-Res Band (48x48) & Boss (64x64) */
                 draw_ff_window(fb, 8, 6, 206, 42);
                 fill_rect(fb, 14, 12, 26, 28, RGB(14, 18, 48));
@@ -764,10 +793,10 @@ int main(void) {
                 draw_boss64(fb, espr, 358, 86, bossHitFlash > 0);
 
                 if (inFFMenu) {
-                    /* Classic Final Fantasy Turn-Based Command Menu + Partitura Preview */
+                    /* Classic Final Fantasy Turn-Based Command Menu + Partitura Preview with REAL 32-Bit PSP Button Sprites! */
                     draw_ff_window(fb, 8, 170, 224, 96);
                     fill_rect(fb, 12, 174, 216, 12, RGB(38, 52, 128));
-                    draw_text(fb, 16, 176, "COMANDOS DE BATALLA [TURNO]", RGB(255, 220, 80));
+                    draw_text(fb, 16, 176, "COMANDOS DE BATALLA (TURNO)", RGB(255, 220, 80));
 
                     fill_rect(fb, 14, 189 + ffCursor * 18, 212, 15, RGB(65, 85, 185));
                     draw_border(fb, 14, 189 + ffCursor * 18, 212, 15, RGB(255, 215, 85));
@@ -778,32 +807,33 @@ int main(void) {
                         "HIMNO CURATIVO (+45 HP)",
                         "HUIR DEL COMBATE"
                     };
-                    const char *hotkeys[4] = { "[X]", "[L/R]", "15MP", "[O]" };
                     for (int i = 0; i < 4; i++) {
                         int ry = 193 + i * 18;
-                        draw_text(fb, 18, ry, ffCursor == i ? ">" : " ", RGB(255, 235, 80));
-                        draw_text(fb, 28, ry, opts[i], ffCursor == i ? RGB(255, 240, 90) : RGB(255, 255, 255));
-                        draw_text(fb, 196, ry, hotkeys[i], RGB(130, 230, 255));
+                        draw_text(fb, 20, ry, opts[i], ffCursor == i ? RGB(255, 240, 90) : RGB(255, 255, 255));
                     }
+                    draw_spr16(fb, spr_btn_cr16, 204, 188);
+                    draw_spr_lr24(fb, 198, 207);
+                    draw_text(fb, 196, 229, "15MP", RGB(130, 235, 215));
+                    draw_spr16(fb, spr_btn_ci16, 204, 242);
 
-                    /* Right Tactical & Partitura Window */
+                    /* Right Tactical & Partitura Window with Real 20x20 PSP Button Sprites */
                     draw_ff_window(fb, 238, 170, 234, 96);
                     fill_rect(fb, 242, 174, 226, 12, RGB(38, 52, 128));
                     draw_text(fb, 248, 176, "ARMONIA Y PARTITURA ENEMIGA", RGB(100, 235, 255));
 
                     fill_rect(fb, 246, 190, 218, 16, curStyle == bossWeak[chapter] ? RGB(18, 52, 36) : RGB(44, 34, 18));
                     draw_border(fb, 246, 190, 218, 16, curStyle == bossWeak[chapter] ? RGB(80, 235, 135) : RGB(240, 190, 75));
-                    sprintf(buf, curStyle == bossWeak[chapter] ? "ESTILO: %s -> CRITICO x2!" : "ESTILO: %s (Pulsa L/R)", styleNames[curStyle]);
+                    sprintf(buf, curStyle == bossWeak[chapter] ? "ESTILO: %s -> CRITICO x2!" : "ESTILO: %s", styleNames[curStyle]);
                     draw_text(fb, 252, 194, buf, curStyle == bossWeak[chapter] ? RGB(120, 255, 150) : RGB(255, 225, 95));
+                    if (curStyle != bossWeak[chapter]) draw_spr_lr24(fb, 434, 191);
 
-                    draw_text(fb, 246, 212, isMobBattle ? "MELODIA: SENCILLA (LENTA):" : "MELODIA BOSS (RAPIDA):", RGB(180, 225, 255));
-                    unsigned int pcols[4] = { RGB(235,70,180), RGB(60,215,110), RGB(240,75,75), RGB(65,165,255) };
+                    draw_text(fb, 246, 211, isMobBattle ? "MELODIA: SENCILLA (LENTA):" : "MELODIA BOSS (RAPIDA):", RGB(180, 225, 255));
                     for (int n = 0; n < 6; n++) {
                         int nl = (chapter + n * 3) & 3;
                         int nx = 248 + n * 36;
-                        fill_rect(fb, nx, 224, 28, 15, pcols[nl]);
-                        draw_border(fb, nx, 224, 28, 15, RGB(255, 255, 255));
-                        draw_text(fb, nx + (nl == 0 ? 8 : 11), 228, laneLabels[nl], RGB(255, 255, 255));
+                        fill_rect(fb, nx, 221, 26, 22, RGB(18, 22, 54));
+                        draw_border(fb, nx, 221, 26, 22, RGB(130, 150, 220));
+                        draw_spr20(fb, btns20_arr[nl], nx + 3, 222);
                     }
                     sprintf(buf, "RELIQUIAS: +%dDMG  +%dVAMP  %s", relicDmg, relicVamp, relicShield ? "ESCUDO" : "-");
                     draw_text(fb, 246, 248, buf, RGB(255, 215, 85));
@@ -836,26 +866,30 @@ int main(void) {
                         fill_rect(fb, ox - 2, oy - 2, 4, 4, RGB(255, 245, 170));
                     }
                 } else {
-                    /* Guitar Hero 4-Lane Rhythm Highway */
-                    draw_ff_window(fb, 140, 114, 200, 152);
+                    /* Guitar Hero 4-Lane Rhythm Highway with REAL 20x20 32-Bit PSP Button Sprites! */
+                    draw_ff_window(fb, 140, 96, 200, 170);
+                    fill_rect(fb, 144, 100, 192, 13, RGB(28, 42, 108));
+                    sprintf(buf, "ESTILO:%s COMBO:x%d", styleNames[curStyle], combo);
+                    draw_text(fb, 148, 103, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
+                    draw_spr_lr24(fb, 308, 100);
+
                     unsigned int lcols[4] = { RGB(255,80,180), RGB(80,255,140), RGB(255,70,70), RGB(0,220,255) };
                     for (int l = 0; l < 4; l++) {
-                        int lx = 148 + l * 47;
-                        fill_rect(fb, lx + 18, 118, 2, 142, RGB(45, 50, 90));
-                        fill_rect(fb, lx, HIT_Y - 7, 38, 14, RGB(25, 30, 65));
-                        draw_border(fb, lx, HIT_Y - 7, 38, 14, lcols[l]);
-                        draw_text(fb, lx + 13, HIT_Y - 3, laneLabels[l], RGB(255, 255, 255));
+                        int lx = 152 + l * 46;
+                        fill_rect(fb, lx + 15, 116, 2, 144, RGB(50, 60, 110));
+                        fill_rect(fb, lx + 1, HIT_Y - 11, 30, 24, RGB(16, 20, 48));
+                        draw_border(fb, lx + 1, HIT_Y - 11, 30, 24, lcols[l]);
+                        draw_spr20(fb, btns20_arr[l], lx + 6, HIT_Y - 9);
                     }
                     for (int i = 0; i < 24; i++) if (notes[i].active) {
-                        int lx = 151 + notes[i].lane * 47;
+                        int l = notes[i].lane;
+                        int lx = 152 + l * 46;
                         int ny = (int)notes[i].y;
-                        fill_rect(fb, lx, ny - 6, 32, 12, lcols[notes[i].lane]);
-                        draw_border(fb, lx, ny - 6, 32, 12, RGB(255, 255, 255));
-                        draw_text(fb, lx + 10, ny - 3, laneLabels[notes[i].lane], RGB(255, 255, 255));
+                        fill_rect(fb, lx + 3, ny - 11, 26, 22, RGB(22, 26, 62));
+                        draw_border(fb, lx + 3, ny - 11, 26, 22, lcols[l]);
+                        draw_spr20(fb, btns20_arr[l], lx + 6, ny - 10);
                     }
-                    sprintf(buf, "ESTILO:%s  COMBO:x%d", styleNames[curStyle], combo);
-                    draw_text(fb, 158, 98, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
-                    if (judgeT > 0) draw_text(fb, 185, 82, judge, RGB(255, 255, 120));
+                    if (judgeT > 0) draw_text(fb, 185, 80, judge, RGB(255, 255, 120));
                 }
             }
         }
