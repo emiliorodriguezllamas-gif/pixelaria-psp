@@ -186,32 +186,45 @@ void render_frame(void) {
         return;
     }
 
-    /* 1. Ceiling (Foggy Night Sky) & Cobblestone Floor */
+    /* 1. Ceiling (Foggy Night Sky) & 3D Perspective Cobblestone Floor */
+    float dirX = cosf(player.ang);
+    float dirY = sinf(player.ang);
+    float fovScale = player.aiming ? ((player.weapon == WPN_RIFLE) ? 0.28f : 0.48f) : 0.66f;
+    float planeX = -dirY * fovScale;
+    float planeY =  dirX * fovScale;
+
     for (int y = 0; y < SCR_H; y++) {
-        unsigned int col;
+        unsigned int *row = &backbuf[y * SCR_W];
         if (y < horizon) {
             int d = horizon - y;
-            int r = 18 + (d * 10) / horizon;
-            int g = 22 + (d * 14) / horizon;
-            int b = 32 + (d * 24) / horizon;
-            col = RGB(r, g, b);
+            int r = 18 + (d * 10) / (horizon > 0 ? horizon : 1);
+            int g = 22 + (d * 14) / (horizon > 0 ? horizon : 1);
+            int b = 32 + (d * 24) / (horizon > 0 ? horizon : 1);
+            unsigned int col = RGB(r, g, b);
+            for (int x = 0; x < SCR_W; x++) row[x] = col;
         } else {
-            int d = y - horizon;
-            int r = 24 + (d * 34) / (SCR_H - horizon);
-            int g = 22 + (d * 30) / (SCR_H - horizon);
-            int b = 20 + (d * 26) / (SCR_H - horizon);
-            col = RGB(r, g, b);
+            int p = y - horizon;
+            if (p < 1) p = 1;
+            float rowDist = (0.5f * SCR_H) / (float)p;
+            float stepX = rowDist * 2.0f * planeX / (float)SCR_W;
+            float stepY = rowDist * 2.0f * planeY / (float)SCR_W;
+            float fx = player.x + rowDist * (dirX - planeX);
+            float fy = player.y + rowDist * (dirY - planeY);
+            int shade = 18 + (p * 38) / (SCR_H - horizon);
+            for (int x = 0; x < SCR_W; x += 2) {
+                int cx = (int)(fx * 4.0f);
+                int cy = (int)(fy * 4.0f);
+                int chk = ((cx ^ cy) & 1) ? 6 : 0;
+                unsigned int col = RGB(shade + chk + 2, shade + chk, shade + chk - 2);
+                row[x] = col;
+                row[x + 1] = col;
+                fx += stepX * 2.0f;
+                fy += stepY * 2.0f;
+            }
         }
-        unsigned int *row = &backbuf[y * SCR_W];
-        for (int x = 0; x < SCR_W; x++) row[x] = col;
     }
 
     /* 2. 3D Raycasting Walls (240 rays x 2px columns) */
-    float dirX = cosf(player.ang);
-    float dirY = sinf(player.ang);
-    float fovScale = player.aiming ? 0.50f : 0.66f; /* Zoom in when holding L to Aim! */
-    float planeX = -dirY * fovScale;
-    float planeY =  dirX * fovScale;
 
     for (int col = 0; col < SCR_W; col += 2) {
         float camX = 2.0f * col / (float)SCR_W - 1.0f;
@@ -317,7 +330,7 @@ void render_frame(void) {
         const unsigned int *sprData = spr_villager;
         if (e->type == ENT_CHAINSAW || e->type == ENT_BOSS) sprData = spr_chainsaw;
         else if (e->type == ENT_MERCHANT) sprData = spr_merchant;
-        else if (e->type == ENT_CRATE) sprData = spr_crate;
+        else if (e->type == ENT_CRATE || e->type == ENT_BARREL) sprData = spr_crate;
         else if (e->type >= ENT_HERB_G) sprData = spr_herb;
 
         int clipStartX = drawStartX < 0 ? 0 : drawStartX;
@@ -334,7 +347,12 @@ void render_frame(void) {
                 if (texY < 0) texY = 0; if (texY >= SPR_H) texY = SPR_H - 1;
                 unsigned int c = sprData[texY * SPR_W + texX];
                 if (c != 0) {
-                    if (e->type == ENT_HERB_R) {
+                    if (e->type == ENT_BARREL) {
+                        /* Explosive Red Barrel with yellow hazard band */
+                        int lum = (c & 0xFF);
+                        if (texY >= 26 && texY <= 34) c = RGB(240, 200, 40);
+                        else c = RGB(lum + 70 > 255 ? 255 : lum + 70, lum / 4, lum / 4);
+                    } else if (e->type == ENT_HERB_R) {
                         /* Tint green herb leaves red */
                         int r = c & 0xFF, g = (c >> 8) & 0xFF, b = (c >> 16) & 0xFF;
                         if (g > r + 20) c = RGB(g, r / 2, b / 2);
@@ -360,44 +378,86 @@ void render_frame(void) {
         }
     }
 
-    /* 4. Red Laser Sight (when holding L to Aim!) */
+    /* 3b. Explosion Fireball & Blood/Hit Sparks */
+    if (ui.explosionTimer > 0) {
+        int rad = (16 - ui.explosionTimer) * 7;
+        fill_rect(SCR_W / 2 - rad, horizon - rad / 2, rad * 2, rad, RGB(255, 120, 20));
+        fill_rect(SCR_W / 2 - rad / 2, horizon - rad / 3, rad, (rad * 2) / 3, RGB(255, 235, 90));
+    }
+    if (ui.hitSparkTimer > 0) {
+        int sp = (8 - ui.hitSparkTimer) * 3;
+        for (int k = -1; k <= 1; k += 2) {
+            fill_rect(ui.hitSparkX + k * sp, ui.hitSparkY - sp, 3, 3, RGB(220, 25, 25));
+            fill_rect(ui.hitSparkX - k * sp, ui.hitSparkY + sp, 2, 2, RGB(180, 15, 15));
+        }
+    }
+
+    /* 4. Red Laser Sight / Sniper Scope & Distinct Weapon Viewmodels */
     int aimScrX = SCR_W / 2 + player.aimX;
     int aimScrY = horizon + player.aimY;
-    int gunBaseX = player.aiming ? 260 : 310;
+    int walkSwing = (int)(sinf(rf * 0.18f) * 3.0f);
+    int gunBaseX = (player.aiming ? 260 : 310) + walkSwing;
     int gunBaseY = SCR_H - 110 + (player.fireTimer > 0 ? -12 : 0) + (player.reloadTimer > 0 ? 24 : 0);
 
-    if (player.aiming && player.reloadTimer <= 0) {
-        draw_line(gunBaseX + 26, gunBaseY + 34, aimScrX, aimScrY, RGB(220, 25, 25));
+    if (player.aiming && player.weapon == WPN_RIFLE) {
+        /* Telescopic Sniper Scope Overlay */
+        fill_rect(0, 0, 90, SCR_H, RGB(8, 10, 14));
+        fill_rect(SCR_W - 90, 0, 90, SCR_H, RGB(8, 10, 14));
+        draw_line(90, aimScrY, SCR_W - 90, aimScrY, RGB(40, 220, 90));
+        draw_line(aimScrX, 20, aimScrX, SCR_H - 20, RGB(40, 220, 90));
+        draw_rect_outline(90, 16, SCR_W - 180, SCR_H - 32, RGB(40, 220, 90));
         fill_rect(aimScrX - 2, aimScrY - 2, 5, 5, RGB(255, 40, 40));
-        put_px(aimScrX, aimScrY, RGB(255, 240, 240));
-    }
+    } else {
+        if (player.aiming && player.reloadTimer <= 0 && player.weapon != WPN_KNIFE) {
+            draw_line(gunBaseX + 26, gunBaseY + 34, aimScrX, aimScrY, RGB(220, 25, 25));
+            fill_rect(aimScrX - 2, aimScrY - 2, 5, 5, RGB(255, 40, 40));
+            put_px(aimScrX, aimScrY, RGB(255, 240, 240));
+        }
 
-    /* Muzzle Flash */
-    if (player.fireTimer > 3 && player.weapon != WPN_KNIFE) {
-        int mx = player.aiming ? aimScrX : (gunBaseX + 24);
-        int my = player.aiming ? aimScrY : (gunBaseY + 24);
-        fill_rect(mx - 8, my - 8, 16, 16, RGB(255, 200, 70));
-        fill_rect(mx - 4, my - 4, 8, 8, RGB(255, 255, 220));
-    }
+        /* Muzzle Flash */
+        if (player.fireTimer > 3 && player.weapon != WPN_KNIFE) {
+            int mx = player.aiming ? aimScrX : (gunBaseX + 24);
+            int my = player.aiming ? aimScrY : (gunBaseY + 24);
+            int mfSz = (player.weapon == WPN_SHOTGUN) ? 14 : 8;
+            fill_rect(mx - mfSz, my - mfSz, mfSz * 2, mfSz * 2, RGB(255, 190, 60));
+            fill_rect(mx - mfSz / 2, my - mfSz / 2, mfSz, mfSz, RGB(255, 255, 220));
+        }
 
-    /* Roundhouse Kick Flash */
-    if (player.kickTimer > 0) {
-        int kx = SCR_W / 2 - 40 + (12 - player.kickTimer) * 8;
-        fill_rect(kx, horizon + 10, 44, 18, RGB(85, 55, 35));
-        fill_rect(kx + 34, horizon + 6, 18, 24, RGB(35, 30, 28));
-    }
+        /* Roundhouse Kick Flash */
+        if (player.kickTimer > 0) {
+            int kx = SCR_W / 2 - 40 + (12 - player.kickTimer) * 8;
+            fill_rect(kx, horizon + 10, 44, 18, RGB(85, 55, 35));
+            fill_rect(kx + 34, horizon + 6, 18, 24, RGB(35, 30, 28));
+        }
 
-    /* Draw Gloved Hands + Laser Pistol 2D Sprite */
-    for (int y = 0; y < SPR_H; y++) {
-        for (int x = 0; x < SPR_W; x++) {
-            unsigned int c = spr_gunhand[y * SPR_W + x];
-            if (c != 0) {
-                int sx = gunBaseX + x * 2 + shakeX;
-                int sy = gunBaseY + y * 2;
-                put_px(sx, sy, c);
-                put_px(sx + 1, sy, c);
-                put_px(sx, sy + 1, c);
-                put_px(sx + 1, sy + 1, c);
+        /* Distinct Weapon Extensions (Knife blade, Shotgun pump barrel, Rifle barrel) */
+        if (player.weapon == WPN_KNIFE) {
+            int slashOff = (player.fireTimer > 0) ? (14 - player.fireTimer) * 7 : 0;
+            int kx = gunBaseX + 18 - slashOff;
+            int ky = gunBaseY + 26;
+            fill_rect(kx, ky, 10, 34, RGB(195, 205, 220));
+            fill_rect(kx + 2, ky - 14, 6, 14, RGB(230, 240, 255));
+        } else if (player.weapon == WPN_SHOTGUN) {
+            fill_rect(gunBaseX - 18, gunBaseY + 10, 44, 12, RGB(65, 70, 78));
+            fill_rect(gunBaseX - 10, gunBaseY + 20, 36, 10, RGB(120, 72, 36));
+        } else if (player.weapon == WPN_RIFLE) {
+            fill_rect(gunBaseX - 32, gunBaseY + 12, 58, 8, RGB(50, 55, 62));
+            fill_rect(gunBaseX - 10, gunBaseY + 4, 24, 7, RGB(30, 35, 42));
+        }
+
+        /* Draw Gloved Hands + Base Weapon 2D Sprite */
+        for (int y = 0; y < SPR_H; y++) {
+            for (int x = 0; x < SPR_W; x++) {
+                if (player.weapon == WPN_KNIFE && y < 26) continue;
+                unsigned int c = spr_gunhand[y * SPR_W + x];
+                if (c != 0) {
+                    int sx = gunBaseX + x * 2 + shakeX;
+                    int sy = gunBaseY + y * 2;
+                    put_px(sx, sy, c);
+                    put_px(sx + 1, sy, c);
+                    put_px(sx, sy + 1, c);
+                    put_px(sx + 1, sy + 1, c);
+                }
             }
         }
     }
@@ -448,14 +508,32 @@ void render_frame(void) {
         draw_line(pmx, pmy, pmx + (int)(cosf(player.ang) * 5.0f), pmy + (int)(sinf(player.ang) * 5.0f), RGB(250, 235, 90));
     }
 
-    /* Objective line */
+    /* Objective line & Boss Health Bar */
     {
-        int bossUp = 0;
+        int bossIdx = -1;
         for (int i = 0; i < MAX_ENTS; i++) {
-            if (ents[i].alive && (ents[i].type == ENT_CHAINSAW || ents[i].type == ENT_BOSS)) bossUp = 1;
+            if (ents[i].alive && (ents[i].type == ENT_CHAINSAW || ents[i].type == ENT_BOSS)) {
+                bossIdx = i;
+                break;
+            }
         }
         fill_rect(6, 31, 195, 13, RGB(18, 20, 26));
-        draw_text(12, 34, bossUp ? "OBJETIVO: Derrota al Jefe" : "OBJETIVO: Cruza la puerta roja", bossUp ? RGB(255, 150, 90) : RGB(150, 240, 170));
+        draw_text(12, 34, bossIdx >= 0 ? "OBJETIVO: Derrota al Jefe" : "OBJETIVO: Cruza la puerta roja",
+                  bossIdx >= 0 ? RGB(255, 150, 90) : RGB(150, 240, 170));
+
+        if (bossIdx >= 0) {
+            Entity *b = &ents[bossIdx];
+            float dx = b->x - player.x, dy = b->y - player.y;
+            if (dx * dx + dy * dy < 13.0f * 13.0f) {
+                fill_rect(206, 6, 208, 22, RGB(24, 16, 20));
+                draw_rect_outline(206, 6, 208, 22, RGB(220, 60, 60));
+                draw_text(212, 9, b->type == ENT_BOSS ? "JEFE: LORD SADDLER" : "JEFE: DR. SALVADOR", RGB(255, 220, 130));
+                int bw = (b->hp * 196) / (b->maxHp > 0 ? b->maxHp : 1);
+                if (bw < 0) bw = 0; if (bw > 196) bw = 196;
+                fill_rect(212, 19, 196, 5, RGB(45, 20, 24));
+                fill_rect(212, 19, bw, 5, RGB(225, 50, 65));
+            }
+        }
     }
 
     /* Bottom-right RE4 Health Gauge & Ammo Counter */

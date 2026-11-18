@@ -104,6 +104,9 @@ void load_stage(int stg) {
     spawn_ent(eIdx++, 18.5f, 4.5f, ENT_CRATE, 1);
     spawn_ent(eIdx++, 12.5f, 3.5f, ENT_HERB_G, 1);
     spawn_ent(eIdx++, 18.5f, 19.5f, ENT_HERB_R, 1);
+    /* Explosive Red Barrels */
+    spawn_ent(eIdx++, 12.5f, 11.5f, ENT_BARREL, 1);
+    spawn_ent(eIdx++, 19.5f, 11.5f, ENT_BARREL, 1);
 
     /* Infected Villagers (Ganados) */
     int vCount = 6 + stg * 2;
@@ -291,7 +294,7 @@ static void fire_weapon(void) {
     /* Project 3D entities and find closest hit under Red Laser Sight (aimScrX, aimScrY) */
     float dirX = cosf(player.ang);
     float dirY = sinf(player.ang);
-    float fovScale = player.aiming ? 0.50f : 0.66f;
+    float fovScale = player.aiming ? ((player.weapon == WPN_RIFLE) ? 0.28f : 0.48f) : 0.66f;
     float planeX = -dirY * fovScale;
     float planeY =  dirX * fovScale;
     float invDet = 1.0f / (planeX * dirY - dirX * planeY);
@@ -306,7 +309,8 @@ static void fire_weapon(void) {
     for (int i = 0; i < MAX_ENTS; i++) {
         Entity *e = &ents[i];
         if (!e->alive) continue;
-        if (e->type != ENT_VILLAGER && e->type != ENT_CHAINSAW && e->type != ENT_BOSS && e->type != ENT_CRATE) continue;
+        if (e->type != ENT_VILLAGER && e->type != ENT_CHAINSAW && e->type != ENT_BOSS &&
+            e->type != ENT_CRATE && e->type != ENT_BARREL) continue;
 
         float sx = e->x - player.x;
         float sy = e->y - player.y;
@@ -316,8 +320,9 @@ static void fire_weapon(void) {
 
         int sprScreenX = (int)((SCR_W / 2) * (1.0f + transX / transY));
         int fullH = (int)fabsf(SCR_H / transY);
-        int sprH = (e->type == ENT_CRATE) ? (fullH * 3) / 5 : fullH;
-        int sprW = (e->type == ENT_CRATE) ? (fullH * 3) / 5 : (fullH * 3) / 4;
+        int isSmall = (e->type == ENT_CRATE || e->type == ENT_BARREL);
+        int sprH = isSmall ? (fullH * 3) / 5 : fullH;
+        int sprW = isSmall ? (fullH * 3) / 5 : (fullH * 3) / 4;
         int crouchOff = (e->stunTimer > 0) ? (sprH / 5) : 0;
         int topY = 132 + fullH / 2 - sprH + crouchOff;
         int botY = 132 + fullH / 2;
@@ -357,6 +362,28 @@ static void fire_weapon(void) {
     if (bestEnt >= 0) {
         Entity *e = &ents[bestEnt];
         e->hitFlash = 6;
+        ui.hitSparkTimer = 7;
+        ui.hitSparkX = aimScrX;
+        ui.hitSparkY = aimScrY;
+        if (e->type == ENT_BARREL) {
+            e->alive = 0;
+            ui.explosionTimer = 15;
+            ui.shakeTimer = 12;
+            audio_play_sfx(SFX_SHOTGUN);
+            set_msg("BOOM! Barril explosivo!");
+            for (int j = 0; j < MAX_ENTS; j++) {
+                Entity *v = &ents[j];
+                if (!v->alive || (v->type != ENT_VILLAGER && v->type != ENT_CHAINSAW && v->type != ENT_BOSS)) continue;
+                float bdx = v->x - e->x, bdy = v->y - e->y;
+                if (bdx * bdx + bdy * bdy <= 4.0f * 4.0f) {
+                    v->hp -= 65;
+                    v->hitFlash = 10;
+                    v->stunTimer = 140;
+                    if (v->hp <= 0) on_enemy_killed(v);
+                }
+            }
+            return;
+        }
         if (e->type == ENT_CRATE) {
             e->alive = 0;
             audio_play_sfx(SFX_CRATE);
@@ -578,7 +605,16 @@ int main(void) {
         } else {
             player.aiming = (pad.Buttons & PSP_CTRL_LTRIGGER) ? 1 : 0;
 
-            if (pressed & PSP_CTRL_SQUARE) reload_or_switch();
+            if (pressed & PSP_CTRL_SQUARE) {
+                if (!player.aiming && ((pad.Buttons & PSP_CTRL_DOWN) || pad.Ly > 195)) {
+                    /* RE4 Quick 180-degree Turn! */
+                    player.ang += 3.14159f;
+                    audio_play_sfx(SFX_UI);
+                    set_msg("Giro rapido 180!");
+                } else {
+                    reload_or_switch();
+                }
+            }
             if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_RTRIGGER)) fire_weapon();
 
             float ax = ((int)pad.Lx - 128) / 128.0f;
@@ -632,6 +668,8 @@ int main(void) {
         if (player.damageFlash > 0) player.damageFlash--;
         if (player.iframes > 0) player.iframes--;
         if (ui.shakeTimer > 0) ui.shakeTimer--;
+        if (ui.explosionTimer > 0) ui.explosionTimer--;
+        if (ui.hitSparkTimer > 0) ui.hitSparkTimer--;
         if (ui.msgTimer > 0) ui.msgTimer--;
 
         if (player.reloadTimer > 0) {

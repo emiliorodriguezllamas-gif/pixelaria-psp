@@ -27,7 +27,8 @@ enum EntType {
     ENT_HERB_R = 5,
     ENT_AMMO = 6,
     ENT_PESETAS = 7,
-    ENT_BOSS = 8
+    ENT_BOSS = 8,
+    ENT_BARREL = 9
 };
 
 enum WeaponId {
@@ -100,6 +101,9 @@ typedef struct {
     int sfxOn;
     int shakeTimer;
     int headPopTimer;
+    int explosionTimer;
+    int hitSparkTimer;
+    int hitSparkX, hitSparkY;
     int gameWon;
     char msg[52];
     int msgTimer;
