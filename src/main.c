@@ -18,7 +18,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define SCR_W 480
 #define SCR_H 272
 #define BUF_W 512
-#define HIT_Y 232
+#define HIT_Y 238
 #define RGB(r,g,b) ((unsigned int)(0xFF000000u | ((unsigned int)(b)<<16) | ((unsigned int)(g)<<8) | (unsigned int)(r)))
 
 static unsigned int __attribute__((aligned(16))) gulist[262144];
@@ -268,6 +268,8 @@ static float projX[6], projY[6], projVx[6], projVy[6];
 static int projAlive[6];
 static char judge[32] = "";
 static int judgeT = 0;
+static int laneFlash[4] = { 0, 0, 0, 0 };
+static float fretScroll = 0.0f;
 
 /* PARTE 1: Mapa enorme Modo Aventura (64x48) */
 #define MW 64
@@ -519,23 +521,24 @@ int main(void) {
             if (bardY < 130) bardY = 130; if (bardY > 245) bardY = 245;
 
             phaseTimer++;
-            int pRate = isMobBattle ? 36 : (26 - chapter * 4);
+            int pRate = isMobBattle ? 52 : (42 - chapter * 7);
             if ((phaseTimer % pRate) == 0) {
                 for (int p = 0; p < 6; p++) if (!projAlive[p]) {
                     projAlive[p] = 1;
                     projX[p] = (float)(145 + (xr() % 190));
-                    projY[p] = 122.0f;
-                    projVx[p] = (bardX - projX[p]) * 0.015f;
-                    projVy[p] = isMobBattle ? 2.0f : (2.6f + chapter * 0.45f);
+                    projY[p] = 132.0f;
+                    projVx[p] = (bardX - projX[p]) * 0.011f;
+                    projVy[p] = isMobBattle ? 1.35f : (1.65f + chapter * 0.30f);
                     break;
                 }
             }
             for (int p = 0; p < 6; p++) if (projAlive[p]) {
                 projX[p] += projVx[p]; projY[p] += projVy[p];
-                if (projY[p] > 260) { projAlive[p] = 0; continue; }
-                if (fabsf(projX[p] - bardX) < 12 && fabsf(projY[p] - bardY) < 12) {
+                if (projY[p] > 256) { projAlive[p] = 0; continue; }
+                if (fabsf(projX[p] - bardX) < 11 && fabsf(projY[p] - bardY) < 11) {
                     projAlive[p] = 0;
-                    int edmg = relicShield ? 5 : 9;
+                    int baseEdmg = isMobBattle ? 4 : (5 + chapter);
+                    int edmg = relicShield ? (baseEdmg / 2 + 1) : baseEdmg;
                     pHp -= edmg; play_sfx(140.0f, 1200);
                     if (pHp <= 0) { pHp = 0; gameOver = 1; save_best(); }
                 }
@@ -546,13 +549,18 @@ int main(void) {
                 memset(projAlive, 0, sizeof(projAlive));
             }
         } else {
-            /* Guitar Hero Rhythm Attack Phase */
+            /* Guitar Hero Rhythm Attack Phase (Progressive & Readable) */
             if (pressed & PSP_CTRL_LTRIGGER) { curStyle = (curStyle + 2) % 3; play_sfx(440.0f, 600); }
             if (pressed & PSP_CTRL_RTRIGGER) { curStyle = (curStyle + 1) % 3; play_sfx(440.0f, 600); }
             if (judgeT > 0) judgeT--;
+            for (int l = 0; l < 4; l++) if (laneFlash[l] > 0) laneFlash[l]--;
+
+            float spd = isMobBattle ? 0.95f : (1.20f + chapter * 0.28f);
+            fretScroll += spd;
+            if (fretScroll >= 28.0f) fretScroll -= 28.0f;
 
             phaseTimer++;
-            if (phaseTimer >= 360) {
+            if (phaseTimer >= 420) {
                 inDefense = 1; phaseTimer = 0;
                 bardX = 240.0f; bardY = 195.0f;
                 memset(notes, 0, sizeof(notes));
@@ -560,30 +568,32 @@ int main(void) {
             }
 
             tick++;
-            int rate = isMobBattle ? 36 : (21 - chapter * 3);
-            if ((tick % rate) == 0 && phaseTimer < 300) {
+            int rate = isMobBattle ? 56 : (44 - chapter * 9);
+            if ((tick == 12 || (tick % rate) == 0) && phaseTimer < 330) {
                 for (int i = 0; i < 24; i++) if (!notes[i].active) {
-                    notes[i].active = 1; notes[i].lane = xr() & 3; notes[i].y = 122; break;
+                    notes[i].active = 1; notes[i].lane = xr() & 3; notes[i].y = 104.0f; break;
                 }
             }
 
             for (int l = 0; l < 4; l++) if (pressed & laneBtns[l]) {
-                int hit = -1; float bestD = 26.0f;
+                laneFlash[l] = 8;
+                int hit = -1; float bestD = 32.0f;
                 for (int i = 0; i < 24; i++) if (notes[i].active && notes[i].lane == l) {
                     float d = fabsf(notes[i].y - HIT_Y);
                     if (d < bestD) { bestD = d; hit = i; }
                 }
                 if (hit >= 0) {
                     notes[hit].active = 0; combo++;
-                    int isPerf = (bestD < 10.0f);
-                    int base = (isPerf ? 10 : 6) + relicDmg + (combo / 4);
+                    laneFlash[l] = 14;
+                    int isPerf = (bestD < 14.0f);
+                    int base = (isPerf ? 11 : 7) + relicDmg + (combo / 4);
                     if (curStyle == bossWeak[chapter]) base *= 2;
                     bHp -= base;
                     bossHitFlash = 6;
                     score += base * 10;
                     if (isPerf && relicVamp > 0) { pHp += relicVamp; if (pHp > pMaxHp) pHp = pMaxHp; }
                     snprintf(judge, sizeof(judge), isPerf ? "PERFECT! -%d" : "GOOD -%d", base);
-                    judgeT = 28;
+                    judgeT = 30;
                     play_sfx(523.25f + l * 75.0f, 800);
                     if (bHp <= 0) {
                         bHp = 0;
@@ -599,12 +609,12 @@ int main(void) {
                 }
             }
 
-            float spd = isMobBattle ? 1.5f : (2.3f + chapter * 0.4f);
             for (int i = 0; i < 24; i++) if (notes[i].active) {
                 notes[i].y += spd;
-                if (notes[i].y > SCR_H - 12) {
+                if (notes[i].y > SCR_H - 10) {
                     notes[i].active = 0; combo = 0;
-                    int edmg = relicShield ? 4 : 7;
+                    int baseMiss = isMobBattle ? 3 : (4 + chapter);
+                    int edmg = relicShield ? (baseMiss / 2 + 1) : baseMiss;
                     pHp -= edmg;
                     snprintf(judge, sizeof(judge), "MISS! -%d HP", edmg);
                     judgeT = 28;
@@ -897,30 +907,48 @@ int main(void) {
                         fill_rect(fb, ox - 2, oy - 2, 4, 4, RGB(255, 245, 170));
                     }
                 } else {
-                    /* Guitar Hero 4-Lane Rhythm Highway with REAL 20x20 32-Bit PSP Button Sprites! */
-                    draw_ff_window(fb, 140, 96, 200, 170);
-                    fill_rect(fb, 144, 100, 192, 13, RGB(28, 42, 108));
-                    sprintf(buf, "ESTILO:%s COMBO:x%d", styleNames[curStyle], combo);
-                    draw_text(fb, 148, 103, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
-                    draw_spr_lr24(fb, 308, 100);
+                    /* Guitar Hero 4-Lane Rhythm Highway (Enhanced Fretboard, Scrolling Beat Bars, & Hit Flash!) */
+                    draw_ff_window(fb, 130, 74, 220, 192);
+                    fill_rect(fb, 134, 78, 212, 14, RGB(28, 42, 108));
+                    sprintf(buf, "%s | COMBO x%d", styleNames[curStyle], combo);
+                    draw_text(fb, 138, 81, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
+                    draw_spr_lr24(fb, 318, 78);
+
+                    /* Turn Timer Bar at top of fretboard */
+                    fill_rect(fb, 136, 94, 208, 4, RGB(18, 22, 50));
+                    fill_rect(fb, 136, 94, ((420 - phaseTimer) * 208) / 420, 4, RGB(80, 220, 255));
+
+                    /* Fretboard Dark Stage & Scrolling Beat Lines */
+                    fill_rect(fb, 136, 100, 208, 160, RGB(11, 13, 30));
+                    for (int fy = 100 + (int)fretScroll; fy < 258; fy += 28) {
+                        fill_rect(fb, 137, fy, 206, 1, RGB(34, 40, 76));
+                    }
 
                     unsigned int lcols[4] = { RGB(255,80,180), RGB(80,255,140), RGB(255,70,70), RGB(0,220,255) };
+                    unsigned int ltint[4] = { RGB(34,16,32), RGB(14,34,24), RGB(34,16,18), RGB(14,26,40) };
+
+                    /* Hit Zone Glowing Bar across all 4 lanes */
+                    fill_rect(fb, 137, HIT_Y - 2, 206, 5, RGB(36, 44, 88));
+
                     for (int l = 0; l < 4; l++) {
-                        int lx = 152 + l * 46;
-                        fill_rect(fb, lx + 15, 116, 2, 144, RGB(50, 60, 110));
-                        fill_rect(fb, lx + 1, HIT_Y - 11, 30, 24, RGB(16, 20, 48));
-                        draw_border(fb, lx + 1, HIT_Y - 11, 30, 24, lcols[l]);
-                        draw_spr20(fb, btns20_arr[l], lx + 6, HIT_Y - 9);
+                        int lx = 144 + l * 50;
+                        fill_rect(fb, lx + 4, 100, 32, 158, ltint[l]);
+                        fill_rect(fb, lx + 19, 100, 2, 158, RGB(65, 78, 135));
+                        /* Receptor Box (lights up when pressed/hit!) */
+                        fill_rect(fb, lx + 3, HIT_Y - 12, 34, 26, laneFlash[l] > 0 ? lcols[l] : RGB(16, 20, 48));
+                        draw_border(fb, lx + 3, HIT_Y - 12, 34, 26, laneFlash[l] > 0 ? RGB(255, 255, 255) : lcols[l]);
+                        draw_spr20(fb, btns20_arr[l], lx + 10, HIT_Y - 9);
                     }
                     for (int i = 0; i < 24; i++) if (notes[i].active) {
                         int l = notes[i].lane;
-                        int lx = 152 + l * 46;
+                        int lx = 144 + l * 50;
                         int ny = (int)notes[i].y;
-                        fill_rect(fb, lx + 3, ny - 11, 26, 22, RGB(22, 26, 62));
-                        draw_border(fb, lx + 3, ny - 11, 26, 22, lcols[l]);
-                        draw_spr20(fb, btns20_arr[l], lx + 6, ny - 10);
+                        fill_rect(fb, lx + 5, ny - 12, 30, 24, lcols[l]);
+                        fill_rect(fb, lx + 7, ny - 10, 26, 20, RGB(20, 24, 58));
+                        draw_border(fb, lx + 5, ny - 12, 30, 24, RGB(255, 255, 255));
+                        draw_spr20(fb, btns20_arr[l], lx + 10, ny - 10);
                     }
-                    if (judgeT > 0) draw_text(fb, 185, 80, judge, RGB(255, 255, 120));
+                    if (judgeT > 0) draw_text(fb, 192, 58, judge, RGB(255, 255, 120));
                 }
             }
         }
