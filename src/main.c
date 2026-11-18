@@ -33,7 +33,7 @@ static int clampi(int v, int mn, int mx) { return v < mn ? mn : (v > mx ? mx : v
 static float clampf(float v, float mn, float mx) { return v < mn ? mn : (v > mx ? mx : v); }
 
 int nextXp(int lv) { return lv * lv * 25; }
-int maxHp(void) { return 100 + (skills.combate.lv - 1) * 5; }
+int maxHp(void) { return 100 + (skills.combate.lv - 1) * 5 + player.armorPieces * 10; }
 int totalLevel(void) {
     return skills.tala.lv + skills.mineria.lv + skills.combate.lv +
            skills.supervivencia.lv + skills.construccion.lv;
@@ -222,7 +222,7 @@ static void generate_dungeon_floor(int floor) {
 
     memset(dungMobs, 0, sizeof(dungMobs));
     int count = 4 + floor;
-    if (count > MAX_MOBS) count = MAX_MOBS;
+    if (count > MAX_MOBS - 1) count = MAX_MOBS - 1;
     for (int i = 0; i < count; i++) {
         int sx = 7 + (int)(rnd() * 21.0f);
         int sy = 2 + (int)(rnd() * 16.0f);
@@ -230,9 +230,22 @@ static void generate_dungeon_floor(int floor) {
             dungMobs[i].x = sx;
             dungMobs[i].y = sy;
             dungMobs[i].hp = 3 + floor * 2;
+            dungMobs[i].maxHp = dungMobs[i].hp;
             dungMobs[i].alive = 1;
             dungMobs[i].type = MOB_SKELETON;
         }
+    }
+    /* Random Crypt Boss (1 of 100 distinct bosses) on floors 2,4,6,8,10 */
+    if ((floor % 2 == 0) || floor == 10) {
+        int bid = ((int)(rnd() * 100.0f)) % 100;
+        int bhp = 24 + floor * 4 + (bid % 10) * 2;
+        dungMobs[MAX_MOBS - 1].x = 25;
+        dungMobs[MAX_MOBS - 1].y = 10;
+        dungMobs[MAX_MOBS - 1].hp = bhp;
+        dungMobs[MAX_MOBS - 1].maxHp = bhp;
+        dungMobs[MAX_MOBS - 1].alive = 1;
+        dungMobs[MAX_MOBS - 1].type = MOB_BOSS;
+        dungMobs[MAX_MOBS - 1].bossId = bid;
     }
 }
 
@@ -370,18 +383,36 @@ static void hit_mob_at(int hx, int hy, int dmg) {
             player.swordPct += 4;
             if (player.swordPct > 100) player.swordPct = 100;
         }
-        if (curMobs[mb].type == MOB_SKELETON) {
+        if (curMobs[mb].type == MOB_BOSS) {
+            player.armorFrags++;
+            player.bones += 3;
+            player.iron += 3;
+            spawn_pop(hx, hy, "+1 FRAG ARM!", 0xFF7AE2FF);
+            set_msg("BOSS vencido! +1 Frag.Armadura");
+            if (player.armorFrags >= 50) {
+                player.armorFrags -= 50;
+                player.armorPieces++;
+                player.hp = clampf(player.hp + 20.0f, 0.0f, (float)maxHp());
+                audio_play_sfx(SFX_LEVELUP);
+                spawn_pop(player.x, player.y, "ARMADURA +1!", 0xFF66EE66);
+                set_msg("Forjada 1 Parte de Armadura!");
+            }
+            add_xp(&skills.combate, "Comb", 40, 1);
+            audio_play_sfx(SFX_CRAFT);
+        } else if (curMobs[mb].type == MOB_SKELETON) {
             player.bones += 2; player.iron += 1;
             spawn_pop(hx, hy, "+2 Hue +1 Hie", 0xFF7AE2FF);
             set_msg("Esqueleto derrotado!");
+            add_xp(&skills.combate, "Comb", 15, 1);
+            audio_play_sfx(SFX_PICKUP);
         } else {
             player.food++; player.iron++;
             spawn_pop(hx, hy, "+1 Bay +1 Hie", 0xFF7AE2FF);
             set_msg("Slime derrotado!");
+            add_xp(&skills.combate, "Comb", 15, 1);
+            audio_play_sfx(SFX_PICKUP);
         }
         stats.slimes++;
-        add_xp(&skills.combate, "Comb", 15, 1);
-        audio_play_sfx(SFX_PICKUP);
     } else {
         /* Zelda Game Boy knockback */
         int kx = clampi(curMobs[mb].x + player.fx, 0, mapW - 1);
@@ -855,13 +886,16 @@ int main(void) {
                 int dx = player.x - curMobs[i].x;
                 int dy = player.y - curMobs[i].y;
                 int d = (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
-                int aggro = (curMobs[i].type == MOB_SKELETON) ? 12 : 8;
+                int aggro = (curMobs[i].type == MOB_BOSS) ? 14 : ((curMobs[i].type == MOB_SKELETON) ? 12 : 8);
 
                 if (d == 1 && player.iframes <= 0) {
-                    int edmg = (curMobs[i].type == MOB_SKELETON) ? (8 + player.dungeonFloor * 2) : 6;
+                    int raw = (curMobs[i].type == MOB_BOSS) ? (12 + (curMobs[i].bossId % 5) * 3)
+                            : ((curMobs[i].type == MOB_SKELETON) ? (8 + player.dungeonFloor * 2) : 6);
+                    int edmg = raw - player.armorPieces * 2;
+                    if (edmg < 1) edmg = 1;
                     player.hp = clampf(player.hp - (float)edmg, 0.0f, (float)maxHp());
                     player.iframes = 28;
-                    audio_play_sfx(curMobs[i].type == MOB_SKELETON ? SFX_SKEL_ATK : SFX_HURT);
+                    audio_play_sfx(curMobs[i].type != MOB_SLIME ? SFX_SKEL_ATK : SFX_HURT);
                     ui.damageFlash = 8; ui.shakeTimer = 5;
                     char db[16];
                     snprintf(db, sizeof(db), "-%d HP", edmg);

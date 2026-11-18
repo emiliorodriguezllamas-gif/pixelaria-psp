@@ -37,7 +37,8 @@ enum TileType {
 
 enum MobType {
     MOB_SLIME = 0,
-    MOB_SKELETON = 1
+    MOB_SKELETON = 1,
+    MOB_BOSS = 2
 };
 
 enum BiomeType {
@@ -82,6 +83,7 @@ typedef struct {
     int hasBoat;
     int inBoat;
     int wood, stone, iron, bones;
+    int armorFrags, armorPieces;
     int campfires, walls, food;
     int potions[7]; /* 7 potion types from chests */
     int selPotion;  /* active potion type 0..6 */
@@ -114,7 +116,7 @@ typedef struct {
 } Stats;
 
 typedef struct {
-    int x, y, hp, alive, type;
+    int x, y, hp, maxHp, alive, type, bossId;
 } Mob;
 
 typedef struct {

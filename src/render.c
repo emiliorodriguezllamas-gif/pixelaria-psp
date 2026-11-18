@@ -328,15 +328,33 @@ void render_frame(void) {
         }
     }
 
-    /* Enemies (Slimes & Dungeon Skeletons) */
+    /* Enemies (Slimes, Skeletons, & 100 Distinct Bosses) */
     int mobBob = (gameTime.ticks & 1) ? -1 : 0;
+    int bossIdx = -1;
     for (int i = 0; i < MAX_MOBS; i++) {
         if (!curMobs[i].alive) continue;
+        if (curMobs[i].type == MOB_BOSS) bossIdx = i;
         int sx = ox + (curMobs[i].x - camX) * TILE_PX;
         int sy = oy + (curMobs[i].y - camY) * TILE_PX;
         if (sx >= ox && sx < ox + 320 && sy >= oy && sy < oy + 200) {
-            const unsigned int *mspr = (curMobs[i].type == MOB_SKELETON) ? spr_skeleton : spr_slime;
-            blit_sprite(sx, sy, mspr, renderHr, (i & 1), mobBob);
+            if (curMobs[i].type == MOB_BOSS) {
+                static const unsigned int bossAuras[10] = {
+                    RGB(255,60,60), RGB(80,180,255), RGB(180,80,255), RGB(255,200,50), RGB(60,230,120),
+                    RGB(255,120,40), RGB(220,220,255), RGB(255,80,180), RGB(100,255,220), RGB(200,40,90)
+                };
+                unsigned int ac = bossAuras[curMobs[i].bossId % 10];
+                draw_rect_outline(sx - 1, sy - 1, 22, 22, ac);
+                blit_sprite(sx, sy, (curMobs[i].bossId & 1) ? spr_skeleton : spr_slime, renderHr, (i & 1), mobBob);
+                /* Crown / horns variant (0..9) */
+                int cr = (curMobs[i].bossId / 10) % 10;
+                fill_rect(sx + 5, sy - 2, 10, 3, ac);
+                if (cr & 1) fill_rect(sx + 4, sy - 4, 2, 3, RGB(255, 230, 90));
+                if (cr & 2) fill_rect(sx + 14, sy - 4, 2, 3, RGB(255, 230, 90));
+                if (cr >= 4) fill_rect(sx + 9, sy - 4, 2, 2, RGB(255, 255, 255));
+            } else {
+                const unsigned int *mspr = (curMobs[i].type == MOB_SKELETON) ? spr_skeleton : spr_slime;
+                blit_sprite(sx, sy, mspr, renderHr, (i & 1), mobBob);
+            }
         }
     }
 
@@ -484,6 +502,21 @@ void render_frame(void) {
 
     draw_rect_outline(ox - 1, oy - 1, 322, 202, ui.damageFlash > 0 ? RGB(255, 60, 60) : RGB(64, 72, 89));
 
+    /* Boss HP Bar at top of viewport */
+    if (bossIdx >= 0) {
+        static const char *bAdj[10] = {"Rey","Lich","Titan","Sombra","Senor","Duque","Espectro","Golem","Guardian","Emperador"};
+        static const char *bNoun[10] = {"Oseo","Abisal","Hielo","Fuego","Arena","Maldito","Runico","Carmesi","Oscuro","Eterno"};
+        int bid = curMobs[bossIdx].bossId;
+        sprintf(buf, "BOSS #%d: %s %s", bid + 1, bAdj[(bid / 10) % 10], bNoun[bid % 10]);
+        fill_rect(ox + 20, oy + 4, 280, 18, RGB(18, 16, 26));
+        draw_rect_outline(ox + 20, oy + 4, 280, 18, RGB(255, 80, 80));
+        draw_text(ox + 26, oy + 6, buf, RGB(255, 226, 122));
+        int bw = (curMobs[bossIdx].hp * 268) / (curMobs[bossIdx].maxHp > 0 ? curMobs[bossIdx].maxHp : 1);
+        if (bw < 0) bw = 0; if (bw > 268) bw = 268;
+        fill_rect(ox + 26, oy + 15, 268, 4, RGB(50, 20, 25));
+        fill_rect(ox + 26, oy + 15, bw, 4, RGB(220, 50, 70));
+    }
+
     /* Floating Popups */
     for (int i = 0; i < MAX_POPS; i++) {
         if (pops[i].timer > 0) {
@@ -533,11 +566,12 @@ void render_frame(void) {
     draw_text(332, 130, buf, RGB(255, 226, 122));
     sprintf(buf, "Poc:%s(%d)", potNames[player.selPotion % 7], player.potions[player.selPotion % 7]);
     draw_text(332, 141, buf, RGB(230, 160, 255));
+    sprintf(buf, "Arm:%d (%d/50)", player.armorPieces, player.armorFrags);
+    draw_text(332, 152, buf, RGB(160, 235, 200));
 
-    draw_text(332, 155, "[X] Usar   [L/R] Slot", RGB(160, 175, 200));
-    draw_text(332, 167, "[^] Craft  [O] Stats", RGB(160, 175, 200));
-    draw_text(332, 179, "[START] Guardar", RGB(160, 175, 200));
-    draw_text(332, 191, "[SEL] SFX On/Off", RGB(160, 175, 200));
+    draw_text(332, 166, "[X] Usar [L/R] Slot", RGB(160, 175, 200));
+    draw_text(332, 178, "[^] Craft [O] Stats", RGB(160, 175, 200));
+    draw_text(332, 190, "[START]Gua [SEL]SFX", RGB(160, 175, 200));
 
     /* BOTTOM HOTBAR (7 slots) */
     fill_rect(4, 237, 472, 32, RGB(19, 22, 29));
