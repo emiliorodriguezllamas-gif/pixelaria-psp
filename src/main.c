@@ -10,6 +10,7 @@
 #include <math.h>
 #include "font5x7.h"
 #include "bg_arena.h"
+#include "bg_title.h"
 #include "world_sprites.h"
 
 PSP_MODULE_INFO("SymphonyAbyss", 0, 1, 0);
@@ -36,6 +37,16 @@ static void put_px(unsigned int *fb, int x, int y, unsigned int c) {
     if ((unsigned)x < SCR_W && (unsigned)y < SCR_H) fb[y * BUF_W + x] = c;
 }
 
+static void blend_px(unsigned int *fb, int x, int y, unsigned int c, int a) {
+    if ((unsigned)x >= SCR_W || (unsigned)y >= SCR_H) return;
+    unsigned int dst = fb[y * BUF_W + x];
+    int ia = 255 - a;
+    unsigned int r = (((c & 0xFFu) * a + (dst & 0xFFu) * ia) >> 8) & 0xFFu;
+    unsigned int g = ((((c >> 8) & 0xFFu) * a + ((dst >> 8) & 0xFFu) * ia) >> 8) & 0xFFu;
+    unsigned int b = ((((c >> 16) & 0xFFu) * a + ((dst >> 16) & 0xFFu) * ia) >> 8) & 0xFFu;
+    fb[y * BUF_W + x] = 0xFF000000u | (b << 16) | (g << 8) | r;
+}
+
 static void fill_rect(unsigned int *fb, int x, int y, int w, int h, unsigned int col) {
     if (x < 0) { w += x; x = 0; }
     if (y < 0) { h += y; y = 0; }
@@ -48,6 +59,42 @@ static void fill_rect(unsigned int *fb, int x, int y, int w, int h, unsigned int
     }
 }
 
+static void fill_rect_alpha(unsigned int *fb, int x, int y, int w, int h, unsigned int col, int a) {
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > SCR_W) w = SCR_W - x;
+    if (y + h > SCR_H) h = SCR_H - y;
+    if (w <= 0 || h <= 0) return;
+    int ia = 255 - a;
+    unsigned int sr = (col & 0xFFu) * a;
+    unsigned int sg = ((col >> 8) & 0xFFu) * a;
+    unsigned int sb = ((col >> 16) & 0xFFu) * a;
+    for (int j = 0; j < h; j++) {
+        unsigned int *row = &fb[(y + j) * BUF_W + x];
+        for (int i = 0; i < w; i++) {
+            unsigned int dst = row[i];
+            unsigned int r = ((sr + (dst & 0xFFu) * ia) >> 8) & 0xFFu;
+            unsigned int g = ((sg + ((dst >> 8) & 0xFFu) * ia) >> 8) & 0xFFu;
+            unsigned int b = ((sb + ((dst >> 16) & 0xFFu) * ia) >> 8) & 0xFFu;
+            row[i] = 0xFF000000u | (b << 16) | (g << 8) | r;
+        }
+    }
+}
+
+static void fill_ellipse_alpha(unsigned int *fb, int cx, int cy, int rx, int ry, unsigned int col, int a) {
+    if (rx <= 0 || ry <= 0) return;
+    int rx2 = rx * rx, ry2 = ry * ry;
+    for (int dy = -ry; dy <= ry; dy++) {
+        int py = cy + dy;
+        if ((unsigned)py >= SCR_H) continue;
+        for (int dx = -rx; dx <= rx; dx++) {
+            if (dx * dx * ry2 + dy * dy * rx2 <= rx2 * ry2) {
+                blend_px(fb, cx + dx, py, col, a);
+            }
+        }
+    }
+}
+
 static void draw_border(unsigned int *fb, int x, int y, int w, int h, unsigned int col) {
     fill_rect(fb, x, y, w, 1, col);
     fill_rect(fb, x, y + h - 1, w, 1, col);
@@ -55,11 +102,21 @@ static void draw_border(unsigned int *fb, int x, int y, int w, int h, unsigned i
     fill_rect(fb, x + w - 1, y, 1, h, col);
 }
 
-/* Classic Final Fantasy Blue Window with double border */
+/* Classic Final Fantasy Semi-Transparent Gradient Blue Window with golden corner rivets */
 static void draw_ff_window(unsigned int *fb, int x, int y, int w, int h) {
-    fill_rect(fb, x, y, w, h, RGB(14, 22, 72));
-    draw_border(fb, x, y, w, h, RGB(230, 235, 255));
-    draw_border(fb, x + 2, y + 2, w - 4, h - 4, RGB(160, 180, 230));
+    for (int j = 0; j < h; j++) {
+        int r = 24 - (j * 14) / (h > 0 ? h : 1);
+        int g = 34 - (j * 20) / (h > 0 ? h : 1);
+        int b = 102 - (j * 54) / (h > 0 ? h : 1);
+        fill_rect_alpha(fb, x + 2, y + j, w - 4, 1, RGB(r, g, b), 222);
+    }
+    draw_border(fb, x, y, w, h, RGB(230, 236, 255));
+    draw_border(fb, x + 1, y + 1, w - 2, h - 2, RGB(65, 82, 145));
+    draw_border(fb, x + 2, y + 2, w - 4, h - 4, RGB(175, 195, 240));
+    fill_rect(fb, x, y, 3, 3, RGB(245, 205, 85));
+    fill_rect(fb, x + w - 3, y, 3, 3, RGB(245, 205, 85));
+    fill_rect(fb, x, y + h - 3, 3, 3, RGB(245, 205, 85));
+    fill_rect(fb, x + w - 3, y + h - 3, 3, 3, RGB(245, 205, 85));
 }
 
 static void draw_text(unsigned int *fb, int x, int y, const char *s, unsigned int c) {
@@ -107,6 +164,35 @@ static void draw_tile24(unsigned int *fb, const unsigned int *tile, int dx, int 
         for (int i = 0; i < 24; i++) {
             int px = dx + i;
             if ((unsigned)px < SCR_W) dst[px] = src[i];
+        }
+    }
+}
+
+static void draw_tile24_scroll(unsigned int *fb, const unsigned int *tile, int dx, int dy, int sxOff) {
+    for (int j = 0; j < 24; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &tile[j * 24];
+        for (int i = 0; i < 24; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) dst[px] = src[(i + sxOff) % 24];
+        }
+    }
+}
+
+static void draw_spr32(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int j = 0; j < 32; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr[j * 32];
+        for (int i = 0; i < 32; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
+            }
         }
     }
 }
@@ -288,6 +374,36 @@ static char judge[32] = "";
 static int judgeT = 0;
 static int laneFlash[4] = { 0, 0, 0, 0 };
 static float fretScroll = 0.0f;
+static int animFrame = 0;
+
+typedef struct { float x, y, vx, vy; unsigned int col; int life; } Particle;
+static Particle parts[32];
+
+static void spawn_sparks(float x, float y, unsigned int col, int count) {
+    for (int k = 0; k < count; k++) {
+        for (int i = 0; i < 32; i++) if (parts[i].life <= 0) {
+            float ang = (float)(xr() % 360) * 0.017453f;
+            float sp = 0.8f + (float)(xr() % 24) * 0.1f;
+            parts[i].x = x; parts[i].y = y;
+            parts[i].vx = cosf(ang) * sp; parts[i].vy = sinf(ang) * sp - 0.6f;
+            parts[i].col = col;
+            parts[i].life = 14 + (xr() % 12);
+            break;
+        }
+    }
+}
+
+static void update_draw_sparks(unsigned int *fb) {
+    for (int i = 0; i < 32; i++) if (parts[i].life > 0) {
+        parts[i].x += parts[i].vx;
+        parts[i].y += parts[i].vy;
+        parts[i].vy += 0.06f;
+        parts[i].life--;
+        int a = (parts[i].life * 255) / 26;
+        if (a > 255) a = 255;
+        fill_rect_alpha(fb, (int)parts[i].x - 1, (int)parts[i].y - 1, 3, 3, parts[i].col, a);
+    }
+}
 
 /* PARTE 1: Mapa enorme Modo Aventura (64x48) */
 #define MW 64
@@ -428,6 +544,7 @@ int main(void) {
         prev = pad.Buttons;
         if (pressed & PSP_CTRL_SELECT) sfx_on = !sfx_on;
         if (bossHitFlash > 0) bossHitFlash--;
+        animFrame++;
 
         /* ================= LOGIC ================= */
         if (inTitle || gameOver || victory) {
@@ -579,6 +696,7 @@ int main(void) {
                     bHp -= pendingDmg;
                     if (bHp < 0) bHp = 0;
                     bossHitFlash = 16;
+                    spawn_sparks(390.0f, 118.0f, RGB(255, 225, 80), 18);
                     play_sfx(980.0f, 1800);
                 } else {
                     play_sfx(220.0f, 900);
@@ -649,6 +767,8 @@ int main(void) {
                     if (isPerf && relicVamp > 0) { pHp += relicVamp; if (pHp > pMaxHp) pHp = pMaxHp; }
                     snprintf(judge, sizeof(judge), isPerf ? "PERFECT! +%d" : "GOOD +%d", base);
                     judgeT = 30;
+                    unsigned int scols[4] = { RGB(255,90,190), RGB(90,255,140), RGB(255,80,80), RGB(80,225,255) };
+                    spawn_sparks((float)(164 + l * 50), (float)HIT_Y, isPerf ? RGB(255, 240, 90) : scols[l], isPerf ? 10 : 6);
                     play_sfx(523.25f + l * 75.0f, 800);
                 }
             }
@@ -673,8 +793,9 @@ int main(void) {
         char buf[64];
 
         if (inOverworld) {
-            /* Render 20x12 textured 24x24 tiles covering the full 480x272 screen */
+            /* Render 20x12 textured 24x24 tiles with animated river water & sandy shorelines */
             int ox = mapX - 10, oy = mapY - 5;
+            int waterOff = (animFrame / 8) % 24;
             for (int ty = 0; ty < 12; ty++) {
                 int sy = ty * 24 - 8;
                 for (int tx = 0; tx < 20; tx++) {
@@ -686,7 +807,11 @@ int main(void) {
                     } else {
                         unsigned char t = worldMap[wy][wx];
                         if (t == 3) {
-                            draw_tile24(fb, tile_water, sx, sy);
+                            draw_tile24_scroll(fb, tile_water, sx, sy, waterOff);
+                            if (wx > 0 && worldMap[wy][wx - 1] != 3 && worldMap[wy][wx - 1] != 6)
+                                fill_rect_alpha(fb, sx, sy, 3, 24, RGB(205, 185, 130), 175);
+                            if (wx < MW - 1 && worldMap[wy][wx + 1] != 3 && worldMap[wy][wx + 1] != 6)
+                                fill_rect_alpha(fb, sx + 21, sy, 3, 24, RGB(205, 185, 130), 175);
                         } else if (t == 4) {
                             draw_tile24(fb, tile_castle, sx, sy);
                         } else if (t == 6) {
@@ -697,31 +822,52 @@ int main(void) {
                             draw_tile24(fb, tile_wall, sx, sy);
                         } else {
                             draw_tile24(fb, tile_grass, sx, sy);
-                            if (t == 1) draw_spr24(fb, spr_tree, sx, sy);
-                            else if (t == 2) draw_spr24(fb, spr_mountain, sx, sy);
+                            if (t == 2) draw_spr24(fb, spr_mountain, sx, sy);
                             else if (t == 5) {
                                 int dIdx = -1;
                                 for (int k = 0; k < 3; k++) if (dngX[k] == wx && dngY[k] == wy) dIdx = k;
                                 if (dIdx >= 0 && bossDefeated[dIdx]) draw_spr24(fb, spr_chest, sx, sy);
-                                else draw_spr24(fb, spr_dungeon, sx, sy);
+                                else {
+                                    int pulse = 55 + (int)(sinf((float)animFrame * 0.10f) * 35.0f);
+                                    fill_ellipse_alpha(fb, sx + 12, sy + 13, 13, 11, RGB(170, 60, 255), pulse);
+                                    draw_spr24(fb, spr_dungeon, sx, sy);
+                                }
                             }
                         }
                     }
                 }
             }
-            /* NPCs dynamically turn to look towards your Bard! */
+            /* 2.5D Overhanging Trees (spr_tree32) with soft elliptical drop shadows */
+            for (int ty = 0; ty < 12; ty++) {
+                int sy = ty * 24 - 8;
+                for (int tx = 0; tx < 20; tx++) {
+                    int sx = tx * 24;
+                    int wx = ox + tx, wy = oy + ty;
+                    if (wx >= 0 && wy >= 0 && wx < MW && wy < MH && worldMap[wy][wx] == 1) {
+                        fill_ellipse_alpha(fb, sx + 12, sy + 20, 11, 5, RGB(0, 0, 0), 115);
+                        draw_spr32(fb, spr_tree32, sx - 4, sy - 7);
+                    }
+                }
+            }
+            /* NPCs dynamically turn to look towards your Bard, with soft drop shadows */
             for (int i = 0; i < 3; i++) {
                 int sx = (npcX[i] - ox) * 24, sy = (npcY[i] - oy) * 24 - 8;
                 if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
                     int npcFlip = (mapX < npcX[i]) ? 1 : 0;
-                    draw_spr24_dir(fb, (i == 1) ? spr_troubadour : spr_elder, sx, sy, npcFlip);
-                    draw_text(fb, sx + 9, sy - 7, "!", RGB(255, 235, 60));
+                    int bob = ((animFrame / 20 + i) & 1);
+                    fill_ellipse_alpha(fb, sx + 12, sy + 21, 8, 3, RGB(0, 0, 0), 120);
+                    draw_spr24_dir(fb, (i == 1) ? spr_troubadour : spr_elder, sx, sy - bob, npcFlip);
+                    draw_text(fb, sx + 9, sy - 8 - bob, "!", RGB(255, 235, 60));
                 }
             }
-            /* Your 3-Piece Band following in formation and facing their walking direction */
-            draw_spr24_dir(fb, spr_band2, (prevX2 - ox) * 24, (prevY2 - oy) * 24 - 8, band2Flip);
-            draw_spr24_dir(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8, band1Flip);
-            draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8, bardFlip);
+            /* Your 3-Piece Band following in formation with soft shadows */
+            int bBob = ((animFrame / 16) & 1);
+            fill_ellipse_alpha(fb, (prevX2 - ox) * 24 + 12, (prevY2 - oy) * 24 + 13, 8, 3, RGB(0, 0, 0), 120);
+            fill_ellipse_alpha(fb, (prevX1 - ox) * 24 + 12, (prevY1 - oy) * 24 + 13, 8, 3, RGB(0, 0, 0), 120);
+            fill_ellipse_alpha(fb, 10 * 24 + 12, 5 * 24 + 13, 9, 4, RGB(0, 0, 0), 135);
+            draw_spr24_dir(fb, spr_band2, (prevX2 - ox) * 24, (prevY2 - oy) * 24 - 8 - bBob, band2Flip);
+            draw_spr24_dir(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8 - (bBob ^ 1), band1Flip);
+            draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8 - bBob, bardFlip);
 
             /* Top Adventure HUD Window with visual HP & MP bars */
             draw_ff_window(fb, 4, 3, 472, 22);
@@ -738,6 +884,24 @@ int main(void) {
                     bossDefeated[0]+bossDefeated[1]+bossDefeated[2], styleNames[curStyle], mapX, mapY);
             draw_text(fb, 244, 10, buf, RGB(255, 255, 255));
 
+            /* Top-Right Corner Mini-Map (64x48) */
+            draw_ff_window(fb, 404, 28, 72, 56);
+            for (int my = 0; my < MH; my++) {
+                for (int mx = 0; mx < MW; mx++) {
+                    unsigned char mt = worldMap[my][mx];
+                    unsigned int mc = RGB(48, 128, 56);
+                    if (mt == 1) mc = RGB(24, 82, 34);
+                    else if (mt == 2) mc = RGB(115, 115, 125);
+                    else if (mt == 3) mc = RGB(36, 98, 205);
+                    else if (mt == 4 || mt == 8) mc = RGB(215, 185, 85);
+                    else if (mt == 6) mc = RGB(180, 115, 55);
+                    else if (mt == 7) mc = RGB(165, 130, 85);
+                    else if (mt == 5) mc = RGB(205, 70, 255);
+                    put_px(fb, 408 + mx, 32 + my, mc);
+                }
+            }
+            if ((animFrame / 15) & 1) fill_rect(fb, 408 + mapX - 1, 32 + mapY - 1, 3, 3, RGB(255, 255, 255));
+
             if (dlgTimer > 0) {
                 draw_ff_window(fb, 10, 228, 460, 38);
                 fill_rect(fb, 16, 235, 24, 24, RGB(10, 14, 42));
@@ -746,23 +910,33 @@ int main(void) {
                 draw_text(fb, 48, 236, "CRONISTA DEL REINO:", RGB(255, 225, 90));
                 draw_text(fb, 48, 250, dlgText, RGB(255, 255, 255));
             }
-        } else {
-            /* Copy 32-bit Arena Backdrop */
-            for (int y = 0; y < SCR_H; y++) memcpy(&fb[y * BUF_W], &bg_arena[y * SCR_W], SCR_W * 4);
+        } else if (inTitle) {
+            /* Exclusive Illustrated 32-Bit Title Screen Cover Art + Translucent FF Logo Box */
+            for (int y = 0; y < SCR_H; y++) memcpy(&fb[y * BUF_W], &bg_title[y * SCR_W], SCR_W * 4);
+            if ((animFrame % 10) == 0) spawn_sparks((float)(60 + (xr() % 360)), 255.0f, (xr() & 1) ? RGB(80, 225, 255) : RGB(255, 120, 235), 1);
+            update_draw_sparks(fb);
 
-            if (inTitle) {
-                draw_ff_window(fb, 64, 52, 352, 168);
-                draw_text(fb, 115, 72, "S Y M P H O N Y   O F   T H E   A B Y S S", RGB(255, 225, 80));
-                draw_text(fb, 138, 92, "32-BIT GUITAR HERO + RPG ROGUELIKE", RGB(100, 235, 255));
-                draw_spr24(fb, spr_bard,  192, 110);
-                draw_spr24(fb, spr_band1, 228, 110);
-                draw_spr24(fb, spr_band2, 264, 110);
-                sprintf(buf, "RECORD MAXIMO: %d PTS", best);
-                draw_text(fb, 174, 144, buf, RGB(140, 255, 160));
-                draw_text(fb, 148, 170, "PULSA     PARA EMPEZAR AVENTURA", RGB(255, 255, 255));
-                draw_spr16(fb, spr_btn_cr16, 187, 166);
-                draw_text(fb, 92, 194, "Explora el Reino, Toca Melodias y Vence al Mal", RGB(190, 205, 235));
-            } else if (inStory) {
+            draw_ff_window(fb, 64, 154, 352, 106);
+            draw_text(fb, 115, 166, "S Y M P H O N Y   O F   T H E   A B Y S S", RGB(255, 225, 80));
+            draw_text(fb, 138, 182, "32-BIT GUITAR HERO + RPG ROGUELIKE", RGB(100, 235, 255));
+            sprintf(buf, "RECORD MAXIMO: %d PTS", best);
+            draw_text(fb, 174, 200, buf, RGB(140, 255, 160));
+            if (((animFrame / 22) & 1) == 0) {
+                draw_text(fb, 148, 224, "PULSA     PARA EMPEZAR AVENTURA", RGB(255, 255, 255));
+                draw_spr16(fb, spr_btn_cr16, 187, 220);
+            }
+            draw_text(fb, 92, 242, "Explora el Reino, Toca Melodias y Vence al Mal", RGB(190, 205, 235));
+        } else {
+            /* Copy 32-bit Gothic Cathedral Arena Backdrop + Flickering Torch Glows */
+            for (int y = 0; y < SCR_H; y++) memcpy(&fb[y * BUF_W], &bg_arena[y * SCR_W], SCR_W * 4);
+            const int torchX[4] = { 118, 188, 292, 362 };
+            int tRad = 18 + (int)(sinf((float)animFrame * 0.16f) * 3.0f);
+            for (int t = 0; t < 4; t++) {
+                fill_ellipse_alpha(fb, torchX[t], 56, tRad, tRad, RGB(255, 165, 50), 48);
+                fill_ellipse_alpha(fb, torchX[t], 56, 8, 8, RGB(255, 230, 120), 85);
+            }
+
+            if (inStory) {
                 draw_ff_window(fb, 64, 56, 352, 160);
                 const unsigned int *bspr = (chapter == 0) ? boss_golem : (chapter == 1 ? boss_automaton : boss_dragon);
                 draw_boss64_dir(fb, bspr, 82, 86, 0, 1);
@@ -860,23 +1034,36 @@ int main(void) {
                 sprintf(buf, "DEBILIDAD: %s (x2!)", styleNames[bossWeak[chapter]]);
                 draw_text(fb, 276, 35, buf, RGB(255, 215, 80));
 
-                /* Individual Runic Summoning Circles + Staggered 3-Piece 48x48 Band on Left */
+                /* Soft Alpha Shadows + Glowing Runic Pads + Idle Breathing Animation on Band & Boss! */
+                int bIdle0 = (int)(sinf((float)animFrame * 0.08f) * 2.0f);
+                int bIdle1 = (int)(sinf((float)animFrame * 0.08f + 1.5f) * 2.0f);
+                int bIdle2 = (int)(sinf((float)animFrame * 0.08f + 3.0f) * 2.0f);
+
+                fill_ellipse_alpha(fb, 42,  144, 21, 6, RGB(0, 0, 0), 130);
+                fill_ellipse_alpha(fb, 122, 148, 21, 6, RGB(0, 0, 0), 130);
+                fill_ellipse_alpha(fb, 82,  158, 21, 6, RGB(0, 0, 0), 130);
+                fill_ellipse_alpha(fb, 42,  144, 22, 6, RGB(175, 105, 255), 60);
+                fill_ellipse_alpha(fb, 122, 148, 22, 6, RGB(65, 225, 255), 65);
+                fill_ellipse_alpha(fb, 82,  158, 22, 6, RGB(80, 235, 145), 60);
                 draw_ellipse_ring(fb, 42,  144, 22, 6, RGB(175, 105, 255));
                 draw_ellipse_ring(fb, 122, 148, 22, 6, RGB(65, 225, 255));
                 draw_ellipse_ring(fb, 82,  158, 22, 6, RGB(80, 235, 145));
 
-                draw_spr48(fb, spr_band2_48, 18, 100);
-                draw_spr48(fb, spr_bard_48,  98, 104);
-                draw_spr48(fb, spr_band1_48, 58, 114);
+                draw_spr48(fb, spr_band2_48, 18, 100 + bIdle2);
+                draw_spr48(fb, spr_bard_48,  98, 104 + bIdle0);
+                draw_spr48(fb, spr_band1_48, 58, 114 + bIdle1);
 
-                /* Boss Summoning Circle & Flood-Filled 64x64 Boss on Right */
+                /* Boss Summoning Circle & Floating/Breathing 64x64 Boss on Right */
+                int bossBob = (int)(sinf((float)animFrame * 0.06f) * 3.0f);
+                fill_ellipse_alpha(fb, 390, 148, 40, 10, RGB(0, 0, 0), 150);
+                fill_ellipse_alpha(fb, 390, 148, 42, 11, RGB(255, 55, 80), 65);
                 draw_ellipse_ring(fb, 390, 148, 42, 11, RGB(255, 65, 85));
                 draw_ellipse_ring(fb, 390, 148, 32, 8,  RGB(255, 185, 90));
                 const unsigned int *espr;
                 if (isMobBattle) espr = (chapter == 0) ? mob_slime : (chapter == 1 ? mob_goblin : mob_wraith);
                 else             espr = (chapter == 0) ? boss_golem : (chapter == 1 ? boss_automaton : boss_dragon);
                 int shakeX = (inAttackResolve && phaseTimer >= 18 && phaseTimer < 38) ? ((phaseTimer & 2) ? 6 : -6) : 0;
-                draw_boss64(fb, espr, 358 + shakeX, 86, bossHitFlash > 0);
+                draw_boss64(fb, espr, 358 + shakeX, 86 + bossBob, bossHitFlash > 0);
 
                 if (inFFMenu) {
                     /* Classic Final Fantasy Turn-Based Command Menu + Partitura Preview with REAL 32-Bit PSP Button Sprites! */
@@ -957,6 +1144,7 @@ int main(void) {
                     if (phaseTimer < 18) {
                         int bx = 142 + (phaseTimer * 240) / 18;
                         int by = 124 - (int)(sinf((float)phaseTimer * 0.17f) * 14.0f);
+                        fill_ellipse_alpha(fb, bx, by, 22, 12, RGB(60, 190, 255), 110);
                         fill_rect(fb, bx - 16, by - 4, 24, 8, RGB(50, 180, 255));
                         fill_rect(fb, bx - 8,  by - 7, 16, 14, RGB(140, 240, 255));
                         fill_rect(fb, bx - 4,  by - 4, 8,  8, RGB(255, 255, 200));
@@ -964,6 +1152,7 @@ int main(void) {
                         int dt = phaseTimer - 18;
                         if (dt < 22 && pendingDmg > 0) {
                             /* Expanding Sonic Shockwave Rings & Sparks around Boss */
+                            fill_ellipse_alpha(fb, 390, 118, 24 + dt, 24 + dt, RGB(255, 220, 80), 85 - dt * 3);
                             draw_ellipse_ring(fb, 390, 118, 16 + dt * 2, 16 + dt * 2, RGB(255, 225, 80));
                             draw_ellipse_ring(fb, 390, 118, 8 + dt * 2,  8 + dt * 2,  RGB(80, 235, 255));
                         }
@@ -977,6 +1166,7 @@ int main(void) {
                             draw_text_2x(fb, 354, fy, "FALLO!", RGB(180, 190, 210));
                         }
                     }
+                    update_draw_sparks(fb);
                     draw_ff_window(fb, 68, 196, 344, 48);
                     sprintf(buf, pendingDmg > 0 ? "DESCARGA DEL COMBO! -%d HP AL ENEMIGO!" : "NO ACERTASTE NOTAS EN ESTE TURNO...", pendingDmg);
                     draw_text(fb, 92, 216, buf, pendingDmg > 0 ? RGB(255, 230, 90) : RGB(210, 220, 240));
@@ -1025,6 +1215,7 @@ int main(void) {
                     sprintf(buf, "DANO ACUMULADO: %d", pendingDmg);
                     draw_text(fb, 174, 54, buf, RGB(120, 245, 255));
                     if (judgeT > 0) draw_text(fb, 192, 64, judge, RGB(255, 255, 120));
+                    update_draw_sparks(fb);
                 }
             }
         }
