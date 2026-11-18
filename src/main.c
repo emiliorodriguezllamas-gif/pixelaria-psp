@@ -657,12 +657,55 @@ int main(void) {
                 draw_text(fb, 158, 146, "Toca las notas para atacar!", RGB(220, 230, 255));
                 draw_text(fb, 165, 182, "> PULSA [X] PARA LUCHAR <", RGB(255, 235, 90));
             } else if (inRelic) {
-                draw_ff_window(fb, 56, 52, 368, 168);
-                draw_spr24(fb, spr_chest, 228, 62);
-                draw_text(fb, 140, 92, "BOSS DERROTADO! ELIGE RELIQUIA:", RGB(255, 225, 80));
-                draw_text(fb, 96, 118, "[[]] Amplificador (+4 Dano por Nota)", RGB(255, 140, 210));
-                draw_text(fb, 96, 144, "[Tri] Pua Vampirica (+3 HP por Perfect)", RGB(120, 255, 150));
-                draw_text(fb, 96, 170, "[O] Escudo Ritmico (-40% Dano + Cura 100%)", RGB(100, 225, 255));
+                /* 32-Bit Roguelike Relic Selection Cards (Band & Boss visible above!) */
+                draw_spr48(fb, spr_band2_48, 18, 76);
+                draw_spr48(fb, spr_bard_48,  98, 80);
+                draw_spr48(fb, spr_band1_48, 58, 88);
+
+                draw_ff_window(fb, 68, 52, 344, 198);
+                fill_rect(fb, 74, 58, 332, 18, RGB(68, 48, 16));
+                draw_spr24(fb, spr_chest, 78, 54);
+                draw_text(fb, 108, 63, "4. BOTIN ROGUELIKE (ELIGE 1 RELIQUIA):", RGB(255, 225, 80));
+
+                /* Card 1: Amplificador Runico [[]] */
+                fill_rect(fb, 78, 84, 324, 46, RGB(42, 18, 48));
+                draw_border(fb, 78, 84, 324, 46, RGB(255, 130, 210));
+                fill_rect(fb, 84, 91, 32, 32, RGB(14, 12, 26));
+                draw_border(fb, 84, 91, 32, 32, RGB(255, 130, 210));
+                fill_rect(fb, 92, 99, 16, 16, RGB(235, 60, 170));
+                fill_rect(fb, 96, 103, 8, 8, RGB(255, 240, 90));
+                draw_text(fb, 126, 93, "AMPLIFICADOR RUNICO", RGB(255, 255, 255));
+                draw_text(fb, 126, 109, "+4 DANO POR CADA NOTA ACERTADA", RGB(255, 155, 220));
+                fill_rect(fb, 358, 96, 34, 22, RGB(235, 70, 180));
+                draw_border(fb, 358, 96, 34, 22, RGB(255, 255, 255));
+                draw_text(fb, 369, 104, "[]", RGB(255, 255, 255));
+
+                /* Card 2: Pua Vampirica Carmesi [^] */
+                fill_rect(fb, 78, 138, 324, 46, RGB(16, 44, 30));
+                draw_border(fb, 78, 138, 324, 46, RGB(95, 245, 145));
+                fill_rect(fb, 84, 145, 32, 32, RGB(14, 12, 26));
+                draw_border(fb, 84, 145, 32, 32, RGB(95, 245, 145));
+                fill_rect(fb, 93, 152, 14, 18, RGB(220, 40, 70));
+                fill_rect(fb, 97, 156, 6, 6, RGB(255, 230, 80));
+                draw_text(fb, 126, 147, "PUA VAMPIRICA CARMESI", RGB(255, 255, 255));
+                draw_text(fb, 126, 163, "+3 HP CURADOS POR NOTA PERFECT", RGB(120, 255, 165));
+                fill_rect(fb, 358, 150, 34, 22, RGB(50, 205, 105));
+                draw_border(fb, 358, 150, 34, 22, RGB(255, 255, 255));
+                draw_text(fb, 372, 158, "^", RGB(255, 255, 255));
+
+                /* Card 3: Escudo Ritmico Astral [O] */
+                fill_rect(fb, 78, 192, 324, 46, RGB(16, 32, 58));
+                draw_border(fb, 78, 192, 324, 46, RGB(100, 215, 255));
+                fill_rect(fb, 84, 199, 32, 32, RGB(14, 12, 26));
+                draw_border(fb, 84, 199, 32, 32, RGB(100, 215, 255));
+                fill_rect(fb, 92, 207, 16, 16, RGB(45, 155, 255));
+                fill_rect(fb, 98, 209, 4, 12, RGB(255, 255, 255));
+                fill_rect(fb, 94, 213, 12, 4, RGB(255, 255, 255));
+                draw_text(fb, 126, 201, "ESCUDO RITMICO ASTRAL", RGB(255, 255, 255));
+                draw_text(fb, 126, 217, "-40% DANO RECIBIDO + CURA 100%", RGB(130, 225, 255));
+                fill_rect(fb, 358, 204, 34, 22, RGB(55, 160, 255));
+                draw_border(fb, 358, 204, 34, 22, RGB(255, 255, 255));
+                draw_text(fb, 372, 212, "O", RGB(255, 255, 255));
             } else if (gameOver || victory) {
                 draw_ff_window(fb, 80, 66, 320, 140);
                 draw_text(fb, 168, 90, victory ? "LEYENDA DEL ROCK!" : "CAISTE EN EL ABISMO", victory ? RGB(255,230,80) : RGB(255,80,90));
@@ -765,13 +808,32 @@ int main(void) {
                     sprintf(buf, "RELIQUIAS: +%dDMG  +%dVAMP  %s", relicDmg, relicVamp, relicShield ? "ESCUDO" : "-");
                     draw_text(fb, 246, 248, buf, RGB(255, 215, 85));
                 } else if (inDefense) {
-                    /* Enemy Turn: Dodge Box */
-                    draw_ff_window(fb, 128, 114, 224, 150);
-                    draw_text(fb, 140, 98, "TURNO ENEMIGO: ESQUIVA!", RGB(255, 90, 90));
+                    /* Enemy Turn: 32-Bit Runic Dodge Arena with Survival Bar & Fiery Shadow Orbs */
+                    draw_ff_window(fb, 132, 110, 216, 156);
+                    fill_rect(fb, 136, 114, 208, 13, RGB(88, 22, 42));
+                    draw_text(fb, 140, 117, "3. ESQUIVA ATAQUE!", RGB(255, 235, 80));
+                    fill_rect(fb, 266, 117, 72, 7, RGB(25, 10, 15));
+                    fill_rect(fb, 266, 117, ((240 - phaseTimer) * 72) / 240, 7, RGB(255, 185, 50));
+                    draw_border(fb, 266, 117, 72, 7, RGB(255, 255, 255));
+
+                    /* Inner Runic Grid Arena */
+                    fill_rect(fb, 138, 130, 204, 130, RGB(14, 11, 28));
+                    for (int gx = 158; gx < 340; gx += 22) fill_rect(fb, gx, 131, 1, 128, RGB(34, 28, 64));
+                    for (int gy = 148; gy < 258; gy += 18) fill_rect(fb, 139, gy, 202, 1, RGB(34, 28, 64));
+                    draw_border(fb, 138, 130, 204, 130, RGB(140, 110, 225));
+
+                    /* Glowing Cyan Aegis Shield Ring around Bard */
+                    draw_ellipse_ring(fb, (int)bardX, (int)bardY, 15, 14, RGB(70, 235, 255));
                     draw_spr24(fb, spr_bard, (int)bardX - 12, (int)bardY - 12);
+
+                    /* 32-Bit Layered Fiery Shadow-Flame Orbs with Comet Trails */
                     for (int p = 0; p < 6; p++) if (projAlive[p]) {
-                        fill_rect(fb, (int)projX[p] - 5, (int)projY[p] - 5, 10, 10, RGB(255, 60, 80));
-                        draw_border(fb, (int)projX[p] - 5, (int)projY[p] - 5, 10, 10, RGB(255, 230, 90));
+                        int ox = (int)projX[p], oy = (int)projY[p];
+                        fill_rect(fb, ox - (int)(projVx[p]*3) - 3, oy - (int)(projVy[p]*3) - 3, 6, 6, RGB(160, 35, 190));
+                        fill_rect(fb, ox - (int)(projVx[p]*1.5f) - 4, oy - (int)(projVy[p]*1.5f) - 4, 8, 8, RGB(230, 50, 95));
+                        fill_rect(fb, ox - 6, oy - 6, 12, 12, RGB(255, 55, 75));
+                        fill_rect(fb, ox - 4, oy - 4, 8, 8, RGB(255, 140, 50));
+                        fill_rect(fb, ox - 2, oy - 2, 4, 4, RGB(255, 245, 170));
                     }
                 } else {
                     /* Guitar Hero 4-Lane Rhythm Highway */
