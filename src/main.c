@@ -190,7 +190,12 @@ static void load_game(void) {
 }
 
 static void move_player(int dx, int dy) {
-    player.fx = dx; player.fy = dy;
+    if (player.fx != dx || player.fy != dy) {
+        player.fx = dx;
+        player.fy = dy;
+        audio_play_sfx(SFX_UI);
+        return;
+    }
     int nx = clampi(player.x + dx, 0, WORLD_SIZE - 1);
     int ny = clampi(player.y + dy, 0, WORLD_SIZE - 1);
     if (mob_at(nx, ny) >= 0) {
