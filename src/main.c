@@ -623,27 +623,27 @@ int main(void) {
         if (frameCnt >= 60) {
             frameCnt = 0;
             gameTime.ticks++;
-            gameTime.minute += 10;
+            gameTime.minute += 2;
             if (gameTime.minute >= 1440) {
                 gameTime.minute = 0; gameTime.day++;
                 gameTime.season = ((gameTime.day - 1) / 3) % 4;
                 add_xp(&skills.supervivencia, "Sup", 15, 0);
             }
-            if (gameTime.ticks % 15 == 0) {
+            if (gameTime.ticks % 45 == 0) {
                 int curB = biomes[player.y * WORLD_SIZE + player.x];
                 float wr = rnd();
                 if (curB == B_TUNDRA || gameTime.season == 3) gameTime.weather = wr < 0.45f ? 2 : 0;
                 else if (curB == B_DESERT) gameTime.weather = 0;
                 else gameTime.weather = wr < 0.30f ? 1 : 0;
             }
-            if (gameTime.weather > 0 && !player.warm) {
+            if (!player.inDungeon && gameTime.weather > 0 && !player.warm) {
                 if (player.wet < 10) { player.wet = 10; set_msg("Ropa mojada!"); }
             } else if (player.wet > 0) player.wet--;
 
             float drain = 1.0f - (skills.supervivencia.lv - 1) * 0.03f;
             if (drain < 0.6f) drain = 0.6f;
-            player.hunger = clampf(player.hunger - 0.35f * drain, 0.0f, 100.0f);
-            player.thirst = clampf(player.thirst - (biomes[player.y * WORLD_SIZE + player.x] == B_DESERT ? 0.65f : 0.40f) * drain, 0.0f, 100.0f);
+            player.hunger = clampf(player.hunger - 0.07f * drain, 0.0f, 100.0f);
+            player.thirst = clampf(player.thirst - (biomes[player.y * WORLD_SIZE + player.x] == B_DESERT ? 0.13f : 0.08f) * drain, 0.0f, 100.0f);
             player.stamina = clampf(player.stamina + (player.warm ? 3.0f : 0.8f), 0.0f, 100.0f);
 
             int mhp = maxHp();
