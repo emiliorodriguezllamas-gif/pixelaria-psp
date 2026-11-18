@@ -73,7 +73,8 @@ static void add_xp(Skill *sk, const char *name, int amt, int is_combat) {
 
 static int is_walkable(int t) {
     return t == T_GRASS || t == T_FOREST || t == T_SAND || t == T_SNOW ||
-           t == T_WATER || t == T_FIRE || t == T_DFLOOR || t == T_DUNGEON_DOOR || t == T_EXIT;
+           t == T_WATER || t == T_FIRE || t == T_DFLOOR || t == T_DUNGEON_DOOR ||
+           t == T_EXIT || t == T_STAIRS_DOWN;
 }
 
 static int mob_at(int x, int y) {
@@ -167,7 +168,10 @@ static void generate_world(void) {
     world[32 * WORLD_SIZE + 30] = T_BERRY;
     world[33 * WORLD_SIZE + 34] = T_ROCK;
     world[34 * WORLD_SIZE + 31] = T_WATER;
+    /* 4 Surface Crypts across biomes */
     world[32 * WORLD_SIZE + 36] = T_DUNGEON_DOOR;
+    world[14 * WORLD_SIZE + 14] = T_DUNGEON_DOOR;
+    world[14 * WORLD_SIZE + 48] = T_DUNGEON_DOOR;
     world[49 * WORLD_SIZE + 48] = T_DUNGEON_DOOR;
 
     memset(mobs, 0, sizeof(mobs));
@@ -180,7 +184,7 @@ static void generate_world(void) {
     }
 }
 
-static void generate_dungeon(void) {
+static void generate_dungeon_floor(int floor) {
     for (int y = 0; y < DUNG_H; y++) {
         for (int x = 0; x < DUNG_W; x++) {
             int i = y * DUNG_W + x;
@@ -191,29 +195,43 @@ static void generate_dungeon(void) {
             }
         }
     }
-    /* Interior stone pillars & chambers */
+    /* Stone pillars & chambers (shift slightly per floor) */
+    int p1 = 9 + (floor % 3);
+    int p2 = 20 + ((floor + 1) % 3);
     for (int y = 3; y < DUNG_H - 3; y++) {
         if (y != 9 && y != 10) {
-            dungeon[y * DUNG_W + 10] = T_DWALL;
-            dungeon[y * DUNG_W + 21] = T_DWALL;
+            dungeon[y * DUNG_W + p1] = T_DWALL;
+            dungeon[y * DUNG_W + p2] = T_DWALL;
         }
     }
     dungeon[2 * DUNG_W + 2] = T_FIRE;
     dungeon[2 * DUNG_W + 29] = T_FIRE;
     dungeon[17 * DUNG_W + 29] = T_FIRE;
     dungeon[10 * DUNG_W + 2] = T_EXIT;
+    if (floor < 10) {
+        dungeon[10 * DUNG_W + 29] = T_STAIRS_DOWN;
+    } else {
+        /* Floor 10 Treasure Vault */
+        dungeon[8 * DUNG_W + 29] = T_CHEST;
+        dungeon[12 * DUNG_W + 29] = T_CHEST;
+    }
     dungeon[5 * DUNG_W + 15] = T_CHEST;
     dungeon[14 * DUNG_W + 16] = T_CHEST;
-    dungeon[10 * DUNG_W + 28] = T_CHEST;
+    dungeon[10 * DUNG_W + 27] = T_CHEST;
 
     memset(dungMobs, 0, sizeof(dungMobs));
-    int sx[6] = {8, 13, 17, 24, 26, 27};
-    int sy[6] = {6, 4, 14, 6, 13, 10};
-    for (int i = 0; i < 6; i++) {
-        dungMobs[i].x = sx[i]; dungMobs[i].y = sy[i];
-        dungMobs[i].hp = 4 + (i >= 4 ? 2 : 0);
-        dungMobs[i].alive = 1;
-        dungMobs[i].type = MOB_SKELETON;
+    int count = 4 + floor;
+    if (count > MAX_MOBS) count = MAX_MOBS;
+    for (int i = 0; i < count; i++) {
+        int sx = 7 + (int)(rnd() * 21.0f);
+        int sy = 2 + (int)(rnd() * 16.0f);
+        if (dungeon[sy * DUNG_W + sx] == T_DFLOOR && (sx > 6 || sy < 7 || sy > 13)) {
+            dungMobs[i].x = sx;
+            dungMobs[i].y = sy;
+            dungMobs[i].hp = 3 + floor * 2;
+            dungMobs[i].alive = 1;
+            dungMobs[i].type = MOB_SKELETON;
+        }
     }
 }
 
@@ -290,9 +308,23 @@ static void move_player(int dx, int dy, int direct) {
         if (t == T_DUNGEON_DOOR) {
             player.savedX = nx; player.savedY = ny;
             player.inDungeon = 1; player.inBoat = 0;
+            player.dungeonFloor = 1;
+            generate_dungeon_floor(1);
             player.x = 3; player.y = 10; player.fx = 1; player.fy = 0;
             audio_play_sfx(SFX_DOOR);
-            set_msg("Entraste al Dungeon!");
+            set_msg("Cripta Piso 1/10!");
+            return;
+        }
+        if (t == T_STAIRS_DOWN) {
+            if (player.dungeonFloor < 10) {
+                player.dungeonFloor++;
+                generate_dungeon_floor(player.dungeonFloor);
+                player.x = 3; player.y = 10; player.fx = 1; player.fy = 0;
+                audio_play_sfx(SFX_DOOR);
+                char b[32];
+                snprintf(b, sizeof(b), "Bajaste al Piso %d/10!", player.dungeonFloor);
+                set_msg(b);
+            }
             return;
         }
         if (t == T_EXIT) {
@@ -300,7 +332,7 @@ static void move_player(int dx, int dy, int direct) {
             player.x = player.savedX; player.y = player.savedY + 1;
             player.fx = 0; player.fy = 1;
             audio_play_sfx(SFX_DOOR);
-            set_msg("Saliste del Dungeon!");
+            set_msg("Saliste de la Cripta!");
             return;
         }
         if (t == T_WATER) {
@@ -325,10 +357,18 @@ static void hit_mob_at(int hx, int hy, int dmg) {
     int mb = mob_at(hx, hy);
     if (mb < 0) return;
     curMobs[mb].hp -= dmg;
+    if (player.slot == 0 && player.swordPct < 100) {
+        player.swordPct += 2;
+        if (player.swordPct > 100) player.swordPct = 100;
+    }
     audio_play_sfx(curMobs[mb].type == MOB_SKELETON ? SFX_BONE_HIT : SFX_HIT);
     ui.shakeTimer = 4;
     if (curMobs[mb].hp <= 0) {
         curMobs[mb].alive = 0;
+        if (player.slot == 0 && player.swordPct < 100) {
+            player.swordPct += 4;
+            if (player.swordPct > 100) player.swordPct = 100;
+        }
         if (curMobs[mb].type == MOB_SKELETON) {
             player.bones += 2; player.iron += 1;
             spawn_pop(hx, hy, "+2 Hue +1 Hie", 0xFF7AE2FF);
@@ -386,7 +426,7 @@ static void use_tool(void) {
     if (player.slot == 0) {
         ui.slashTimer = 8;
         audio_play_sfx(SFX_SLASH);
-        int dmg = 2 + player.swordTier * 2 + (skills.combate.lv - 1) / 3;
+        int dmg = 2 + player.swordTier * 2 + (player.swordPct / 25) + (skills.combate.lv - 1) / 3;
         int hitAny = 0;
         for (int a = -1; a <= 1; a++) {
             int hx = player.x + player.fx + (player.fy != 0 ? a : 0);
@@ -574,11 +614,12 @@ int main(void) {
 
     gameTime.day = 1; gameTime.minute = 480; gameTime.season = 1;
     ui.sfxOn = 1;
+    ui.inTitle = 1;
+    ui.titleSel = 0;
     set_msg("Explora Pixelaria!");
 
     generate_world();
-    generate_dungeon();
-    load_game();
+    generate_dungeon_floor(1);
 
     SceCtrlData pad, oldPad;
     sceCtrlReadBufferPositive(&oldPad, 1);
@@ -587,6 +628,36 @@ int main(void) {
     while (running) {
         sceCtrlReadBufferPositive(&pad, 1);
         unsigned int pressed = pad.Buttons & ~oldPad.Buttons;
+
+        if (ui.inTitle) {
+            if (ui.showHelp) {
+                if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_CIRCLE)) {
+                    ui.showHelp = 0;
+                    audio_play_sfx(SFX_UI);
+                }
+            } else {
+                if (pressed & PSP_CTRL_UP) { ui.titleSel = (ui.titleSel + 2) % 3; audio_play_sfx(SFX_UI); }
+                if (pressed & PSP_CTRL_DOWN) { ui.titleSel = (ui.titleSel + 1) % 3; audio_play_sfx(SFX_UI); }
+                if (pressed & PSP_CTRL_CROSS) {
+                    if (ui.titleSel == 0) {
+                        load_game();
+                        ui.inTitle = 0;
+                        audio_play_sfx(SFX_CRAFT);
+                    } else if (ui.titleSel == 1) {
+                        generate_world();
+                        generate_dungeon_floor(1);
+                        ui.inTitle = 0;
+                        audio_play_sfx(SFX_CRAFT);
+                    } else {
+                        ui.showHelp = 1;
+                        audio_play_sfx(SFX_UI);
+                    }
+                }
+            }
+            oldPad = pad;
+            render_frame();
+            continue;
+        }
 
         if (pressed & PSP_CTRL_SELECT) {
             ui.sfxOn = !ui.sfxOn;
@@ -694,12 +765,14 @@ int main(void) {
                     int d = (curMobs[i].x > player.x ? curMobs[i].x - player.x : player.x - curMobs[i].x) +
                             (curMobs[i].y > player.y ? curMobs[i].y - player.y : player.y - curMobs[i].y);
                     if (d == 1 && player.iframes <= 0) {
-                        int edmg = (curMobs[i].type == MOB_SKELETON) ? 10 : 6;
+                        int edmg = (curMobs[i].type == MOB_SKELETON) ? (8 + player.dungeonFloor * 2) : 6;
                         player.hp = clampf(player.hp - (float)edmg, 0.0f, (float)maxHp());
                         player.iframes = 30;
                         audio_play_sfx(curMobs[i].type == MOB_SKELETON ? SFX_SKEL_ATK : SFX_HURT);
                         ui.damageFlash = 8; ui.shakeTimer = 5;
-                        spawn_pop(player.x, player.y, edmg == 10 ? "-10 HP" : "-6 HP", 0xFF4444FF);
+                        char db[16];
+                        snprintf(db, sizeof(db), "-%d HP", edmg);
+                        spawn_pop(player.x, player.y, db, 0xFF4444FF);
                     } else if (d < 8 && rnd() < 0.65f) {
                         int mx = curMobs[i].x + (player.x > curMobs[i].x ? 1 : (player.x < curMobs[i].x ? -1 : 0));
                         int my = curMobs[i].y + (player.y > curMobs[i].y ? 1 : (player.y < curMobs[i].y ? -1 : 0));

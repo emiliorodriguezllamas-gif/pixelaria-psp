@@ -31,7 +31,8 @@ enum TileType {
     T_DUNGEON_DOOR = 15,
     T_DFLOOR = 16,
     T_DWALL = 17,
-    T_EXIT = 18
+    T_EXIT = 18,
+    T_STAIRS_DOWN = 19
 };
 
 enum MobType {
@@ -77,11 +78,13 @@ typedef struct {
     int slot;
     int ironTools;
     int swordTier; /* 0=Madera, 1=Hierro, 2=Acero, 3=Real */
+    int swordPct;  /* 0..100% weapon mastery */
     int hasBoat;
     int inBoat;
     int wood, stone, iron, bones;
     int campfires, walls, food;
     int inDungeon;
+    int dungeonFloor; /* 1..10 */
     int savedX, savedY;
     int iframes;
 } Player;
@@ -128,6 +131,9 @@ typedef struct {
 } GameTime;
 
 typedef struct {
+    int inTitle;
+    int titleSel;
+    int showHelp;
     int craftOpen;
     int statsOpen;
     int menuSel;

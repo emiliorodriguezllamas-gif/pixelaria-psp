@@ -158,11 +158,20 @@ static void draw_tile_art(int sx, int sy, int wx, int wy, int t, int hr) {
         case T_CHEST:  blit_sprite(sx, sy, spr_chest, hr, 0, 0); break;
         case T_WALL:   draw_wood_wall(sx, sy, wx, wy, hr); break;
         case T_FIRE:   blit_sprite(sx, sy, spr_fire, hr, flick, -flick); break;
-        case T_DUNGEON_DOOR:
-            fill_rect(sx + 2, sy + 2, 16, 17, tint_night(RGB(90, 86, 98), hr));
-            fill_rect(sx + 5, sy + 6, 10, 13, RGB(16, 14, 22));
-            draw_rect_outline(sx + 2, sy + 2, 16, 17, tint_night(RGB(145, 138, 155), hr));
-            fill_rect(sx + 9, sy + 3, 2, 2, RGB(255, 180, 60));
+        case T_DUNGEON_DOOR: /* Surface Crypt */
+            fill_rect(sx + 2, sy + 1, 16, 18, tint_night(RGB(95, 92, 106), hr));
+            fill_rect(sx + 4, sy + 1, 12, 3, tint_night(RGB(125, 122, 138), hr));
+            fill_rect(sx + 6, sy + 8, 8, 11, RGB(14, 12, 20));
+            draw_rect_outline(sx + 2, sy + 1, 16, 18, tint_night(RGB(52, 50, 62), hr));
+            fill_rect(sx + 9, sy + 3, 2, 4, tint_night(RGB(205, 195, 160), hr));
+            fill_rect(sx + 8, sy + 4, 4, 1, tint_night(RGB(205, 195, 160), hr));
+            break;
+        case T_STAIRS_DOWN:
+            fill_rect(sx + 2, sy + 3, 16, 14, RGB(22, 20, 28));
+            fill_rect(sx + 4, sy + 5, 12, 3, RGB(70, 65, 82));
+            fill_rect(sx + 6, sy + 9, 10, 3, RGB(50, 46, 60));
+            fill_rect(sx + 8, sy + 13, 8, 3, RGB(34, 30, 42));
+            draw_rect_outline(sx + 2, sy + 3, 16, 14, RGB(210, 170, 60));
             break;
         case T_DWALL:
             fill_rect(sx, sy, 20, 20, RGB(58, 56, 68));
@@ -193,6 +202,63 @@ void render_frame(void) {
     char buf[64];
 
     fill_rect(0, 0, SCR_W, SCR_H, RGB(22, 26, 35));
+
+    /* TITLE / START MENU */
+    if (ui.inTitle) {
+        static int tf = 0;
+        tf++;
+        /* Night twilight sky & stars */
+        fill_rect(0, 0, SCR_W, 190, RGB(18, 26, 48));
+        fill_rect(0, 110, SCR_W, 80, RGB(28, 42, 72));
+        for (int s = 0; s < 24; s++) {
+            int sx = (s * 73 + 19) % 470;
+            int sy = (s * 41 + 11) % 100;
+            if (((tf / 15 + s) % 4) != 0) put_px(sx, sy, RGB(255, 245, 200));
+        }
+        /* Distant mountains & grassy meadow */
+        fill_rect(0, 190, SCR_W, 82, RGB(42, 92, 46));
+        fill_rect(0, 190, SCR_W, 3, RGB(70, 140, 68));
+        /* Decorative sprites on meadow */
+        blit_sprite(40, 174, spr_pine, 12, 0, 0);
+        blit_sprite(70, 178, spr_tree, 12, 0, 0);
+        blit_sprite(380, 176, spr_ruin, 12, 0, 0);
+        blit_sprite(415, 178, spr_pine, 12, 0, 0);
+        blit_sprite(216, 182, spr_p_down, 12, 0, 0);
+        blit_sprite(244, 184, spr_fire, 12, (tf / 8) & 1, 0);
+
+        /* Title Banner */
+        fill_rect(100, 26, 280, 44, RGB(19, 22, 32));
+        draw_rect_outline(100, 26, 280, 44, RGB(255, 226, 122));
+        draw_text(154, 36, "P I X E L A R I A", RGB(255, 226, 122));
+        draw_text(176, 52, "POCKET - PSP EDITION", RGB(166, 216, 255));
+
+        if (ui.showHelp) {
+            fill_rect(60, 82, 360, 152, RGB(20, 24, 34));
+            draw_rect_outline(60, 82, 360, 152, RGB(142, 232, 164));
+            draw_text(74, 92, "CONTROLES PSP:", RGB(255, 226, 122));
+            draw_text(74, 108, "Joystick: Mover directo  | Cruceta: Apuntar y andar", RGB(230, 235, 245));
+            draw_text(74, 124, "[X]: Usar / Espada Zelda | [Cuad / L / R]: Slot", RGB(230, 235, 245));
+            draw_text(74, 140, "[Triangulo]: Craftear    | [Circulo]: Habilidades", RGB(230, 235, 245));
+            draw_text(74, 156, "[START]: Guardar         | [SELECT]: Musica/SFX", RGB(230, 235, 245));
+            draw_text(74, 178, "Explora Criptas (10 pisos), forja armas y navega!", RGB(166, 216, 255));
+            draw_text(154, 212, "Pulsa [X] o [O] para volver", RGB(142, 232, 164));
+        } else {
+            const char *opts[3] = {"Continuar Partida", "Nueva Partida", "Controles y Guia"};
+            for (int i = 0; i < 3; i++) {
+                int oy = 90 + i * 28;
+                fill_rect(140, oy, 200, 22, i == ui.titleSel ? RGB(54, 65, 89) : RGB(24, 28, 38));
+                draw_rect_outline(140, oy, 200, 22, i == ui.titleSel ? RGB(255, 226, 122) : RGB(75, 86, 112));
+                draw_text(168, oy + 7, opts[i], i == ui.titleSel ? RGB(255, 226, 122) : RGB(230, 235, 245));
+            }
+            draw_text(146, 252, "Cruceta: Elegir   [X]: Aceptar", RGB(220, 235, 220));
+        }
+
+        sceDisplayWaitVblankStart();
+        for (int y = 0; y < SCR_H; y++) {
+            memcpy(&vram_base[y * VRAM_STRIDE], &backbuf[y * SCR_W], SCR_W * 4);
+        }
+        return;
+    }
 
     /* TOP HUD */
     fill_rect(0, 0, SCR_W, 32, RGB(18, 22, 29));
@@ -433,7 +499,11 @@ void render_frame(void) {
     draw_text(332, 110, buf, RGB(230, 235, 245));
     sprintf(buf, "Hie:%d Hue:%d", player.iron, player.bones);
     draw_text(332, 122, buf, RGB(255, 210, 158));
-    sprintf(buf, "Esp:%s %s", swNames[player.swordTier & 3], player.inDungeon ? "[DUNGEON]" : "");
+    if (player.inDungeon) {
+        sprintf(buf, "Esp:%s %d%% P:%d/10", swNames[player.swordTier & 3], player.swordPct, player.dungeonFloor);
+    } else {
+        sprintf(buf, "Esp:%s %d%%", swNames[player.swordTier & 3], player.swordPct);
+    }
     draw_text(332, 134, buf, RGB(255, 226, 122));
 
     draw_text(332, 150, "[X] Usar   [L/R] Slot", RGB(160, 175, 200));
