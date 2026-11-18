@@ -311,41 +311,130 @@ static void draw_boss64(unsigned int *fb, const unsigned int *spr, int dx, int d
     draw_boss64_dir(fb, spr, dx, dy, flash, 0);
 }
 
-/* Audio: 3 styles (0=Rock, 1=Synth, 2=Symphonic) */
+/* Epic 44.1kHz Multi-Track PSP Synthesizer: 5 Distinct Songs (Overworld, Mobs, Boss 1 Rock, Boss 2 Synth, Boss 3 Symphonic) */
 static int ach = -1, ath = -1;
-static volatile int arun = 0, sfx_t = 0, sfx_on = 1, curStyle = 0;
-static float sfx_f = 440.0f, sfx_p = 0.0f, bgm_t = 0.0f;
+static volatile int arun = 0, sfx_t = 0, sfx_max = 3000, sfx_on = 1, curStyle = 0, curSong = 0;
+static volatile int bgm_step = 0;
+static float sfx_f = 440.0f, sfx_p = 0.0f, sfx_p2 = 0.0f, bgm_t = 0.0f;
 static short abuf[2][1024 * 2];
-static void play_sfx(float f, int dur) { if (sfx_on) { sfx_f = f; sfx_t = dur; sfx_p = 0.0f; } }
+
+static void play_sfx(float f, int dur) {
+    if (sfx_on) { sfx_f = f; sfx_t = dur; sfx_max = dur > 0 ? dur : 1; sfx_p = 0.0f; sfx_p2 = 0.0f; }
+}
+
+/* Harmonic 4-lane scale frequencies (Root, b3/4, 5th, Octave) per song so Guitar Hero notes are 100% in tune! */
+static const float songScale[5][4] = {
+    { 293.66f, 349.23f, 440.00f, 587.33f }, /* 0: D Minor (Overworld / Title) */
+    { 329.63f, 392.00f, 493.88f, 659.25f }, /* 1: E Minor (Forest Mobs) */
+    { 164.81f, 220.00f, 246.94f, 329.63f }, /* 2: E Minor Heavy Rock (Boss 1: Golem) */
+    { 261.63f, 311.13f, 392.00f, 523.25f }, /* 3: C Minor Synth (Boss 2: Automata) */
+    { 293.66f, 349.23f, 440.00f, 587.33f }  /* 4: D Minor Symphonic (Boss 3: Dragon) */
+};
 
 static int audio_th(SceSize a, void *p) {
     (void)a; (void)p;
     int cur = 0;
-    const float notes_seq[3][8] = {
-        { 82.41f, 82.41f, 98.00f, 110.00f, 82.41f, 123.47f, 110.00f, 98.00f }, /* Rock */
-        { 130.81f, 196.00f, 261.63f, 196.00f, 146.83f, 220.00f, 293.66f, 220.00f }, /* Synth */
-        { 110.00f, 130.81f, 164.81f, 220.00f, 196.00f, 164.81f, 146.83f, 130.81f }  /* Symphonic */
+    /* 16-step Basslines & Epic Lead Melodies for each of the 5 songs */
+    static const float bass[5][16] = {
+        { 146.83f,146.83f,174.61f,146.83f, 130.81f,130.81f,164.81f,130.81f, 116.54f,116.54f,146.83f,116.54f, 130.81f,146.83f,164.81f,110.00f }, /* 0: Adventure D-min */
+        { 164.81f,164.81f,196.00f,164.81f, 146.83f,146.83f,174.61f,146.83f, 130.81f,130.81f,164.81f,130.81f, 146.83f,164.81f,196.00f,123.47f }, /* 1: Forest Mobs E-min */
+        {  82.41f, 82.41f, 82.41f, 98.00f,  82.41f, 82.41f,110.00f, 98.00f,  73.42f, 73.42f, 98.00f, 73.42f,  82.41f,110.00f,123.47f, 98.00f }, /* 2: Boss 1 Heavy Rock E-min */
+        { 130.81f,261.63f,130.81f,196.00f, 116.54f,233.08f,116.54f,174.61f, 103.83f,207.65f,103.83f,155.56f, 116.54f,146.83f,196.00f,233.08f }, /* 3: Boss 2 Dark Synth C-min */
+        {  73.42f,146.83f,110.00f,146.83f,  65.41f,130.81f, 98.00f,130.81f,  58.27f,116.54f, 87.31f,116.54f,  65.41f, 73.42f,110.00f, 82.41f }  /* 4: Boss 3 Epic Symphonic D-min */
     };
+    static const float lead[5][16] = {
+        { 293.66f,349.23f,440.00f,392.00f, 349.23f,329.63f,293.66f,261.63f, 233.08f,293.66f,349.23f,329.63f, 293.66f,329.63f,440.00f,587.33f }, /* 0: Adventure */
+        { 329.63f,392.00f,493.88f,392.00f, 440.00f,392.00f,329.63f,293.66f, 261.63f,329.63f,392.00f,329.63f, 349.23f,392.00f,493.88f,659.25f }, /* 1: Forest Mobs */
+        { 329.63f,329.63f,392.00f,440.00f, 493.88f,440.00f,392.00f,329.63f, 293.66f,329.63f,392.00f,493.88f, 587.33f,493.88f,440.00f,392.00f }, /* 2: Boss 1 Rock */
+        { 523.25f,392.00f,311.13f,392.00f, 466.16f,349.23f,293.66f,349.23f, 415.30f,311.13f,261.63f,311.13f, 466.16f,523.25f,622.25f,783.99f }, /* 3: Boss 2 Synth */
+        { 587.33f,523.25f,440.00f,349.23f, 523.25f,440.00f,392.00f,329.63f, 466.16f,440.00f,349.23f,293.66f, 440.00f,523.25f,587.33f,880.00f }  /* 4: Boss 3 Symphonic */
+    };
+    static const float tempo[5] = { 3.7f, 4.1f, 4.4f, 4.6f, 4.8f };
+    unsigned int noiseSeed = 0x13579BDFu;
+
     while (arun) {
         short *o = abuf[cur];
+        int sg = curSong; if (sg < 0 || sg > 4) sg = 0;
+        int stStyle = curStyle; if (stStyle < 0 || stStyle > 2) stStyle = 0;
+        float spd = tempo[sg];
+
         for (int i = 0; i < 1024; i++) {
-            float m = 0.0f;
+            float lSig = 0.0f, rSig = 0.0f;
             if (sfx_on) {
-                int st = (int)(bgm_t * 4.5f);
-                float bf = notes_seq[curStyle][st & 7];
-                float sub = bgm_t * 4.5f - floorf(bgm_t * 4.5f);
-                float bt = bgm_t * bf - floorf(bgm_t * bf);
-                m += (curStyle == 2 ? sinf(bt * 6.283f) : (2.0f * bt - 1.0f)) * 0.11f * expf(-sub * 2.0f);
+                float stepF = bgm_t * spd;
+                int st = ((int)stepF) & 15;
+                bgm_step = (int)stepF;
+                float sub = stepF - (float)((int)stepF);
+
+                /* 1. Bass Track (Warm sub + 5th harmonic) */
+                float bf = bass[sg][st];
+                float bp = bgm_t * bf; bp -= (float)((int)bp);
+                float bassEnv = expf(-sub * 2.4f);
+                float bassWave = (bp < 0.5f ? 0.5f : -0.5f) * 0.35f + sinf(bp * 6.28318f) * 0.65f;
+                float bOut = bassWave * 0.14f * bassEnv;
+
+                /* 2. Lead / Chord Instrument Track (shaped by Song & Active Musical Style) */
+                float lf = lead[sg][st];
+                float lp1 = bgm_t * lf; lp1 -= (float)((int)lp1);
+                float lp2 = bgm_t * (lf * 1.498f); lp2 -= (float)((int)lp2); /* Power 5th harmony */
+                float lp3 = bgm_t * (lf * 1.004f); lp3 -= (float)((int)lp3); /* Stereo detune chorus */
+                float leadEnv = expf(-sub * 1.8f);
+                float leadL = 0.0f, leadR = 0.0f;
+                if (stStyle == 0 || sg == 2) {
+                    /* Distorted Epic Rock Power-Chord Guitar */
+                    float rawL = (2.0f * lp1 - 1.0f) * 0.7f + (2.0f * lp2 - 1.0f) * 0.45f;
+                    float rawR = (2.0f * lp3 - 1.0f) * 0.7f + (2.0f * lp2 - 1.0f) * 0.45f;
+                    leadL = (rawL / (1.0f + fabsf(rawL))) * 0.11f * leadEnv;
+                    leadR = (rawR / (1.0f + fabsf(rawR))) * 0.11f * leadEnv;
+                } else if (stStyle == 1 || sg == 3) {
+                    /* Detuned Arcane Supersaw Synth */
+                    leadL = ((2.0f * lp1 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.10f * leadEnv;
+                    leadR = ((2.0f * lp3 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.10f * leadEnv;
+                } else {
+                    /* Symphonic Lush String Ensemble */
+                    float vibrato = 1.0f + sinf(bgm_t * 32.0f) * 0.004f;
+                    float sp = bgm_t * lf * vibrato; sp -= (float)((int)sp);
+                    leadL = (sinf(sp * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.11f * (0.4f + 0.6f * sinf(sub * 3.14159f));
+                    leadR = (sinf(lp3 * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.11f * (0.4f + 0.6f * sinf(sub * 3.14159f));
+                }
+
+                /* 3. Percussion Track (Kick on 0,4,8,12 | Snare on 2,6,10,14 | Hi-Hat on every step) */
+                float drum = 0.0f;
+                if ((st & 3) == 0 && sub < 0.35f) {
+                    float kf = 115.0f * expf(-sub * 14.0f) + 42.0f;
+                    drum += sinf(bgm_t * kf * 6.28318f) * 0.15f * expf(-sub * 12.0f);
+                }
+                noiseSeed = noiseSeed * 1664525u + 1013904223u;
+                float nz = ((float)(int)(noiseSeed >> 16) / 32768.0f);
+                if ((st & 3) == 2 && sub < 0.28f) {
+                    drum += nz * 0.085f * expf(-sub * 16.0f); /* Snare */
+                } else if (sub < 0.09f) {
+                    drum += nz * 0.030f * expf(-sub * 32.0f); /* Hi-hat */
+                }
+
+                lSig = bOut + leadL + drum;
+                rSig = bOut + leadR + drum;
+
+                /* 4. In-Key Guitar Hero Note Pluck / SFX Overlay */
                 if (sfx_t > 0) {
-                    sfx_p += sfx_f / 44100.0f;
-                    m += sinf(sfx_p * 6.283f) * 0.24f * ((float)sfx_t / 3000.0f);
+                    sfx_p  += sfx_f / 44100.0f;
+                    sfx_p2 += (sfx_f * 1.5f) / 44100.0f;
+                    if (sfx_p >= 1.0f) sfx_p -= 1.0f;
+                    if (sfx_p2 >= 1.0f) sfx_p2 -= 1.0f;
+                    float env = (float)sfx_t / (float)sfx_max;
+                    float noteWave = (stStyle == 0)
+                        ? ((2.0f * sfx_p - 1.0f) * 0.6f + (2.0f * sfx_p2 - 1.0f) * 0.4f)
+                        : (sinf(sfx_p * 6.28318f) * 0.7f + sinf(sfx_p2 * 6.28318f) * 0.3f);
+                    float sOut = noteWave * 0.20f * env;
+                    lSig += sOut; rSig += sOut;
                     sfx_t--;
                 }
             }
             bgm_t += 1.0f / 44100.0f;
-            int v = (int)(m * 32767.0f);
-            if (v > 32767) v = 32767; else if (v < -32767) v = -32767;
-            o[i * 2] = (short)v; o[i * 2 + 1] = (short)v;
+            int vl = (int)(lSig * 32767.0f), vr = (int)(rSig * 32767.0f);
+            if (vl > 32767) vl = 32767; else if (vl < -32767) vl = -32767;
+            if (vr > 32767) vr = 32767; else if (vr < -32767) vr = -32767;
+            o[i * 2] = (short)vl; o[i * 2 + 1] = (short)vr;
         }
         sceAudioOutputPannedBlocking(ach, PSP_AUDIO_VOLUME_MAX, PSP_AUDIO_VOLUME_MAX, o);
         cur ^= 1;
@@ -546,6 +635,11 @@ int main(void) {
         if (bossHitFlash > 0) bossHitFlash--;
         animFrame++;
 
+        /* Select Song dynamically: 0=Overworld/Title, 1=Forest Mobs, 2=Boss1 Rock, 3=Boss2 Synth, 4=Boss3 Symphonic */
+        if (inTitle || inOverworld) curSong = 0;
+        else if (isMobBattle) curSong = 1;
+        else curSong = 2 + chapter;
+
         /* ================= LOGIC ================= */
         if (inTitle || gameOver || victory) {
             if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) start_game();
@@ -742,11 +836,12 @@ int main(void) {
                 memset(notes, 0, sizeof(notes));
             }
 
-            tick++;
-            int rate = isMobBattle ? 56 : (44 - chapter * 9);
-            if ((tick == 12 || (tick % rate) == 0) && phaseTimer < 330) {
+            static int lastBeatStep = -1;
+            int stepMod = isMobBattle ? 4 : (3 - (chapter > 0 ? 1 : 0)); /* Mobs every 4 beats, Boss 1 every 3, Boss 2-3 every 2 */
+            if (bgm_step != lastBeatStep && (bgm_step % stepMod) == 0 && phaseTimer < 330) {
+                lastBeatStep = bgm_step;
                 for (int i = 0; i < 24; i++) if (!notes[i].active) {
-                    notes[i].active = 1; notes[i].lane = xr() & 3; notes[i].y = 104.0f; break;
+                    notes[i].active = 1; notes[i].lane = (bgm_step + (xr() & 1)) & 3; notes[i].y = 104.0f; break;
                 }
             }
 
@@ -770,7 +865,7 @@ int main(void) {
                     judgeT = 30;
                     unsigned int scols[4] = { RGB(255,90,190), RGB(90,255,140), RGB(255,80,80), RGB(80,225,255) };
                     spawn_sparks((float)(164 + l * 50), (float)HIT_Y, isPerf ? RGB(255, 240, 90) : scols[l], isPerf ? 10 : 6);
-                    play_sfx(523.25f + l * 75.0f, 800);
+                    play_sfx(songScale[curSong][l], 2600);
                 } else {
                     /* Penalty for pressing wrong button / mashing */
                     combo = 0;
