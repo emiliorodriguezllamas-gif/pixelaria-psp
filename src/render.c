@@ -520,42 +520,49 @@ void render_frame(void) {
     }
 
     static const char *swNames[4] = {"Mad", "Hie", "Ace", "Real"};
+    static const char *potNames[7] = {"Roja", "Azul", "Verde", "Dorada", "Oscura", "Blanca", "Violeta"};
     sprintf(buf, "Mad:%d Pie:%d", player.wood, player.stone);
-    draw_text(332, 110, buf, RGB(230, 235, 245));
+    draw_text(332, 108, buf, RGB(230, 235, 245));
     sprintf(buf, "Hie:%d Hue:%d", player.iron, player.bones);
-    draw_text(332, 122, buf, RGB(255, 210, 158));
+    draw_text(332, 119, buf, RGB(255, 210, 158));
     if (player.inDungeon) {
         sprintf(buf, "Esp:%s %d%% P:%d/10", swNames[player.swordTier & 3], player.swordPct, player.dungeonFloor);
     } else {
         sprintf(buf, "Esp:%s %d%%", swNames[player.swordTier & 3], player.swordPct);
     }
-    draw_text(332, 134, buf, RGB(255, 226, 122));
+    draw_text(332, 130, buf, RGB(255, 226, 122));
+    sprintf(buf, "Poc:%s(%d)", potNames[player.selPotion % 7], player.potions[player.selPotion % 7]);
+    draw_text(332, 141, buf, RGB(230, 160, 255));
 
-    draw_text(332, 150, "[X] Usar   [L/R] Slot", RGB(160, 175, 200));
-    draw_text(332, 163, "[^] Craft  [O] Stats", RGB(160, 175, 200));
-    draw_text(332, 176, "[START] Guardar", RGB(160, 175, 200));
-    draw_text(332, 189, "[SEL] SFX On/Off", RGB(160, 175, 200));
+    draw_text(332, 155, "[X] Usar   [L/R] Slot", RGB(160, 175, 200));
+    draw_text(332, 167, "[^] Craft  [O] Stats", RGB(160, 175, 200));
+    draw_text(332, 179, "[START] Guardar", RGB(160, 175, 200));
+    draw_text(332, 191, "[SEL] SFX On/Off", RGB(160, 175, 200));
 
-    /* BOTTOM HOTBAR */
+    /* BOTTOM HOTBAR (7 slots) */
     fill_rect(4, 237, 472, 32, RGB(19, 22, 29));
     draw_rect_outline(4, 237, 472, 32, RGB(53, 59, 74));
 
+    int totPot = 0;
+    for (int pi = 0; pi < 7; pi++) totPot += player.potions[pi];
+
     const char *pfx = player.ironTools ? "H+" : "";
-    char sbuf[6][16];
+    char sbuf[7][16];
     sprintf(sbuf[0], "1:%sEsp", pfx);
     sprintf(sbuf[1], "2:%sHac", pfx);
     sprintf(sbuf[2], "3:%sPic", pfx);
-    sprintf(sbuf[3], "4:Hog(%d)", player.campfires);
-    sprintf(sbuf[4], "5:Mur(%d)", player.walls);
-    sprintf(sbuf[5], "6:Bay(%d)", player.food);
+    sprintf(sbuf[3], "4:Hog%d", player.campfires);
+    sprintf(sbuf[4], "5:Mur%d", player.walls);
+    sprintf(sbuf[5], "6:Bay%d", player.food);
+    sprintf(sbuf[6], "7:Poc%d", totPot);
 
-    for (int s = 0; s < 6; s++) {
-        int sx = 8 + s * 56;
-        fill_rect(sx, 241, 54, 24, s == player.slot ? RGB(57, 70, 97) : RGB(34, 39, 51));
-        draw_rect_outline(sx, 241, 54, 24, s == player.slot ? RGB(255, 226, 122) : RGB(69, 78, 99));
-        draw_text(sx + 3, 249, sbuf[s], s == player.slot ? RGB(255, 226, 122) : RGB(230, 235, 245));
+    for (int s = 0; s < 7; s++) {
+        int sx = 7 + s * 48;
+        fill_rect(sx, 241, 46, 24, s == player.slot ? RGB(57, 70, 97) : RGB(34, 39, 51));
+        draw_rect_outline(sx, 241, 46, 24, s == player.slot ? RGB(255, 226, 122) : RGB(69, 78, 99));
+        draw_text(sx + 2, 249, sbuf[s], s == player.slot ? RGB(255, 226, 122) : RGB(230, 235, 245));
     }
-    draw_text(348, 249, ui.msg, RGB(168, 230, 163));
+    draw_text(346, 249, ui.msg, RGB(168, 230, 163));
 
     /* CRAFT MODAL */
     if (ui.craftOpen) {

@@ -394,7 +394,71 @@ static void hit_mob_at(int hx, int hy, int dmg) {
     }
 }
 
+static void drink_potion(void) {
+    static const char *pnames[7] = {"Roja", "Azul", "Verde", "Dorada", "Oscura", "Blanca", "Violeta"};
+    int p = player.selPotion % 7;
+    if (player.potions[p] <= 0) {
+        int found = -1;
+        for (int i = 0; i < 7; i++) {
+            if (player.potions[i] > 0) { found = i; break; }
+        }
+        if (found < 0) {
+            audio_play_sfx(SFX_BLOCKED);
+            set_msg("Sin pociones! Busca cofres");
+            return;
+        }
+        p = found;
+        player.selPotion = p;
+    }
+    player.potions[p]--;
+    int mhp = maxHp();
+    audio_play_sfx(SFX_DRINK);
+    if (p == 0) { /* Roja: +50 HP, -20 Sed */
+        player.hp = clampf(player.hp + 50.0f, 0.0f, (float)mhp);
+        player.thirst = clampf(player.thirst - 20.0f, 0.0f, 100.0f);
+        spawn_pop(player.x, player.y, "+50HP -20SD", 0xFF6666FF);
+    } else if (p == 1) { /* Azul: +35 HP +40 Sed, -15 Hambre */
+        player.hp = clampf(player.hp + 35.0f, 0.0f, (float)mhp);
+        player.thirst = clampf(player.thirst + 40.0f, 0.0f, 100.0f);
+        player.hunger = clampf(player.hunger - 15.0f, 0.0f, 100.0f);
+        spawn_pop(player.x, player.y, "+35HP +40SD", 0xFFFFB055);
+    } else if (p == 2) { /* Verde: +30 HP +30 Hambre, -25 Energia */
+        player.hp = clampf(player.hp + 30.0f, 0.0f, (float)mhp);
+        player.hunger = clampf(player.hunger + 30.0f, 0.0f, 100.0f);
+        player.stamina = clampf(player.stamina - 25.0f, 0.0f, 100.0f);
+        spawn_pop(player.x, player.y, "+30HP +30HM", 0xFF66EE66);
+    } else if (p == 3) { /* Dorada: +45 HP +5% Espada, -20 HM/SD */
+        player.hp = clampf(player.hp + 45.0f, 0.0f, (float)mhp);
+        if (player.swordPct < 100) player.swordPct = clampi(player.swordPct + 5, 0, 100);
+        player.hunger = clampf(player.hunger - 20.0f, 0.0f, 100.0f);
+        player.thirst = clampf(player.thirst - 20.0f, 0.0f, 100.0f);
+        spawn_pop(player.x, player.y, "+45HP +5%ESP", 0xFF66E2FF);
+    } else if (p == 4) { /* Oscura: +80 HP, moja ropa + -30 Energia */
+        player.hp = clampf(player.hp + 80.0f, 0.0f, (float)mhp);
+        player.wet = 15;
+        player.stamina = clampf(player.stamina - 30.0f, 0.0f, 100.0f);
+        spawn_pop(player.x, player.y, "+80HP MOJADO", 0xFFCC88FF);
+    } else if (p == 5) { /* Blanca: +25 HP + seca ropa, -10 Energia */
+        player.hp = clampf(player.hp + 25.0f, 0.0f, (float)mhp);
+        player.wet = 0;
+        player.stamina = clampf(player.stamina - 10.0f, 0.0f, 100.0f);
+        spawn_pop(player.x, player.y, "+25HP SECO", 0xFFFFFFFF);
+    } else { /* Violeta: +60 HP +50 Energia, -25 Hambre */
+        player.hp = clampf(player.hp + 60.0f, 0.0f, (float)mhp);
+        player.stamina = clampf(player.stamina + 50.0f, 0.0f, 100.0f);
+        player.hunger = clampf(player.hunger - 25.0f, 0.0f, 100.0f);
+        spawn_pop(player.x, player.y, "+60HP +50EN", 0xFFEE88FF);
+    }
+    char msg[40];
+    snprintf(msg, sizeof(msg), "Pocion %s!", pnames[p]);
+    set_msg(msg);
+}
+
 static void use_tool(void) {
+    if (player.slot == 6) {
+        drink_potion();
+        return;
+    }
     if (player.slot == 5) {
         if (player.food > 0) {
             player.food--;
@@ -500,15 +564,23 @@ static void use_tool(void) {
         spawn_pop(tx, ty, "+2 Bayas", 0xFFB899FF);
         set_msg("+2 Bayas");
     } else if (t == T_CHEST) {
+        static const char *pnames[7] = {"Roja", "Azul", "Verde", "Dorada", "Oscura", "Blanca", "Violeta"};
         curMap[ti] = player.inDungeon ? T_DFLOOR : T_SAND;
         player.iron += 5; player.food += 3; player.bones += 2; stats.chests++;
+        int pt = ((int)(rnd() * 7.0f)) % 7;
+        player.potions[pt]++;
+        player.selPotion = pt;
         if (player.inDungeon && player.swordTier < 3) {
             player.swordTier++;
-            spawn_pop(tx, ty, "ESPADA +1!", 0xFF7AE2FF);
-            set_msg("Arma mejorada en cofre!");
+            spawn_pop(tx, ty, "ESPADA+POC!", 0xFF7AE2FF);
+            char cb[40];
+            snprintf(cb, sizeof(cb), "Espada +1 & Poc.%s!", pnames[pt]);
+            set_msg(cb);
         } else {
-            spawn_pop(tx, ty, "COFRE!", 0xFF7AE2FF);
-            set_msg("Cofre! +5 Hie +2 Hue");
+            spawn_pop(tx, ty, "COFRE+POC!", 0xFF7AE2FF);
+            char cb[40];
+            snprintf(cb, sizeof(cb), "Cofre! +Poc.%s", pnames[pt]);
+            set_msg(cb);
         }
         add_xp(&skills.supervivencia, "Sup", 25, 0);
         audio_play_sfx(SFX_CRAFT);
@@ -718,11 +790,11 @@ int main(void) {
             if (pressed & PSP_CTRL_CROSS) craft_selected(ui.menuSel);
         } else if (!ui.statsOpen) {
             if (pressed & (PSP_CTRL_SQUARE | PSP_CTRL_RTRIGGER)) {
-                player.slot = (player.slot + 1) % 6;
+                player.slot = (player.slot + 1) % 7;
                 audio_play_sfx(SFX_UI);
             }
             if (pressed & PSP_CTRL_LTRIGGER) {
-                player.slot = (player.slot + 5) % 6;
+                player.slot = (player.slot + 6) % 7;
                 audio_play_sfx(SFX_UI);
             }
             if (pressed & PSP_CTRL_CROSS) use_tool();
@@ -845,7 +917,6 @@ int main(void) {
 
             int mhp = maxHp();
             if (player.hunger <= 0.0f || player.thirst <= 0.0f) player.hp = clampf(player.hp - 2.0f, 0.0f, (float)mhp);
-            else if (player.hunger > 60.0f && player.thirst > 60.0f && player.hp < (float)mhp) player.hp = clampf(player.hp + 0.5f, 0.0f, (float)mhp);
 
             if (player.hp <= 0.0f) {
                 player.hp = (float)mhp; player.hunger = 80.0f; player.thirst = 80.0f; player.stamina = 100.0f;

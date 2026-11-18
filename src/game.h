@@ -83,6 +83,8 @@ typedef struct {
     int inBoat;
     int wood, stone, iron, bones;
     int campfires, walls, food;
+    int potions[7]; /* 7 potion types from chests */
+    int selPotion;  /* active potion type 0..6 */
     int inDungeon;
     int dungeonFloor; /* 1..10 */
     int savedX, savedY;
