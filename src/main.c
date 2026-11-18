@@ -227,22 +227,43 @@ static void init_world(void) {
     for (int y = 0; y < MH; y++) {
         for (int x = 0; x < MW; x++) {
             if (x == 0 || y == 0 || x == MW - 1 || y == MH - 1) worldMap[y][x] = 2;
-            else if (x >= 30 && x <= 32) {
+            else if (x >= 30 && x <= 31) {
                 worldMap[y][x] = (y == 18 || y == 19) ? 6 : 3; /* Rio con puente de madera */
+            } else {
+                /* Natural clustered forest groves & mountains (no straight rows!) */
+                int h = (x * 37 + y * 53 + (x * y) * 7) % 97;
+                if (h < 14 && (abs(y - 18) > 2)) worldMap[y][x] = 1; /* Bosque */
+                else if (h > 90 && (abs(y - 18) > 2)) worldMap[y][x] = 2; /* Montana */
+                else worldMap[y][x] = 0;
             }
-            else if (((x * 7 + y * 13) % 9) == 0) worldMap[y][x] = 1; /* Bosque */
-            else if (((x * 11 + y * 5) % 19) == 0) worldMap[y][x] = 2; /* Montana */
-            else worldMap[y][x] = 0;
         }
     }
-    /* Reino inicial */
-    for (int y = 8; y <= 13; y++) for (int x = 8; x <= 13; x++) worldMap[y][x] = 4;
+    /* Caminos de tierra (7) conectando Reino -> Puente -> Dungeons */
+    for (int x = 10; x <= 44; x++) {
+        if (worldMap[18][x] != 6) worldMap[18][x] = 7;
+        if (worldMap[19][x] != 6) worldMap[19][x] = 7;
+    }
+    for (int y = 12; y <= 18; y++) worldMap[y][24] = 7;
+    for (int y = 18; y <= 30; y++) worldMap[y][44] = 7;
+    for (int x = 44; x <= 52; x++) worldMap[12][x] = 7;
+    for (int y = 10; y <= 18; y++) worldMap[y][52] = 7;
+
+    /* Reino amurallado inicial (8=muralla, 4=patio, 7=puerta Este) */
+    for (int y = 7; y <= 14; y++) {
+        for (int x = 7; x <= 14; x++) {
+            if (x == 7 || x == 14 || y == 7 || y == 14) worldMap[y][x] = 8;
+            else worldMap[y][x] = 4;
+        }
+    }
+    worldMap[11][14] = 7; /* Puerta del castillo hacia el Este */
+    for (int x = 14; x <= 24; x++) worldMap[11][x] = 7;
+
     for (int i = 0; i < 3; i++) {
         worldMap[dngY[i]][dngX[i]] = 5;
         worldMap[npcY[i]][npcX[i]] = 0;
         bossDefeated[i] = 0;
     }
-    mapX = 10; mapY = 10; prevX1 = 9; prevY1 = 10; prevX2 = 8; prevY2 = 10;
+    mapX = 10; mapY = 11; prevX1 = 9; prevY1 = 11; prevX2 = 8; prevY2 = 11;
     dlgTimer = 0;
 }
 
@@ -322,7 +343,7 @@ int main(void) {
             if ((dx != 0 || dy != 0) && moveCd <= 0) {
                 moveCd = 9;
                 int nx = mapX + dx, ny = mapY + dy;
-                if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && worldMap[ny][nx] != 2 && worldMap[ny][nx] != 3) {
+                if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && worldMap[ny][nx] != 2 && worldMap[ny][nx] != 3 && worldMap[ny][nx] != 8) {
                     prevX2 = prevX1; prevY2 = prevY1;
                     prevX1 = mapX;   prevY1 = mapY;
                     mapX = nx;       mapY = ny;
@@ -528,9 +549,11 @@ int main(void) {
                         } else if (t == 4) {
                             draw_tile24(fb, tile_castle, sx, sy);
                         } else if (t == 6) {
-                            draw_tile24(fb, tile_water, sx, sy);
-                            fill_rect(fb, sx, sy + 4, 24, 16, RGB(145, 95, 50));
-                            draw_border(fb, sx, sy + 4, 24, 16, RGB(90, 55, 25));
+                            draw_tile24(fb, tile_bridge, sx, sy);
+                        } else if (t == 7) {
+                            draw_tile24(fb, tile_path, sx, sy);
+                        } else if (t == 8) {
+                            draw_tile24(fb, tile_wall, sx, sy);
                         } else {
                             draw_tile24(fb, tile_grass, sx, sy);
                             if (t == 1) draw_spr24(fb, spr_tree, sx, sy);
@@ -558,15 +581,28 @@ int main(void) {
             draw_spr24(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8);
             draw_spr24(fb, spr_bard,  10 * 24, 5 * 24 - 8);
 
-            /* Top Adventure HUD Window */
-            draw_ff_window(fb, 4, 3, 472, 20);
-            sprintf(buf, "AVENTURA | HP:%d/%d MP:%d | BOSSES:%d/3 | POS:%d,%d",
-                    pHp, pMaxHp, pMp, bossDefeated[0]+bossDefeated[1]+bossDefeated[2], mapX, mapY);
-            draw_text(fb, 12, 9, buf, RGB(255, 235, 110));
+            /* Top Adventure HUD Window with visual HP & MP bars */
+            draw_ff_window(fb, 4, 3, 472, 22);
+            draw_text(fb, 12, 10, "REINO AETHEL", RGB(255, 225, 90));
+            draw_text(fb, 94, 10, "HP", RGB(255, 130, 130));
+            fill_rect(fb, 110, 10, 56, 7, RGB(40, 20, 25));
+            fill_rect(fb, 110, 10, (pHp * 56) / pMaxHp, 7, RGB(70, 235, 100));
+            draw_border(fb, 110, 10, 56, 7, RGB(220, 235, 255));
+            draw_text(fb, 174, 10, "MP", RGB(130, 220, 255));
+            fill_rect(fb, 190, 10, 44, 7, RGB(20, 25, 50));
+            fill_rect(fb, 190, 10, (pMp * 44) / pMaxMp, 7, RGB(50, 200, 255));
+            draw_border(fb, 190, 10, 44, 7, RGB(220, 235, 255));
+            sprintf(buf, "BOSSES:%d/3 | %s | %d,%d",
+                    bossDefeated[0]+bossDefeated[1]+bossDefeated[2], styleNames[curStyle], mapX, mapY);
+            draw_text(fb, 244, 10, buf, RGB(255, 255, 255));
 
             if (dlgTimer > 0) {
-                draw_ff_window(fb, 12, 234, 456, 32);
-                draw_text(fb, 22, 246, dlgText, RGB(255, 255, 255));
+                draw_ff_window(fb, 10, 228, 460, 38);
+                fill_rect(fb, 16, 235, 24, 24, RGB(10, 14, 42));
+                draw_spr24(fb, spr_troubadour, 16, 235);
+                draw_border(fb, 16, 235, 24, 24, RGB(255, 215, 80));
+                draw_text(fb, 48, 236, "CRONISTA DEL REINO:", RGB(255, 225, 90));
+                draw_text(fb, 48, 250, dlgText, RGB(255, 255, 255));
             }
         } else {
             /* Copy 32-bit Arena Backdrop */
