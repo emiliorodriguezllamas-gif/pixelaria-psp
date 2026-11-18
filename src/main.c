@@ -264,35 +264,35 @@ int main(void) {
 
         char buf[64];
         if (inTitle) {
-            draw_text(135, 76, "C H O R D B R E A K E R :  A R I A", RGB(255, 225, 80));
-            draw_text(145, 96, "32-BIT GUITAR HERO + RPG ROGUELIKE", RGB(0, 235, 255));
+            draw_text(fb, 135, 76, "C H O R D B R E A K E R :  A R I A", RGB(255, 225, 80));
+            draw_text(fb, 145, 96, "32-BIT GUITAR HERO + RPG ROGUELIKE", RGB(0, 235, 255));
             sprintf(buf, "RECORD: %d PTS", best);
-            draw_text(190, 126, buf, RGB(140, 255, 160));
-            draw_text(148, 160, "Pulsa [X] o [START] para Tocar!", RGB(255, 255, 255));
-            draw_text(98, 186, "L/R: Cambiar Estilo | [] Tri O X: Notas", RGB(190, 200, 230));
+            draw_text(fb, 190, 126, buf, RGB(140, 255, 160));
+            draw_text(fb, 148, 160, "Pulsa [X] o [START] para Tocar!", RGB(255, 255, 255));
+            draw_text(fb, 98, 186, "L/R: Cambiar Estilo | [] Tri O X: Notas", RGB(190, 200, 230));
         } else if (inStory) {
             sprintf(buf, "CAPITULO %d: %s", chapter + 1, bossNames[chapter]);
-            draw_text(135, 84, buf, RGB(255, 225, 80));
+            draw_text(fb, 135, 84, buf, RGB(255, 225, 80));
             sprintf(buf, "DEBILIDAD MUSICAL: %s", styleNames[bossWeak[chapter]]);
-            draw_text(145, 114, buf, RGB(0, 235, 255));
-            draw_text(120, 144, "Usa L/R para elegir su estilo debil!", RGB(255, 255, 255));
-            draw_text(155, 178, "Pulsa [X] para Comenzar", RGB(140, 255, 160));
+            draw_text(fb, 145, 114, buf, RGB(0, 235, 255));
+            draw_text(fb, 120, 144, "Usa L/R para elegir su estilo debil!", RGB(255, 255, 255));
+            draw_text(fb, 155, 178, "Pulsa [X] para Comenzar", RGB(140, 255, 160));
         } else if (inRelic) {
-            draw_text(165, 78, "BOSS DERROTADO! ELIGE RELIQUIA:", RGB(255, 225, 80));
-            draw_text(105, 110, "[[]] Amplificador (+4 Dano por Nota)", RGB(255, 120, 200));
-            draw_text(105, 136, "[Tri] Pua Vampirica (+3 HP por Perfect)", RGB(120, 255, 140));
-            draw_text(105, 162, "[O] Escudo Ritmico (-40% Dano + Cura)", RGB(100, 220, 255));
+            draw_text(fb, 165, 78, "BOSS DERROTADO! ELIGE RELIQUIA:", RGB(255, 225, 80));
+            draw_text(fb, 105, 110, "[[]] Amplificador (+4 Dano por Nota)", RGB(255, 120, 200));
+            draw_text(fb, 105, 136, "[Tri] Pua Vampirica (+3 HP por Perfect)", RGB(120, 255, 140));
+            draw_text(fb, 105, 162, "[O] Escudo Ritmico (-40% Dano + Cura)", RGB(100, 220, 255));
         } else if (gameOver || victory) {
-            draw_text(175, 92, victory ? "LEYENDA DEL ROCK!" : "RITMO ROTO...", victory ? RGB(255,230,80) : RGB(255,70,90));
+            draw_text(fb, 175, 92, victory ? "LEYENDA DEL ROCK!" : "RITMO ROTO...", victory ? RGB(255,230,80) : RGB(255,70,90));
             sprintf(buf, "PUNTOS: %d   RECORD: %d", score, best);
-            draw_text(148, 128, buf, RGB(255, 255, 255));
-            draw_text(155, 164, "Pulsa [X] para Reintentar", RGB(160, 225, 255));
+            draw_text(fb, 148, 128, buf, RGB(255, 255, 255));
+            draw_text(fb, 155, 164, "Pulsa [X] para Reintentar", RGB(160, 225, 255));
         } else {
-            sprintf(buf, "HP:%d", pHp); draw_text(16, 28, buf, RGB(140, 230, 255));
-            draw_text(306, 28, bossNames[chapter], RGB(255, 140, 140));
+            sprintf(buf, "HP:%d", pHp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
+            draw_text(fb, 306, 28, bossNames[chapter], RGB(255, 140, 140));
             sprintf(buf, "ESTILO:%s  COMBO:x%d", styleNames[curStyle], combo);
-            draw_text(165, 102, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
-            if (judgeT > 0) draw_text(190, 122, judge, RGB(255, 255, 255));
+            draw_text(fb, 165, 102, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
+            if (judgeT > 0) draw_text(fb, 190, 122, judge, RGB(255, 255, 255));
         }
 
         sceDisplayWaitVblankStart();
