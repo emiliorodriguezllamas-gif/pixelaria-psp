@@ -16,7 +16,11 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define BUF_W 512
 #define RGB(r,g,b) ((unsigned int)(0xFF000000 | ((b)<<16) | ((g)<<8) | (r)))
 
-static unsigned int __attribute__((aligned(16))) fb0[BUF_W * SCR_H];
+#include "sprites_pack.h"
+#include "bg_synth.h"
+static unsigned int * const fb_ptrs[2] = { (unsigned int *)0x44000000, (unsigned int *)(0x44000000 + BUF_W * SCR_H * 4) };
+static int cur_fb = 0;
+#define fb0 (fb_ptrs[cur_fb])
 static int running = 1;
 static unsigned int rng = 0x55667788u;
 
@@ -109,7 +113,7 @@ int main(void) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
     sceDisplaySetMode(0, SCR_W, SCR_H);
-    sceDisplaySetFrameBuf(fb0, BUF_W, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_NEXTFRAME);
+    sceDisplaySetFrameBuf(fb0, BUF_W, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
 
     for (int i = 0; i < 40; i++) { stars[i].x = (float)(xr() % SCR_W); stars[i].y = (float)(xr() % SCR_H); stars[i].spd = 1 + (xr() % 3); }
     load_best();
@@ -224,6 +228,7 @@ int main(void) {
 
         char buf[64];
         if (inTitle) {
+            for (int _y = 0; _y < SCR_H; _y++) memcpy(&fb0[_y * BUF_W], &bg_synth[_y * SCR_W], SCR_W * 4);
             draw_text(145, 80, "G A L A C T I C   D E F E N D E R", RGB(0, 235, 255));
             sprintf(buf, "RECORD: %d PTS", best);
             draw_text(188, 120, buf, RGB(140, 255, 160));
@@ -245,6 +250,8 @@ int main(void) {
             draw_text(10, 6, buf, RGB(255, 235, 100));
         }
         sceDisplayWaitVblankStart();
+        sceDisplaySetFrameBuf(fb0, BUF_W, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
+        cur_fb ^= 1;
     }
 
     save_best();
