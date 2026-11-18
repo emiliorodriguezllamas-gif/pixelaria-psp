@@ -77,7 +77,7 @@ typedef struct {
     int warm;
     int slot;
     int ironTools;
-    int swordTier; /* 0=Madera, 1=Hierro, 2=Acero, 3=Real */
+    int swordTier; /* 0=Madera(Estocada), 1=Hierro(Barrido), 2=Acero(Distancia), 3=Real(Area) */
     int swordPct;  /* 0..100% weapon mastery */
     int hasBoat;
     int inBoat;
@@ -123,6 +123,10 @@ typedef struct {
 } Popup;
 
 typedef struct {
+    int x, y, dx, dy, life, dmg, active;
+} Projectile;
+
+typedef struct {
     int day;
     int minute;
     int season;
@@ -145,6 +149,7 @@ typedef struct {
     int walkFrame;
     int actionType; /* 0=none, 1=break/hit, 2=build */
     int slashTimer;
+    int spinTimer;
     char msg[48];
 } UIState;
 
@@ -156,6 +161,7 @@ extern unsigned char biomes[WORLD_SIZE * WORLD_SIZE];
 extern unsigned char dungeon[DUNG_W * DUNG_H];
 extern Mob mobs[MAX_MOBS];
 extern Mob dungMobs[MAX_MOBS];
+extern Projectile proj;
 extern Popup pops[MAX_POPS];
 extern Player player;
 extern Skills skills;

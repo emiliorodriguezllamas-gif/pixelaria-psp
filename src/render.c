@@ -368,8 +368,14 @@ void render_frame(void) {
         blit_sprite(px, py, pspr, ui.damageFlash > 0 ? 22 : renderHr, 0, 0);
     }
 
-    /* Zelda Game Boy wide sweeping sword slash arc */
-    if (ui.slashTimer > 0) {
+    /* Weapon Attack Visuals (0=Estocada, 1=Barrido, 2=Distancia, 3=Area 360) */
+    if (ui.spinTimer > 0) {
+        int cx = ox + (player.x - camX) * TILE_PX + 10;
+        int cy = oy + (player.y - camY) * TILE_PX + 10;
+        int rad = 14 + (10 - ui.spinTimer);
+        draw_rect_outline(cx - rad, cy - rad, rad * 2, rad * 2, RGB(255, 225, 70));
+        draw_rect_outline(cx - rad + 2, cy - rad + 2, rad * 2 - 4, rad * 2 - 4, RGB(255, 255, 200));
+    } else if (ui.slashTimer > 0) {
         static const unsigned int swCols[4] = {
             RGB(210, 165, 95),  /* Madera */
             RGB(215, 232, 250), /* Hierro */
@@ -379,12 +385,21 @@ void render_frame(void) {
         unsigned int sc = swCols[player.swordTier & 3];
         int cx = ox + (player.x - camX) * TILE_PX + 10;
         int cy = oy + (player.y - camY) * TILE_PX + 10;
-        int phase = 8 - ui.slashTimer; /* 0..7 sweep */
-        for (int a = -1; a <= 1; a++) {
-            int sx = cx + player.fx * 18 + (player.fy != 0 ? a * (10 + phase) : 0);
-            int sy = cy + player.fy * 18 + (player.fx != 0 ? a * (10 + phase) : 0);
+        int phase = 8 - ui.slashTimer; /* 0..7 */
+        if (player.swordTier == 0) {
+            /* Precision 2-tile forward thrust */
+            int sx = cx + player.fx * (12 + phase * 3);
+            int sy = cy + player.fy * (12 + phase * 3);
             fill_rect(sx - 2, sy - 2, 5, 5, sc);
             fill_rect(sx - 1, sy - 1, 3, 3, RGB(255, 255, 255));
+        } else {
+            /* Zelda 3-tile wide sweep */
+            for (int a = -1; a <= 1; a++) {
+                int sx = cx + player.fx * 18 + (player.fy != 0 ? a * (10 + phase) : 0);
+                int sy = cy + player.fy * 18 + (player.fx != 0 ? a * (10 + phase) : 0);
+                fill_rect(sx - 2, sy - 2, 5, 5, sc);
+                fill_rect(sx - 1, sy - 1, 3, 3, RGB(255, 255, 255));
+            }
         }
     } else if (player.slot < 3) {
         int toolX = px + (player.fx < 0 ? 1 : 16);
@@ -392,6 +407,16 @@ void render_frame(void) {
         unsigned int toolCol = (player.slot == 0 && player.swordTier >= 2) ? RGB(130, 215, 255) :
                                (player.ironTools ? RGB(215, 236, 255) : RGB(205, 210, 220));
         fill_rect(toolX, toolY, 3, ui.lungeTimer > 0 ? 10 : 6, toolCol);
+    }
+
+    /* Ranged Energy Wave Projectile (Acero tier) */
+    if (proj.active) {
+        int prx = ox + (proj.x - camX) * TILE_PX + 5;
+        int pry = oy + (proj.y - camY) * TILE_PX + 5;
+        if (prx >= ox && prx < ox + 312 && pry >= oy && pry < oy + 192) {
+            fill_rect(prx, pry, 10, 10, RGB(90, 200, 255));
+            fill_rect(prx + 2, pry + 2, 6, 6, RGB(230, 250, 255));
+        }
     }
 
     /* Break / Build impact particles on target tile */

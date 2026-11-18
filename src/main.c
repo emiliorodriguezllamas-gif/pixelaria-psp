@@ -13,6 +13,7 @@ unsigned char biomes[WORLD_SIZE * WORLD_SIZE];
 unsigned char dungeon[DUNG_W * DUNG_H];
 Mob mobs[MAX_MOBS];
 Mob dungMobs[MAX_MOBS];
+Projectile proj;
 Popup pops[MAX_POPS];
 Player player;
 Skills skills;
@@ -422,23 +423,58 @@ static void use_tool(void) {
     ui.lungeTimer = 10;
     ui.actionType = (player.slot == 3 || player.slot == 4) ? 2 : 1;
 
-    /* Zelda Game Boy sweeping sword slash (hits 3 tiles in front!) */
+    /* Distinct Weapon Attacks by Tier: 0=Estocada, 1=Barrido, 2=Distancia, 3=Area 360 */
     if (player.slot == 0) {
-        ui.slashTimer = 8;
-        audio_play_sfx(SFX_SLASH);
         int dmg = 2 + player.swordTier * 2 + (player.swordPct / 25) + (skills.combate.lv - 1) / 3;
         int hitAny = 0;
-        for (int a = -1; a <= 1; a++) {
-            int hx = player.x + player.fx + (player.fy != 0 ? a : 0);
-            int hy = player.y + player.fy + (player.fx != 0 ? a : 0);
-            if (mob_at(hx, hy) >= 0) {
-                hit_mob_at(hx, hy, dmg);
+        audio_play_sfx(SFX_SLASH);
+
+        if (player.swordTier == 0) {
+            /* Madera: 2-tile precision thrust */
+            ui.slashTimer = 8;
+            for (int d = 1; d <= 2; d++) {
+                int hx = player.x + player.fx * d;
+                int hy = player.y + player.fy * d;
+                if (mob_at(hx, hy) >= 0) { hit_mob_at(hx, hy, dmg); hitAny = 1; break; }
+            }
+        } else if (player.swordTier == 1) {
+            /* Hierro: 3-tile Zelda wide sweep */
+            ui.slashTimer = 8;
+            for (int a = -1; a <= 1; a++) {
+                int hx = player.x + player.fx + (player.fy != 0 ? a : 0);
+                int hy = player.y + player.fy + (player.fx != 0 ? a : 0);
+                if (mob_at(hx, hy) >= 0) { hit_mob_at(hx, hy, dmg); hitAny = 1; }
+            }
+        } else if (player.swordTier == 2) {
+            /* Acero: Ranged energy wave projectile (6 tiles) */
+            ui.slashTimer = 6;
+            if (mob_at(tx, ty) >= 0) {
+                hit_mob_at(tx, ty, dmg);
                 hitAny = 1;
+            } else {
+                proj.x = player.x + player.fx;
+                proj.y = player.y + player.fy;
+                proj.dx = player.fx;
+                proj.dy = player.fy;
+                proj.life = 6;
+                proj.dmg = dmg;
+                proj.active = 1;
+                return;
+            }
+        } else {
+            /* Real: 360-degree Area Whirlwind (all 8 surrounding tiles) */
+            ui.spinTimer = 10;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    if (dx == 0 && dy == 0) continue;
+                    int hx = player.x + dx;
+                    int hy = player.y + dy;
+                    if (mob_at(hx, hy) >= 0) { hit_mob_at(hx, hy, dmg); hitAny = 1; }
+                }
             }
         }
         if (hitAny) return;
         if (t != T_BERRY && t != T_CHEST && t != T_WATER && t != T_TREE && t != T_PINE && t != T_CACTUS) {
-            audio_play_sfx(SFX_STEP);
             return;
         }
     }
@@ -715,7 +751,25 @@ int main(void) {
         if (ui.lungeTimer > 0) ui.lungeTimer--;
         if (ui.walkTimer > 0) ui.walkTimer--;
         if (ui.slashTimer > 0) ui.slashTimer--;
+        if (ui.spinTimer > 0) ui.spinTimer--;
         if (player.iframes > 0) player.iframes--;
+        if (proj.active && (frameCnt % 3 == 0)) {
+            int mapW = player.inDungeon ? DUNG_W : WORLD_SIZE;
+            int mapH = player.inDungeon ? DUNG_H : WORLD_SIZE;
+            unsigned char *curMap = player.inDungeon ? dungeon : world;
+            if (proj.x < 0 || proj.y < 0 || proj.x >= mapW || proj.y >= mapH || !is_walkable(curMap[proj.y * mapW + proj.x])) {
+                proj.active = 0;
+            } else if (mob_at(proj.x, proj.y) >= 0) {
+                hit_mob_at(proj.x, proj.y, proj.dmg);
+                proj.active = 0;
+            } else if (proj.life <= 0) {
+                proj.active = 0;
+            } else {
+                proj.x += proj.dx;
+                proj.y += proj.dy;
+                proj.life--;
+            }
+        }
         for (int i = 0; i < MAX_POPS; i++) if (pops[i].timer > 0) pops[i].timer--;
 
         /* 60 FPS -> 1 game tick per second */
