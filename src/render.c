@@ -1,5 +1,6 @@
 #include "game.h"
 #include "font5x7.h"
+#include "sprites.h"
 #include <pspdisplay.h>
 #include <stdio.h>
 #include <string.h>
@@ -86,61 +87,58 @@ static unsigned int tint_night(unsigned int col, int hr) {
     return RGB(r, g, b);
 }
 
+static void blit_sprite(int sx, int sy, const unsigned int *spr, int hr, int flipX, int bobY) {
+    for (int y = 0; y < 20; y++) {
+        int dy = sy + y + bobY;
+        if (dy < 34 || dy >= 234) continue;
+        for (int x = 0; x < 20; x++) {
+            int dx = sx + x;
+            if (dx < 4 || dx >= 324) continue;
+            unsigned int c = spr[y * 20 + (flipX ? (19 - x) : x)];
+            if (c != 0) {
+                put_px(dx, dy, tint_night(c, hr));
+            }
+        }
+    }
+}
+
+static void draw_textured_ground(int sx, int sy, int wx, int wy, int t, int b, int hr) {
+    unsigned int base = ground_color(t, b);
+    if (b == B_MEADOW && gameTime.season < 2 && t != T_WATER) {
+        blit_sprite(sx, sy, spr_grass, hr, (wx ^ wy) & 1, 0);
+        return;
+    }
+    fill_rect(sx, sy, TILE_PX, TILE_PX, tint_night(base, hr));
+    unsigned int h = (unsigned int)(wx * 73856093 ^ wy * 19349663);
+    if (t == T_WATER) {
+        int flick = (gameTime.ticks & 1) ? 1 : 0;
+        fill_rect(sx + 3, sy + 6 + flick, 6, 1, tint_night(RGB(140, 205, 255), hr));
+        fill_rect(sx + 10, sy + 13 - flick, 6, 1, tint_night(RGB(120, 185, 245), hr));
+    } else if (b == B_DESERT || t == T_SAND) {
+        fill_rect(sx + (h % 13) + 2, sy + ((h >> 4) % 14) + 2, 4, 1, tint_night(RGB(201, 168, 98), hr));
+        fill_rect(sx + ((h >> 8) % 14) + 2, sy + ((h >> 12) % 14) + 2, 2, 1, tint_night(RGB(238, 212, 148), hr));
+    } else if (b == B_TUNDRA || t == T_SNOW) {
+        fill_rect(sx + (h % 15) + 2, sy + ((h >> 4) % 15) + 2, 2, 2, tint_night(RGB(245, 250, 255), hr));
+        fill_rect(sx + ((h >> 8) % 14) + 2, sy + ((h >> 12) % 14) + 2, 3, 1, tint_night(RGB(185, 205, 228), hr));
+    } else {
+        fill_rect(sx + (h % 14) + 2, sy + ((h >> 4) % 14) + 2, 2, 2, tint_night(RGB(42, 86, 44), hr));
+        fill_rect(sx + ((h >> 8) % 13) + 2, sy + ((h >> 12) % 13) + 2, 3, 1, tint_night(RGB(82, 136, 78), hr));
+    }
+}
+
 static void draw_tile_art(int sx, int sy, int t, int hr) {
     int flick = (gameTime.ticks & 1) ? 1 : 0;
     switch (t) {
-        case T_WATER:
-            fill_rect(sx + 3, sy + 6 + flick, 6, 1, tint_night(RGB(140, 200, 255), hr));
-            fill_rect(sx + 10, sy + 13 - flick, 6, 1, tint_night(RGB(140, 200, 255), hr));
-            break;
-        case T_TREE:
-            fill_rect(sx + 7, sy + 10, 6, 9, tint_night(RGB(107, 68, 35), hr));
-            fill_rect(sx + 3, sy + 2, 14, 10, tint_night(RGB(47, 125, 50), hr));
-            fill_rect(sx + 5, sy + 3, 6, 4, tint_night(RGB(75, 160, 75), hr));
-            break;
-        case T_PINE:
-            fill_rect(sx + 8, sy + 12, 4, 7, tint_night(RGB(92, 58, 30), hr));
-            fill_rect(sx + 4, sy + 8, 12, 5, tint_night(RGB(28, 88, 52), hr));
-            fill_rect(sx + 6, sy + 4, 8, 5, tint_night(RGB(36, 108, 66), hr));
-            fill_rect(sx + 8, sy + 1, 4, 4, tint_night(RGB(48, 130, 80), hr));
-            break;
-        case T_ROCK:
-            fill_rect(sx + 4, sy + 6, 12, 9, tint_night(RGB(125, 132, 145), hr));
-            fill_rect(sx + 6, sy + 7, 5, 3, tint_night(RGB(165, 172, 185), hr));
-            break;
-        case T_IRON:
-            fill_rect(sx + 4, sy + 6, 12, 9, tint_night(RGB(105, 112, 125), hr));
-            fill_rect(sx + 6, sy + 8, 3, 3, tint_night(RGB(215, 155, 105), hr));
-            fill_rect(sx + 11, sy + 10, 3, 3, tint_night(RGB(215, 155, 105), hr));
-            break;
-        case T_CACTUS:
-            fill_rect(sx + 7, sy + 3, 6, 14, tint_night(RGB(56, 150, 66), hr));
-            fill_rect(sx + 4, sy + 7, 3, 4, tint_night(RGB(56, 150, 66), hr));
-            fill_rect(sx + 13, sy + 9, 3, 4, tint_night(RGB(56, 150, 66), hr));
-            break;
-        case T_BERRY:
-            fill_rect(sx + 5, sy + 6, 10, 9, tint_night(RGB(46, 128, 54), hr));
-            fill_rect(sx + 6, sy + 8, 2, 2, tint_night(RGB(227, 59, 91), hr));
-            fill_rect(sx + 11, sy + 10, 2, 2, tint_night(RGB(227, 59, 91), hr));
-            break;
-        case T_RUIN:
-            fill_rect(sx + 2, sy + 2, 16, 16, tint_night(RGB(185, 155, 100), hr));
-            draw_rect_outline(sx + 2, sy + 2, 16, 16, tint_night(RGB(125, 100, 58), hr));
-            break;
-        case T_CHEST:
-            fill_rect(sx + 4, sy + 6, 12, 9, tint_night(RGB(181, 115, 40), hr));
-            draw_rect_outline(sx + 4, sy + 6, 12, 9, tint_night(RGB(255, 210, 77), hr));
-            fill_rect(sx + 9, sy + 9, 2, 3, RGB(255, 225, 90));
-            break;
-        case T_WALL:
-            fill_rect(sx + 1, sy + 1, 18, 18, tint_night(RGB(138, 94, 59), hr));
-            draw_rect_outline(sx + 1, sy + 1, 18, 18, tint_night(RGB(84, 55, 32), hr));
-            break;
-        case T_FIRE:
-            fill_rect(sx + 5, sy + 12, 10, 4, RGB(95, 58, 30));
-            fill_rect(sx + 6, sy + 6 - flick, 8, 7, RGB(255, 110, 10));
-            fill_rect(sx + 8, sy + 8 - flick, 4, 4, RGB(255, 230, 80));
-            break;
+        case T_TREE:   blit_sprite(sx, sy, spr_tree, hr, 0, 0); break;
+        case T_PINE:   blit_sprite(sx, sy, spr_pine, hr, 0, 0); break;
+        case T_ROCK:   blit_sprite(sx, sy, spr_rock, hr, 0, 0); break;
+        case T_IRON:   blit_sprite(sx, sy, spr_iron, hr, 0, 0); break;
+        case T_CACTUS: blit_sprite(sx, sy, spr_cactus, hr, 0, 0); break;
+        case T_BERRY:  blit_sprite(sx, sy, spr_berry, hr, 0, 0); break;
+        case T_RUIN:   blit_sprite(sx, sy, spr_ruin, hr, 0, 0); break;
+        case T_CHEST:  blit_sprite(sx, sy, spr_chest, hr, 0, 0); break;
+        case T_WALL:   blit_sprite(sx, sy, spr_wall, hr, 0, 0); break;
+        case T_FIRE:   blit_sprite(sx, sy, spr_fire, hr, flick, -flick); break;
         default: break;
     }
 }
@@ -210,30 +208,45 @@ void render_frame(void) {
             int idx = wy * WORLD_SIZE + wx;
             int sx = ox + vx * TILE_PX;
             int sy = oy + vy * TILE_PX;
-            fill_rect(sx, sy, TILE_PX, TILE_PX, tint_night(ground_color(world[idx], biomes[idx]), hr));
+            draw_textured_ground(sx, sy, wx, wy, world[idx], biomes[idx], hr);
             draw_tile_art(sx, sy, world[idx], hr);
         }
     }
 
     /* Slimes */
+    int slimeBob = (gameTime.ticks & 1) ? -1 : 0;
     for (int i = 0; i < MAX_MOBS; i++) {
         if (!mobs[i].alive) continue;
         int sx = ox + (mobs[i].x - camX) * TILE_PX;
         int sy = oy + (mobs[i].y - camY) * TILE_PX;
         if (sx >= ox && sx < ox + 320 && sy >= oy && sy < oy + 200) {
-            fill_rect(sx + 4, sy + 7, 12, 9, RGB(121, 217, 65));
-            fill_rect(sx + 6, sy + 9, 2, 2, RGB(20, 40, 20));
-            fill_rect(sx + 12, sy + 9, 2, 2, RGB(20, 40, 20));
+            blit_sprite(sx, sy, spr_slime, hr, (i & 1), slimeBob);
         }
     }
 
     /* Player */
     int px = ox + (player.x - camX) * TILE_PX + (ui.lungeTimer > 0 ? player.fx * 4 : 0);
     int py = oy + (player.y - camY) * TILE_PX + (ui.lungeTimer > 0 ? player.fy * 4 : 0);
-    fill_rect(px + 5, py + 2, 10, 7, RGB(244, 198, 154));
-    fill_rect(px + 5, py + 2, 10, 2, RGB(74, 46, 27));
-    fill_rect(px + 5, py + 9, 10, 8, ui.damageFlash > 0 ? RGB(255, 60, 60) : RGB(52, 120, 198));
-    fill_rect(px + 15, py + 7, 4, ui.lungeTimer > 0 ? 10 : 7, player.ironTools ? RGB(215, 236, 255) : RGB(195, 200, 210));
+    blit_sprite(px, py, spr_player, ui.damageFlash > 0 ? 22 : hr, player.fx < 0, 0);
+    if (player.slot < 3) {
+        fill_rect(px + (player.fx < 0 ? 1 : 16), py + 8, 3, ui.lungeTimer > 0 ? 9 : 6,
+                  player.ironTools ? RGB(215, 236, 255) : RGB(205, 210, 220));
+    }
+
+    /* Weather particles (Rain / Snow) */
+    if (gameTime.weather > 0) {
+        static int wf = 0;
+        wf++;
+        for (int p = 0; p < 24; p++) {
+            int rx = ox + ((p * 53 + wf * 3) % 316);
+            int ry = oy + ((p * 37 + wf * (gameTime.weather == 1 ? 6 : 2)) % 194);
+            if (gameTime.weather == 1) {
+                fill_rect(rx, ry, 1, 4, RGB(120, 180, 255));
+            } else {
+                fill_rect(rx, ry, 2, 2, RGB(240, 248, 255));
+            }
+        }
+    }
 
     /* Target cursor */
     int tx = player.x + player.fx;
