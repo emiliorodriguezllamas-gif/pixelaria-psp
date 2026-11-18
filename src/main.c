@@ -374,7 +374,7 @@ static char judge[32] = "";
 static int judgeT = 0;
 static int laneFlash[4] = { 0, 0, 0, 0 };
 static float fretScroll = 0.0f;
-static int animFrame = 0;
+static int animFrame = 0, missFlash = 0;
 
 typedef struct { float x, y, vx, vy; unsigned int col; int life; } Particle;
 static Particle parts[32];
@@ -727,6 +727,7 @@ int main(void) {
             if (pressed & PSP_CTRL_LTRIGGER) { curStyle = (curStyle + 2) % 3; play_sfx(440.0f, 600); }
             if (pressed & PSP_CTRL_RTRIGGER) { curStyle = (curStyle + 1) % 3; play_sfx(440.0f, 600); }
             if (judgeT > 0) judgeT--;
+            if (missFlash > 0) missFlash--;
             for (int l = 0; l < 4; l++) if (laneFlash[l] > 0) laneFlash[l]--;
 
             float spd = isMobBattle ? 0.95f : (1.20f + chapter * 0.28f);
@@ -770,19 +771,35 @@ int main(void) {
                     unsigned int scols[4] = { RGB(255,90,190), RGB(90,255,140), RGB(255,80,80), RGB(80,225,255) };
                     spawn_sparks((float)(164 + l * 50), (float)HIT_Y, isPerf ? RGB(255, 240, 90) : scols[l], isPerf ? 10 : 6);
                     play_sfx(523.25f + l * 75.0f, 800);
+                } else {
+                    /* Penalty for pressing wrong button / mashing */
+                    combo = 0;
+                    pendingDmg -= 6; if (pendingDmg < 0) pendingDmg = 0;
+                    int wdmg = relicShield ? 3 : 5;
+                    pHp -= wdmg;
+                    missFlash = 10;
+                    snprintf(judge, sizeof(judge), "NOTA FALSA! -%dHP", wdmg);
+                    judgeT = 26;
+                    spawn_sparks((float)(164 + l * 50), (float)HIT_Y, RGB(255, 60, 70), 6);
+                    play_sfx(110.0f, 900);
+                    if (pHp <= 0) { pHp = 0; gameOver = 1; save_best(); }
                 }
             }
 
             for (int i = 0; i < 24; i++) if (notes[i].active) {
                 notes[i].y += spd;
                 if (notes[i].y > SCR_H - 10) {
+                    int ml = notes[i].lane;
                     notes[i].active = 0; combo = 0;
-                    int baseMiss = isMobBattle ? 3 : (4 + chapter);
-                    int edmg = relicShield ? (baseMiss / 2 + 1) : baseMiss;
+                    pendingDmg -= 10; if (pendingDmg < 0) pendingDmg = 0;
+                    int baseMiss = isMobBattle ? 8 : (10 + chapter * 3);
+                    int edmg = relicShield ? ((baseMiss * 6) / 10) : baseMiss;
                     pHp -= edmg;
-                    snprintf(judge, sizeof(judge), "MISS! -%d HP", edmg);
-                    judgeT = 28;
-                    play_sfx(140.0f, 1200);
+                    missFlash = 14;
+                    snprintf(judge, sizeof(judge), "FALLO! -%dHP / -10", edmg);
+                    judgeT = 30;
+                    spawn_sparks((float)(164 + ml * 50), (float)HIT_Y + 12.0f, RGB(255, 50, 70), 8);
+                    play_sfx(130.0f, 1200);
                     if (pHp <= 0) { pHp = 0; gameOver = 1; save_best(); }
                 }
             }
@@ -1182,8 +1199,8 @@ int main(void) {
                     fill_rect(fb, 136, 94, 208, 4, RGB(18, 22, 50));
                     fill_rect(fb, 136, 94, ((420 - phaseTimer) * 208) / 420, 4, RGB(80, 220, 255));
 
-                    /* Fretboard Dark Stage & Scrolling Beat Lines */
-                    fill_rect(fb, 136, 100, 208, 160, RGB(11, 13, 30));
+                    /* Fretboard Dark Stage & Scrolling Beat Lines (flashes red on miss/wrong note!) */
+                    fill_rect(fb, 136, 100, 208, 160, (missFlash > 0) ? RGB(68, 14, 24) : RGB(11, 13, 30));
                     for (int fy = 100 + (int)fretScroll; fy < 258; fy += 28) {
                         fill_rect(fb, 137, fy, 206, 1, RGB(34, 40, 76));
                     }
@@ -1214,7 +1231,7 @@ int main(void) {
                     }
                     sprintf(buf, "DANO ACUMULADO: %d", pendingDmg);
                     draw_text(fb, 174, 54, buf, RGB(120, 245, 255));
-                    if (judgeT > 0) draw_text(fb, 192, 64, judge, RGB(255, 255, 120));
+                    if (judgeT > 0) draw_text(fb, 182, 64, judge, (missFlash > 0 || judge[0] == 'F' || judge[0] == 'N') ? RGB(255, 85, 95) : RGB(255, 255, 120));
                     update_draw_sparks(fb);
                 }
             }
