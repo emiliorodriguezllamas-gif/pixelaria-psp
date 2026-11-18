@@ -3,6 +3,7 @@
 #include <pspiofilemgr.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 PSP_MODULE_INFO("PixelariaPocket", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -106,26 +107,41 @@ static void generate_world(void) {
     for (int y = 0; y < WORLD_SIZE; y++) {
         for (int x = 0; x < WORLD_SIZE; x++) {
             int i = y * WORLD_SIZE + x;
-            if (x < 3 || y < 3 || x >= WORLD_SIZE - 3 || y >= WORLD_SIZE - 3) {
+            int coast = 3 + (int)(1.6f * sinf(x * 0.22f) + 1.6f * cosf(y * 0.22f));
+            if (x < coast || y < coast || x >= WORLD_SIZE - coast || y >= WORLD_SIZE - coast) {
                 world[i] = T_WATER;
                 biomes[i] = B_MEADOW;
                 continue;
             }
+            /* Southern Bay */
+            if (y > 54 && x > 18 && x < 42 && (y + (int)(2.0f * sinf(x * 0.35f)) > 55)) {
+                world[i] = T_WATER;
+                biomes[i] = B_MEADOW;
+                continue;
+            }
+
             int nx = x + (int)((rnd() - 0.5f) * 6.0f);
             int ny = y + (int)((rnd() - 0.5f) * 6.0f);
             int b = (nx < 32 && ny < 32) ? B_FOREST : ((nx >= 32 && ny < 32) ? B_TUNDRA : ((nx < 32 && ny >= 32) ? B_MEADOW : B_DESERT));
             biomes[i] = (unsigned char)b;
             float r = rnd();
             if (b == B_MEADOW) {
-                world[i] = r < 0.04f ? T_WATER : (r < 0.14f ? T_TREE : (r < 0.20f ? T_BERRY : (r < 0.24f ? T_ROCK : T_GRASS)));
+                world[i] = r < 0.12f ? T_TREE : (r < 0.19f ? T_BERRY : (r < 0.23f ? T_ROCK : T_GRASS));
             } else if (b == B_FOREST) {
                 world[i] = r < 0.28f ? T_TREE : (r < 0.36f ? T_PINE : (r < 0.41f ? T_BERRY : (r < 0.45f ? T_ROCK : T_FOREST)));
             } else if (b == B_DESERT) {
                 world[i] = r < 0.08f ? T_CACTUS : (r < 0.13f ? T_ROCK : T_SAND);
             } else {
-                world[i] = r < 0.07f ? T_WATER : (r < 0.18f ? T_PINE : (r < 0.24f ? T_IRON : (r < 0.28f ? T_ROCK : T_SNOW)));
+                world[i] = r < 0.16f ? T_PINE : (r < 0.23f ? T_IRON : (r < 0.28f ? T_ROCK : T_SNOW));
             }
         }
+    }
+
+    /* Winding River from northern mountains to southern bay */
+    for (int y = 3; y < WORLD_SIZE - 3; y++) {
+        int rx = 25 + (int)(3.0f * sinf(y * 0.18f));
+        world[y * WORLD_SIZE + rx] = T_WATER;
+        world[y * WORLD_SIZE + rx + 1] = T_WATER;
     }
 
     for (int y = 45; y <= 51; y++) {
@@ -257,8 +273,14 @@ static void move_player(int dx, int dy, int direct) {
         return;
     }
     int t = curMap[ny * mapW + nx];
+    if (t == T_WATER && !player.hasBoat) {
+        audio_play_sfx(SFX_BLOCKED);
+        set_msg("Necesitas Barca! (Craft)");
+        return;
+    }
     if (is_walkable(t)) {
         player.x = nx; player.y = ny;
+        player.inBoat = (t == T_WATER) ? 1 : 0;
         ui.walkTimer = 10;
         ui.walkFrame ^= 1;
         stats.steps++;
@@ -267,14 +289,14 @@ static void move_player(int dx, int dy, int direct) {
 
         if (t == T_DUNGEON_DOOR) {
             player.savedX = nx; player.savedY = ny;
-            player.inDungeon = 1;
+            player.inDungeon = 1; player.inBoat = 0;
             player.x = 3; player.y = 10; player.fx = 1; player.fy = 0;
             audio_play_sfx(SFX_CRAFT);
             set_msg("Entraste al Dungeon!");
             return;
         }
         if (t == T_EXIT) {
-            player.inDungeon = 0;
+            player.inDungeon = 0; player.inBoat = 0;
             player.x = player.savedX; player.y = player.savedY + 1;
             player.fx = 0; player.fy = 1;
             audio_play_sfx(SFX_CRAFT);
@@ -282,9 +304,7 @@ static void move_player(int dx, int dy, int direct) {
             return;
         }
         if (t == T_WATER) {
-            player.wet = 20;
             audio_play_sfx(SFX_SPLASH);
-            set_msg("Ropa mojada!");
         } else {
             audio_play_sfx(SFX_STEP);
         }
@@ -505,6 +525,14 @@ static void craft_selected(int sel) {
             audio_play_sfx(SFX_LEVELUP); set_msg("Espada mejorada!");
         } else { audio_play_sfx(SFX_BLOCKED); set_msg("Falta 3 Hie, 3 Hue"); }
     } else if (sel == 5) {
+        if (player.hasBoat) {
+            audio_play_sfx(SFX_BLOCKED); set_msg("Ya tienes Barca!");
+        } else if (player.wood >= 5) {
+            player.wood -= 5; player.hasBoat = 1; stats.crafted++;
+            add_xp(&skills.construccion, "Cons", 18, 0);
+            audio_play_sfx(SFX_CRAFT); set_msg("Barca construida!");
+        } else { audio_play_sfx(SFX_BLOCKED); set_msg("Falta 5 Madera"); }
+    } else if (sel == 6) {
         if (player.warm && !player.inDungeon) {
             player.stamina = 100.0f; player.hp = clampf(player.hp + 30.0f, 0.0f, (float)maxHp());
             gameTime.day++; gameTime.minute = 420; gameTime.season = ((gameTime.day - 1) / 3) % 4;
@@ -577,8 +605,8 @@ int main(void) {
         }
 
         if (ui.craftOpen) {
-            if (pressed & PSP_CTRL_UP) { ui.menuSel = (ui.menuSel + 5) % 6; audio_play_sfx(SFX_UI); }
-            if (pressed & PSP_CTRL_DOWN) { ui.menuSel = (ui.menuSel + 1) % 6; audio_play_sfx(SFX_UI); }
+            if (pressed & PSP_CTRL_UP) { ui.menuSel = (ui.menuSel + 6) % 7; audio_play_sfx(SFX_UI); }
+            if (pressed & PSP_CTRL_DOWN) { ui.menuSel = (ui.menuSel + 1) % 7; audio_play_sfx(SFX_UI); }
             if (pressed & PSP_CTRL_CROSS) craft_selected(ui.menuSel);
         } else if (!ui.statsOpen) {
             if (pressed & (PSP_CTRL_SQUARE | PSP_CTRL_RTRIGGER)) {

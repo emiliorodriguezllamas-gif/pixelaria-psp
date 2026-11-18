@@ -73,6 +73,8 @@ typedef struct {
     int slot;
     int ironTools;
     int swordTier; /* 0=Madera, 1=Hierro, 2=Acero, 3=Real */
+    int hasBoat;
+    int inBoat;
     int wood, stone, iron, bones;
     int campfires, walls, food;
     int inDungeon;

@@ -2,6 +2,7 @@
 #include "font5x7.h"
 #include "sprites.h"
 #include "sprites_extra.h"
+#include "sprites_boat.h"
 #include <pspdisplay.h>
 #include <stdio.h>
 #include <string.h>
@@ -277,10 +278,21 @@ void render_frame(void) {
     int walkBob = (ui.walkTimer > 3) ? -2 : 0;
     int px = ox + (player.x - camX) * TILE_PX + (ui.lungeTimer > 0 ? player.fx * 4 : 0);
     int py = oy + (player.y - camY) * TILE_PX + (ui.lungeTimer > 0 ? player.fy * 4 : 0) + walkBob;
-    if (ui.walkTimer > 0) {
+    if (ui.walkTimer > 0 && !player.inBoat) {
         int dustX = ox + (player.x - camX) * TILE_PX + (ui.walkFrame ? 6 : 11);
         int dustY = oy + (player.y - camY) * TILE_PX + 17;
         fill_rect(dustX, dustY, 3, 2, tint_night(RGB(210, 210, 190), renderHr));
+    }
+    if (player.inBoat) {
+        int bx = ox + (player.x - camX) * TILE_PX;
+        int by = oy + (player.y - camY) * TILE_PX + ((gameTime.ticks & 1) ? 1 : 0);
+        if (player.fx != 0) {
+            blit_sprite(bx, by, spr_boat_h, renderHr, player.fx > 0, 0);
+        } else {
+            blit_sprite(bx, by, spr_boat_v, renderHr, 0, 0);
+        }
+        fill_rect(bx - player.fx * 4 + 7, by - player.fy * 4 + 10, 5, 2, RGB(210, 238, 255));
+        py -= 2;
     }
     const unsigned int *pspr = spr_p_down;
     if (player.fy < 0) pspr = spr_p_up;
@@ -423,22 +435,23 @@ void render_frame(void) {
 
     /* CRAFT MODAL */
     if (ui.craftOpen) {
-        fill_rect(44, 38, 392, 192, RGB(22, 26, 36));
-        draw_rect_outline(44, 38, 392, 192, RGB(255, 226, 122));
-        draw_text(54, 46, "CRAFTEO & FORJA ([X] Crear, [^] Cerrar)", RGB(255, 226, 122));
-        const char *items[6] = {
+        fill_rect(44, 34, 392, 204, RGB(22, 26, 36));
+        draw_rect_outline(44, 34, 392, 204, RGB(255, 226, 122));
+        draw_text(54, 41, "CRAFTEO & FORJA ([X] Crear, [^] Cerrar)", RGB(255, 226, 122));
+        const char *items[7] = {
             "Hoguera (3 Mad, 2 Pie) - Seca ropa y cura",
             "Muro x2 (2 Mad, 1 Pie) - Refugio conectable",
             "Racion (2 Bayas, 1 Mad) - +45 Hambre",
             "Herramientas Hierro (4 Hie, 2 Mad) - 2x",
             "Mejorar Espada (3 Hie, 3 Hue) - Sube Tier!",
+            "Barca de Madera (5 Mad) - Navegar agua",
             "Descansar (Junto a Hoguera) - +Energia/Dia"
         };
-        for (int i = 0; i < 6; i++) {
-            int iy = 64 + i * 26;
-            fill_rect(54, iy, 372, 22, i == ui.menuSel ? RGB(54, 65, 89) : RGB(35, 41, 56));
-            draw_rect_outline(54, iy, 372, 22, i == ui.menuSel ? RGB(255, 226, 122) : RGB(75, 86, 112));
-            draw_text(60, iy + 7, items[i], RGB(240, 240, 240));
+        for (int i = 0; i < 7; i++) {
+            int iy = 56 + i * 24;
+            fill_rect(54, iy, 372, 20, i == ui.menuSel ? RGB(54, 65, 89) : RGB(35, 41, 56));
+            draw_rect_outline(54, iy, 372, 20, i == ui.menuSel ? RGB(255, 226, 122) : RGB(75, 86, 112));
+            draw_text(60, iy + 6, items[i], RGB(240, 240, 240));
         }
     }
 
