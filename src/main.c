@@ -2,14 +2,13 @@
 #include <pspctrl.h>
 #include <pspdisplay.h>
 #include <pspaudio.h>
-#include <pspgu.h>
-#include <pspge.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include "font5x7.h"
 #include "bg_arena.h"
+#include "world_sprites.h"
 
 PSP_MODULE_INFO("SymphonyAbyss", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -17,17 +16,15 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 #define SCR_W 480
 #define SCR_H 272
 #define BUF_W 512
-#define HIT_Y 236
-#define RGB(r,g,b) ((unsigned int)(0xFF000000 | ((b)<<16) | ((g)<<8) | (r)))
+#define HIT_Y 232
+#define RGB(r,g,b) ((unsigned int)(0xFF000000u | ((unsigned int)(b)<<16) | ((unsigned int)(g)<<8) | (unsigned int)(r)))
 
-static unsigned int __attribute__((aligned(16))) gulist[262144];
-static void *fbp0 = (void*)0;
-static void *fbp1 = (void*)(BUF_W * SCR_H * 4);
+/* Pure double-buffered uncached VRAM: zero flicker, zero Gu/CPU desync */
+static unsigned int * const vram_bufs[2] = {
+    (unsigned int *)0x44000000,
+    (unsigned int *)(0x44000000 + BUF_W * SCR_H * 4)
+};
 static int cur_fb = 0;
-
-typedef struct { unsigned int color; short x, y, z; } Vtx2D;
-static Vtx2D __attribute__((aligned(16))) vpool[4096];
-static int vidx = 0;
 
 static int running = 1;
 static unsigned int rng = 0x77113355u;
@@ -35,22 +32,37 @@ static unsigned int xr(void) { unsigned int x = rng; x ^= x<<13; x ^= x>>17; x ^
 static int exit_cb(int a, int b, void *c) { (void)a; (void)b; (void)c; running = 0; return 0; }
 static int cb_th(SceSize a, void *p) { (void)a; (void)p; sceKernelRegisterExitCallback(sceKernelCreateCallback("Exit", exit_cb, NULL)); sceKernelSleepThreadCB(); return 0; }
 
-static void gu_rect(int x, int y, int w, int h, unsigned int col) {
-    if (vidx + 6 > 4096) return;
-    Vtx2D *v = &vpool[vidx];
-    v[0] = (Vtx2D){ col, (short)x, (short)y, 0 };
-    v[1] = (Vtx2D){ col, (short)(x + w), (short)y, 0 };
-    v[2] = (Vtx2D){ col, (short)(x + w), (short)(y + h), 0 };
-    v[3] = (Vtx2D){ col, (short)x, (short)y, 0 };
-    v[4] = (Vtx2D){ col, (short)(x + w), (short)(y + h), 0 };
-    v[5] = (Vtx2D){ col, (short)x, (short)(y + h), 0 };
-    sceGuDrawArray(GU_TRIANGLES, GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D, 6, 0, v);
-    vidx += 6;
-}
-
+/* 2D Primitives & 32-bit Sprite Blitters */
 static void put_px(unsigned int *fb, int x, int y, unsigned int c) {
     if ((unsigned)x < SCR_W && (unsigned)y < SCR_H) fb[y * BUF_W + x] = c;
 }
+
+static void fill_rect(unsigned int *fb, int x, int y, int w, int h, unsigned int col) {
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > SCR_W) w = SCR_W - x;
+    if (y + h > SCR_H) h = SCR_H - y;
+    if (w <= 0 || h <= 0) return;
+    for (int j = 0; j < h; j++) {
+        unsigned int *row = &fb[(y + j) * BUF_W + x];
+        for (int i = 0; i < w; i++) row[i] = col;
+    }
+}
+
+static void draw_border(unsigned int *fb, int x, int y, int w, int h, unsigned int col) {
+    fill_rect(fb, x, y, w, 1, col);
+    fill_rect(fb, x, y + h - 1, w, 1, col);
+    fill_rect(fb, x, y, 1, h, col);
+    fill_rect(fb, x + w - 1, y, 1, h, col);
+}
+
+/* Classic Final Fantasy Blue Window with double border */
+static void draw_ff_window(unsigned int *fb, int x, int y, int w, int h) {
+    fill_rect(fb, x, y, w, h, RGB(14, 22, 72));
+    draw_border(fb, x, y, w, h, RGB(230, 235, 255));
+    draw_border(fb, x + 2, y + 2, w - 4, h - 4, RGB(160, 180, 230));
+}
+
 static void draw_text(unsigned int *fb, int x, int y, const char *s, unsigned int c) {
     while (*s) {
         unsigned char ch = (unsigned char)*s++;
@@ -58,9 +70,75 @@ static void draw_text(unsigned int *fb, int x, int y, const char *s, unsigned in
         const unsigned char *g = font5x7[ch - 32];
         for (int cx = 0; cx < 5; cx++) {
             unsigned char b = g[cx];
-            for (int cy = 0; cy < 7; cy++) if (b & (1 << cy)) put_px(fb, x + cx, y + cy, c);
+            for (int cy = 0; cy < 7; cy++) {
+                if (b & (1 << cy)) {
+                    put_px(fb, x + cx + 1, y + cy + 1, RGB(0, 0, 0)); /* drop shadow */
+                    put_px(fb, x + cx, y + cy, c);
+                }
+            }
         }
         x += 6;
+    }
+}
+
+static void draw_tile24(unsigned int *fb, const unsigned int *tile, int dx, int dy) {
+    for (int j = 0; j < 24; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &tile[j * 24];
+        for (int i = 0; i < 24; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) dst[px] = src[i];
+        }
+    }
+}
+
+static void draw_spr24(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int j = 0; j < 24; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr[j * 24];
+        for (int i = 0; i < 24; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
+static void draw_spr24_scaled(unsigned int *fb, const unsigned int *spr, int dx, int dy, int scale) {
+    for (int j = 0; j < 24 * scale; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr[(j / scale) * 24];
+        for (int i = 0; i < 24 * scale; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i / scale];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
+static void draw_boss64(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flash) {
+    for (int j = 0; j < 64; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr[j * 64];
+        for (int i = 0; i < 64; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = flash ? RGB(255, 255, 255) : c;
+            }
+        }
     }
 }
 
@@ -74,7 +152,7 @@ static void play_sfx(float f, int dur) { if (sfx_on) { sfx_f = f; sfx_t = dur; s
 static int audio_th(SceSize a, void *p) {
     (void)a; (void)p;
     int cur = 0;
-    const float notes[3][8] = {
+    const float notes_seq[3][8] = {
         { 82.41f, 82.41f, 98.00f, 110.00f, 82.41f, 123.47f, 110.00f, 98.00f }, /* Rock */
         { 130.81f, 196.00f, 261.63f, 196.00f, 146.83f, 220.00f, 293.66f, 220.00f }, /* Synth */
         { 110.00f, 130.81f, 164.81f, 220.00f, 196.00f, 164.81f, 146.83f, 130.81f }  /* Symphonic */
@@ -85,7 +163,7 @@ static int audio_th(SceSize a, void *p) {
             float m = 0.0f;
             if (sfx_on) {
                 int st = (int)(bgm_t * 4.5f);
-                float bf = notes[curStyle][st & 7];
+                float bf = notes_seq[curStyle][st & 7];
                 float sub = bgm_t * 4.5f - floorf(bgm_t * 4.5f);
                 float bt = bgm_t * bf - floorf(bgm_t * bf);
                 m += (curStyle == 2 ? sinf(bt * 6.283f) : (2.0f * bt - 1.0f)) * 0.11f * expf(-sub * 2.0f);
@@ -110,15 +188,18 @@ static int audio_th(SceSize a, void *p) {
 typedef struct { int lane; float y; int active; } Note;
 static Note notes[24];
 static const char *bossNames[3] = { "GOLEM DE HIERRO", "AUTOMATA ARCANO", "DRAGON SOMBRIO" };
+static const char *mobNames[3]  = { "SLIME DEL BOSQUE", "TRASGO ERRANTE", "ESPECTRO MENOR" };
 static const char *styleNames[3] = { "ROCK", "SYNTH", "SINFONICO" };
+static const char *laneLabels[4] = { "[]", "^", "O", "X" };
 static const int bossWeak[3] = { 0, 1, 2 };
 
-static int chapter = 0, pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 120;
+static int chapter = 0, isMobBattle = 0, bossHitFlash = 0;
+static int pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 120;
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
 static int relicDmg = 0, relicVamp = 0, relicShield = 0;
 static int inTitle = 1, inOverworld = 0, inStory = 0, inFFMenu = 0, inDefense = 0, inRelic = 0, gameOver = 0, victory = 0;
 static int ffCursor = 0;
-static float bardX = 240.0f, bardY = 210.0f;
+static float bardX = 240.0f, bardY = 195.0f;
 static float projX[6], projY[6], projVx[6], projVy[6];
 static int projAlive[6];
 static char judge[32] = "";
@@ -127,17 +208,17 @@ static int judgeT = 0;
 /* PARTE 1: Mapa enorme Modo Aventura (64x48) */
 #define MW 64
 #define MH 48
-static unsigned char worldMap[MH][MW]; /* 0=pasto, 1=bosque, 2=montana, 3=agua, 4=reino, 5=dungeon */
+static unsigned char worldMap[MH][MW]; /* 0=pasto, 1=bosque, 2=montana, 3=agua, 4=reino, 5=dungeon, 6=puente */
 static int mapX = 10, mapY = 10, prevX1 = 9, prevY1 = 10, prevX2 = 8, prevY2 = 10;
 static int bossDefeated[3] = { 0, 0, 0 };
-static const int dngX[3] = { 26, 48, 54 };
-static const int dngY[3] = { 14, 34, 10 };
-static const int npcX[3] = { 12, 22, 42 };
-static const int npcY[3] = { 12, 22, 30 };
+static const int dngX[3] = { 24, 44, 52 };
+static const int dngY[3] = { 12, 30, 10 };
+static const int npcX[3] = { 12, 20, 38 };
+static const int npcY[3] = { 11, 18, 26 };
 static const char *npcMsg[3] = {
-    "ANCIONO: El Golem teme al ROCK! Ve al Este.",
-    "TROVADOR: El Automata cae ante el SYNTH!",
-    "SABIO: Solo lo SINFONICO vence al Dragon!"
+    "ANCIANO: El Golem al Este teme al ROCK! (+HP/MP)",
+    "TROVADOR: El Automata tras el puente teme al SYNTH!",
+    "SABIO: Solo lo SINFONICO vence al Dragon Sombrio!"
 };
 static char dlgText[64] = "";
 static int dlgTimer = 0;
@@ -146,15 +227,21 @@ static void init_world(void) {
     for (int y = 0; y < MH; y++) {
         for (int x = 0; x < MW; x++) {
             if (x == 0 || y == 0 || x == MW - 1 || y == MH - 1) worldMap[y][x] = 2;
-            else if (x > 30 && x < 34 && y != 20 && y != 21) worldMap[y][x] = 3; /* Rio con puente en y=20 */
-            else if (((x * 7 + y * 13) % 11) == 0) worldMap[y][x] = 1; /* Bosque */
+            else if (x >= 30 && x <= 32) {
+                worldMap[y][x] = (y == 18 || y == 19) ? 6 : 3; /* Rio con puente de madera */
+            }
+            else if (((x * 7 + y * 13) % 9) == 0) worldMap[y][x] = 1; /* Bosque */
             else if (((x * 11 + y * 5) % 19) == 0) worldMap[y][x] = 2; /* Montana */
             else worldMap[y][x] = 0;
         }
     }
     /* Reino inicial */
     for (int y = 8; y <= 13; y++) for (int x = 8; x <= 13; x++) worldMap[y][x] = 4;
-    for (int i = 0; i < 3; i++) { worldMap[dngY[i]][dngX[i]] = 5; bossDefeated[i] = 0; }
+    for (int i = 0; i < 3; i++) {
+        worldMap[dngY[i]][dngX[i]] = 5;
+        worldMap[npcY[i]][npcX[i]] = 0;
+        bossDefeated[i] = 0;
+    }
     mapX = 10; mapY = 10; prevX1 = 9; prevY1 = 10; prevX2 = 8; prevY2 = 10;
     dlgTimer = 0;
 }
@@ -162,38 +249,34 @@ static void init_world(void) {
 static void load_best(void) { FILE *f = fopen("cb_save.dat", "rb"); if (f) { int v=0; if (fread(&v,4,1,f)==1 && v>0) best=v; fclose(f); } }
 static void save_best(void) { if (score > best) { best = score; FILE *f = fopen("cb_save.dat", "wb"); if (f) { fwrite(&best,4,1,f); fclose(f); } } }
 
-static int isMobBattle = 0;
-static const char *mobNames[3] = { "SLIME DEL BOSQUE", "TRASGO ERRANTE", "ESPECTRO MENOR" };
-static const char *laneLabels[4] = { "[]", "^", "O", "X" };
-
 static void start_mob_battle(void) {
     isMobBattle = 1;
     chapter = xr() % 3;
-    bHp = bMaxHp = 35;
-    combo = 0; tick = 0; judgeT = 0; phaseTimer = 0;
-    bardX = 240.0f; bardY = 210.0f;
+    bHp = bMaxHp = 40;
+    combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
+    bardX = 240.0f; bardY = 195.0f;
     memset(notes, 0, sizeof(notes));
     memset(projAlive, 0, sizeof(projAlive));
-    inOverworld = 0; inStory = 0; inDefense = 0;
+    inOverworld = 0; inStory = 0; inFFMenu = 1; ffCursor = 0; inDefense = 0;
 }
 
 static void start_chapter(int ch) {
     isMobBattle = 0;
     chapter = ch;
-    bHp = bMaxHp = 120 + ch * 60;
-    combo = 0; tick = 0; judgeT = 0; phaseTimer = 0;
-    bardX = 240.0f; bardY = 210.0f;
+    bHp = bMaxHp = 130 + ch * 65;
+    combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
+    bardX = 240.0f; bardY = 195.0f;
     memset(notes, 0, sizeof(notes));
     memset(projAlive, 0, sizeof(projAlive));
-    inStory = 1; inDefense = 0;
+    inOverworld = 0; inStory = 1; inFFMenu = 0; ffCursor = 0; inDefense = 0;
 }
 
 static void start_game(void) {
-    pHp = pMaxHp = 100; score = 0;
+    pHp = pMaxHp = 100; pMp = pMaxMp = 50; score = 0;
     relicDmg = 0; relicVamp = 0; relicShield = 0;
     init_world();
-    inTitle = 0; inOverworld = 1; inStory = 0; inDefense = 0; inRelic = 0; gameOver = 0; victory = 0;
-    snprintf(dlgText, sizeof(dlgText), "Explora el reino con tu banda! Busca los Dungeons.");
+    inTitle = 0; inOverworld = 1; inStory = 0; inFFMenu = 0; inDefense = 0; inRelic = 0; gameOver = 0; victory = 0;
+    snprintf(dlgText, sizeof(dlgText), "Explora el mundo con tu banda! [X] Hablar con NPCs.");
     dlgTimer = 180;
     play_sfx(660.0f, 2000);
 }
@@ -204,20 +287,8 @@ int main(void) {
     sceCtrlSetSamplingCycle(0);
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
-    sceGuInit();
-    sceGuStart(GU_DIRECT, gulist);
-    sceGuDrawBuffer(GU_PSM_8888, fbp0, BUF_W);
-    sceGuDispBuffer(SCR_W, SCR_H, fbp1, BUF_W);
-    sceGuOffset(2048 - (SCR_W / 2), 2048 - (SCR_H / 2));
-    sceGuViewport(2048, 2048, SCR_W, SCR_H);
-    sceGuScissor(0, 0, SCR_W, SCR_H);
-    sceGuEnable(GU_SCISSOR_TEST);
-    sceGuDisable(GU_DEPTH_TEST);
-    sceGuShadeModel(GU_FLAT);
-    sceGuFinish();
-    sceGuSync(0, 0);
-    sceDisplayWaitVblankStart();
-    sceGuDisplay(GU_TRUE);
+    sceDisplaySetMode(0, SCR_W, SCR_H);
+    sceDisplaySetFrameBuf(vram_bufs[0], BUF_W, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
 
     load_best();
     ach = sceAudioChReserve(PSP_AUDIO_NEXT_CHANNEL, 1024, PSP_AUDIO_FORMAT_STEREO);
@@ -225,35 +296,43 @@ int main(void) {
 
     SceCtrlData pad; unsigned int prev = 0;
     const unsigned int laneBtns[4] = { PSP_CTRL_SQUARE, PSP_CTRL_TRIANGLE, PSP_CTRL_CIRCLE, PSP_CTRL_CROSS };
+    int moveCd = 0;
+
     while (running) {
         sceCtrlReadBufferPositive(&pad, 1);
         unsigned int pressed = pad.Buttons & (~prev);
         prev = pad.Buttons;
         if (pressed & PSP_CTRL_SELECT) sfx_on = !sfx_on;
+        if (bossHitFlash > 0) bossHitFlash--;
 
+        /* ================= LOGIC ================= */
         if (inTitle || gameOver || victory) {
             if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) start_game();
         } else if (inOverworld) {
             if (dlgTimer > 0) dlgTimer--;
+            if (moveCd > 0) moveCd--;
+
             int dx = 0, dy = 0;
-            if (pressed & PSP_CTRL_LEFT) dx = -1;
-            else if (pressed & PSP_CTRL_RIGHT) dx = 1;
-            else if (pressed & PSP_CTRL_UP) dy = -1;
-            else if (pressed & PSP_CTRL_DOWN) dy = 1;
-            if (dx != 0 || dy != 0) {
+            float ax = ((float)pad.Lx - 128.0f) / 128.0f, ay = ((float)pad.Ly - 128.0f) / 128.0f;
+            if ((pad.Buttons & PSP_CTRL_LEFT)  || ax < -0.45f) dx = -1;
+            else if ((pad.Buttons & PSP_CTRL_RIGHT) || ax >  0.45f) dx =  1;
+            else if ((pad.Buttons & PSP_CTRL_UP)    || ay < -0.45f) dy = -1;
+            else if ((pad.Buttons & PSP_CTRL_DOWN)  || ay >  0.45f) dy =  1;
+
+            if ((dx != 0 || dy != 0) && moveCd <= 0) {
+                moveCd = 9;
                 int nx = mapX + dx, ny = mapY + dy;
                 if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && worldMap[ny][nx] != 2 && worldMap[ny][nx] != 3) {
                     prevX2 = prevX1; prevY2 = prevY1;
-                    prevX1 = mapX; prevY1 = mapY;
-                    mapX = nx; mapY = ny;
+                    prevX1 = mapX;   prevY1 = mapY;
+                    mapX = nx;       mapY = ny;
                     for (int i = 0; i < 3; i++) {
                         if (!bossDefeated[i] && mapX == dngX[i] && mapY == dngY[i]) {
-                            inOverworld = 0;
                             start_chapter(i);
                             break;
                         }
                     }
-                    if (inOverworld && worldMap[mapY][mapX] == 1 && (xr() % 9) == 0) {
+                    if (inOverworld && worldMap[mapY][mapX] == 1 && (xr() % 7) == 0) {
                         start_mob_battle();
                     }
                 }
@@ -261,70 +340,122 @@ int main(void) {
             if (pressed & PSP_CTRL_CROSS) {
                 for (int i = 0; i < 3; i++) {
                     if (abs(mapX - npcX[i]) + abs(mapY - npcY[i]) <= 1) {
-                        pHp = pMaxHp;
+                        pHp = pMaxHp; pMp = pMaxMp;
                         snprintf(dlgText, sizeof(dlgText), "%s", npcMsg[i]);
-                        dlgTimer = 180;
+                        dlgTimer = 200;
                         play_sfx(780.0f, 900);
                     }
                 }
             }
         } else if (inStory) {
-            if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) { inStory = 0; play_sfx(520.0f, 1200); }
+            if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) {
+                inStory = 0; inFFMenu = 1; ffCursor = 0;
+                play_sfx(520.0f, 1200);
+            }
         } else if (inRelic) {
-            if (pressed & PSP_CTRL_SQUARE) { relicDmg += 4; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
-            else if (pressed & PSP_CTRL_TRIANGLE) { relicVamp += 3; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
-            else if (pressed & PSP_CTRL_CIRCLE) { relicShield = 1; pHp = pMaxHp; inRelic = 0; bossDefeated[chapter] = 1; inOverworld = 1; }
-            if (bossDefeated[0] && bossDefeated[1] && bossDefeated[2]) { victory = 1; inOverworld = 0; save_best(); }
+            int chosen = 0;
+            if (pressed & PSP_CTRL_SQUARE)   { relicDmg += 4; chosen = 1; }
+            else if (pressed & PSP_CTRL_TRIANGLE) { relicVamp += 3; chosen = 1; }
+            else if (pressed & PSP_CTRL_CIRCLE)   { relicShield = 1; pHp = pMaxHp; chosen = 1; }
+            if (chosen) {
+                play_sfx(880.0f, 1500);
+                inRelic = 0;
+                bossDefeated[chapter] = 1;
+                if (bossDefeated[0] && bossDefeated[1] && bossDefeated[2]) {
+                    victory = 1; save_best();
+                } else {
+                    inOverworld = 1;
+                    snprintf(dlgText, sizeof(dlgText), "Reliquia obtenida! Busca el siguiente Dungeon.");
+                    dlgTimer = 180;
+                }
+            }
+        } else if (inFFMenu) {
+            if (pressed & PSP_CTRL_UP)   { ffCursor = (ffCursor + 3) % 4; play_sfx(440.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { ffCursor = (ffCursor + 1) % 4; play_sfx(440.0f, 400); }
+            if (pressed & (PSP_CTRL_LTRIGGER | PSP_CTRL_RTRIGGER)) {
+                curStyle = (curStyle + 1) % 3; play_sfx(520.0f, 600);
+            }
+            if (pressed & PSP_CTRL_CROSS) {
+                if (ffCursor == 0) {
+                    inFFMenu = 0; phaseTimer = 0; memset(notes, 0, sizeof(notes));
+                    play_sfx(660.0f, 800);
+                } else if (ffCursor == 1) {
+                    curStyle = (curStyle + 1) % 3;
+                    play_sfx(520.0f, 600);
+                } else if (ffCursor == 2) {
+                    if (pMp >= 15) {
+                        pMp -= 15; pHp = (pHp + 45 > pMaxHp) ? pMaxHp : pHp + 45;
+                        inFFMenu = 0; inDefense = 1; phaseTimer = 0;
+                        memset(projAlive, 0, sizeof(projAlive));
+                        play_sfx(880.0f, 1200);
+                    } else {
+                        play_sfx(180.0f, 600);
+                    }
+                } else if (ffCursor == 3) {
+                    if (isMobBattle) {
+                        inFFMenu = 0; inOverworld = 1;
+                        snprintf(dlgText, sizeof(dlgText), "Escapaste del combate!"); dlgTimer = 100;
+                        play_sfx(300.0f, 800);
+                    } else {
+                        play_sfx(180.0f, 600);
+                    }
+                }
+            }
         } else if (inDefense) {
             float ax = ((float)pad.Lx - 128.0f) / 128.0f, ay = ((float)pad.Ly - 128.0f) / 128.0f;
             if (fabsf(ax) < 0.18f) ax = 0; if (fabsf(ay) < 0.18f) ay = 0;
-            if (pad.Buttons & PSP_CTRL_LEFT) ax = -1; if (pad.Buttons & PSP_CTRL_RIGHT) ax = 1;
-            if (pad.Buttons & PSP_CTRL_UP) ay = -1; if (pad.Buttons & PSP_CTRL_DOWN) ay = 1;
-            bardX += ax * 3.4f; bardY += ay * 3.0f;
-            if (bardX < 30) bardX = 30; if (bardX > SCR_W - 30) bardX = SCR_W - 30;
-            if (bardY < 110) bardY = 110; if (bardY > SCR_H - 20) bardY = SCR_H - 20;
+            if (pad.Buttons & PSP_CTRL_LEFT)  ax = -1; if (pad.Buttons & PSP_CTRL_RIGHT) ax = 1;
+            if (pad.Buttons & PSP_CTRL_UP)    ay = -1; if (pad.Buttons & PSP_CTRL_DOWN)  ay = 1;
+            bardX += ax * 3.2f; bardY += ay * 2.8f;
+            if (bardX < 140) bardX = 140; if (bardX > 340) bardX = 340;
+            if (bardY < 130) bardY = 130; if (bardY > 245) bardY = 245;
 
             phaseTimer++;
-            if ((phaseTimer % 28) == 0) {
+            int pRate = isMobBattle ? 36 : (26 - chapter * 4);
+            if ((phaseTimer % pRate) == 0) {
                 for (int p = 0; p < 6; p++) if (!projAlive[p]) {
                     projAlive[p] = 1;
-                    projX[p] = (float)(40 + (xr() % (SCR_W - 80)));
-                    projY[p] = 60.0f;
+                    projX[p] = (float)(145 + (xr() % 190));
+                    projY[p] = 122.0f;
                     projVx[p] = (bardX - projX[p]) * 0.015f;
-                    projVy[p] = 2.6f + chapter * 0.5f;
+                    projVy[p] = isMobBattle ? 2.0f : (2.6f + chapter * 0.45f);
                     break;
                 }
             }
             for (int p = 0; p < 6; p++) if (projAlive[p]) {
                 projX[p] += projVx[p]; projY[p] += projVy[p];
-                if (projY[p] > SCR_H) { projAlive[p] = 0; continue; }
+                if (projY[p] > 260) { projAlive[p] = 0; continue; }
                 if (fabsf(projX[p] - bardX) < 12 && fabsf(projY[p] - bardY) < 12) {
                     projAlive[p] = 0;
-                    int edmg = relicShield ? 6 : 10;
+                    int edmg = relicShield ? 5 : 9;
                     pHp -= edmg; play_sfx(140.0f, 1200);
                     if (pHp <= 0) { pHp = 0; gameOver = 1; save_best(); }
                 }
             }
-            if (phaseTimer >= 360) {
-                inDefense = 0; phaseTimer = 0;
+            if (phaseTimer >= 240) {
+                inDefense = 0; inFFMenu = 1; phaseTimer = 0;
+                pMp = (pMp + 5 > pMaxMp) ? pMaxMp : pMp + 5;
                 memset(projAlive, 0, sizeof(projAlive));
             }
         } else {
+            /* Guitar Hero Rhythm Attack Phase */
             if (pressed & PSP_CTRL_LTRIGGER) { curStyle = (curStyle + 2) % 3; play_sfx(440.0f, 600); }
             if (pressed & PSP_CTRL_RTRIGGER) { curStyle = (curStyle + 1) % 3; play_sfx(440.0f, 600); }
             if (judgeT > 0) judgeT--;
 
             phaseTimer++;
-            if (phaseTimer >= 720) {
+            if (phaseTimer >= 360) {
                 inDefense = 1; phaseTimer = 0;
+                bardX = 240.0f; bardY = 195.0f;
                 memset(notes, 0, sizeof(notes));
+                memset(projAlive, 0, sizeof(projAlive));
             }
 
             tick++;
-            int rate = isMobBattle ? 36 : (20 - chapter * 3);
-            if ((tick % rate) == 0) {
+            int rate = isMobBattle ? 36 : (21 - chapter * 3);
+            if ((tick % rate) == 0 && phaseTimer < 300) {
                 for (int i = 0; i < 24; i++) if (!notes[i].active) {
-                    notes[i].active = 1; notes[i].lane = xr() & 3; notes[i].y = 120; break;
+                    notes[i].active = 1; notes[i].lane = xr() & 3; notes[i].y = 122; break;
                 }
             }
 
@@ -337,9 +468,10 @@ int main(void) {
                 if (hit >= 0) {
                     notes[hit].active = 0; combo++;
                     int isPerf = (bestD < 10.0f);
-                    int base = (isPerf ? 10 : 5) + relicDmg + (combo / 4);
+                    int base = (isPerf ? 10 : 6) + relicDmg + (combo / 4);
                     if (curStyle == bossWeak[chapter]) base *= 2;
                     bHp -= base;
+                    bossHitFlash = 6;
                     score += base * 10;
                     if (isPerf && relicVamp > 0) { pHp += relicVamp; if (pHp > pMaxHp) pHp = pMaxHp; }
                     snprintf(judge, sizeof(judge), isPerf ? "PERFECT! -%d" : "GOOD -%d", base);
@@ -359,12 +491,12 @@ int main(void) {
                 }
             }
 
-            float spd = isMobBattle ? 1.5f : (2.4f + chapter * 0.45f);
+            float spd = isMobBattle ? 1.5f : (2.3f + chapter * 0.4f);
             for (int i = 0; i < 24; i++) if (notes[i].active) {
                 notes[i].y += spd;
-                if (notes[i].y > SCR_H) {
+                if (notes[i].y > SCR_H - 12) {
                     notes[i].active = 0; combo = 0;
-                    int edmg = relicShield ? 5 : 9;
+                    int edmg = relicShield ? 4 : 7;
                     pHp -= edmg;
                     snprintf(judge, sizeof(judge), "MISS! -%d HP", edmg);
                     judgeT = 28;
@@ -374,137 +506,188 @@ int main(void) {
             }
         }
 
-        unsigned int *fb = (unsigned int*)(0x44000000 + (cur_fb ? (BUF_W * SCR_H * 4) : 0));
-        for (int y = 0; y < SCR_H; y++) memcpy(&fb[y * BUF_W], &bg_arena[y * SCR_W], SCR_W * 4);
+        /* ================= RENDER ================= */
+        unsigned int *fb = vram_bufs[cur_fb];
+        char buf[64];
 
-        vidx = 0;
-        sceGuStart(GU_DIRECT, gulist);
-
-        if (inTitle || gameOver || victory || inStory || inRelic) {
-            gu_rect(70, 58, 340, 156, RGB(14, 12, 28));
-        } else if (inOverworld) {
-            /* Render 20x12 visible tiles around (mapX, mapY) */
-            int ox = mapX - 10, oy = mapY - 6;
+        if (inOverworld) {
+            /* Render 20x12 textured 24x24 tiles covering the full 480x272 screen */
+            int ox = mapX - 10, oy = mapY - 5;
             for (int ty = 0; ty < 12; ty++) {
+                int sy = ty * 24 - 8;
                 for (int tx = 0; tx < 20; tx++) {
+                    int sx = tx * 24;
                     int wx = ox + tx, wy = oy + ty;
-                    unsigned int tc = RGB(45, 115, 55);
-                    if (wx < 0 || wy < 0 || wx >= MW || wy >= MH) tc = RGB(20, 20, 30);
-                    else {
+                    if (wx < 0 || wy < 0 || wx >= MW || wy >= MH) {
+                        draw_tile24(fb, tile_grass, sx, sy);
+                        draw_spr24(fb, spr_mountain, sx, sy);
+                    } else {
                         unsigned char t = worldMap[wy][wx];
-                        if (t == 1) tc = RGB(25, 75, 35);
-                        else if (t == 2) tc = RGB(95, 90, 105);
-                        else if (t == 3) tc = RGB(35, 95, 195);
-                        else if (t == 4) tc = RGB(140, 115, 85);
-                        else if (t == 5) tc = RGB(140, 30, 160);
+                        if (t == 3) {
+                            draw_tile24(fb, tile_water, sx, sy);
+                        } else if (t == 4) {
+                            draw_tile24(fb, tile_castle, sx, sy);
+                        } else if (t == 6) {
+                            draw_tile24(fb, tile_water, sx, sy);
+                            fill_rect(fb, sx, sy + 4, 24, 16, RGB(145, 95, 50));
+                            draw_border(fb, sx, sy + 4, 24, 16, RGB(90, 55, 25));
+                        } else {
+                            draw_tile24(fb, tile_grass, sx, sy);
+                            if (t == 1) draw_spr24(fb, spr_tree, sx, sy);
+                            else if (t == 2) draw_spr24(fb, spr_mountain, sx, sy);
+                            else if (t == 5) {
+                                int dIdx = -1;
+                                for (int k = 0; k < 3; k++) if (dngX[k] == wx && dngY[k] == wy) dIdx = k;
+                                if (dIdx >= 0 && bossDefeated[dIdx]) draw_spr24(fb, spr_chest, sx, sy);
+                                else draw_spr24(fb, spr_dungeon, sx, sy);
+                            }
+                        }
                     }
-                    gu_rect(tx * 24, ty * 22, 24, 22, tc);
                 }
             }
             /* NPCs */
             for (int i = 0; i < 3; i++) {
-                int sx = (npcX[i] - ox) * 24 + 5, sy = (npcY[i] - oy) * 22 + 4;
-                if (sx >= 0 && sx < SCR_W && sy >= 0 && sy < SCR_H) gu_rect(sx, sy, 14, 14, RGB(255, 220, 60));
+                int sx = (npcX[i] - ox) * 24, sy = (npcY[i] - oy) * 24 - 8;
+                if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
+                    draw_spr24(fb, (i == 1) ? spr_troubadour : spr_elder, sx, sy);
+                    draw_text(fb, sx + 9, sy - 7, "!", RGB(255, 235, 60));
+                }
             }
-            /* Band (3 musicians) */
-            gu_rect((prevX2 - ox) * 24 + 6, (prevY2 - oy) * 22 + 5, 12, 12, RGB(180, 90, 255));
-            gu_rect((prevX1 - ox) * 24 + 6, (prevY1 - oy) * 22 + 5, 12, 12, RGB(80, 230, 140));
-            gu_rect(10 * 24 + 5, 6 * 22 + 4, 14, 14, RGB(60, 210, 255));
-            if (dlgTimer > 0) gu_rect(16, 226, 448, 36, RGB(14, 12, 28));
-        } else if (inFFMenu) {
-            gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
-            gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
-            gu_rect(16, 162, 220, 96, RGB(14, 22, 68));
-            gu_rect(244, 162, 220, 96, RGB(14, 22, 68));
-        } else if (inDefense) {
-            gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
-            gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
-            gu_rect((int)bardX - 8, (int)bardY - 10, 16, 20, RGB(60, 210, 255));
-            for (int p = 0; p < 6; p++) if (projAlive[p]) {
-                gu_rect((int)projX[p] - 5, (int)projY[p] - 5, 10, 10, RGB(255, 60, 80));
+            /* Your 3-Piece Band following in formation */
+            draw_spr24(fb, spr_band2, (prevX2 - ox) * 24, (prevY2 - oy) * 24 - 8);
+            draw_spr24(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8);
+            draw_spr24(fb, spr_bard,  10 * 24, 5 * 24 - 8);
+
+            /* Top Adventure HUD Window */
+            draw_ff_window(fb, 4, 3, 472, 20);
+            sprintf(buf, "AVENTURA | HP:%d/%d MP:%d | BOSSES:%d/3 | POS:%d,%d",
+                    pHp, pMaxHp, pMp, bossDefeated[0]+bossDefeated[1]+bossDefeated[2], mapX, mapY);
+            draw_text(fb, 12, 9, buf, RGB(255, 235, 110));
+
+            if (dlgTimer > 0) {
+                draw_ff_window(fb, 12, 234, 456, 32);
+                draw_text(fb, 22, 246, dlgText, RGB(255, 255, 255));
             }
         } else {
-            /* HP Bars */
-            gu_rect(14, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(14, 12, (pHp * 160) / pMaxHp, 12, RGB(60, 210, 255));
-            gu_rect(306, 12, 160, 12, RGB(30, 20, 30));
-            gu_rect(306, 12, (bHp * 160) / bMaxHp, 12, RGB(255, 50, 80));
+            /* Copy 32-bit Arena Backdrop */
+            for (int y = 0; y < SCR_H; y++) memcpy(&fb[y * BUF_W], &bg_arena[y * SCR_W], SCR_W * 4);
 
-            /* 4-Lane Rhythm Highway */
-            gu_rect(144, 118, 192, 154, RGB(12, 10, 24));
-            unsigned int lcols[4] = { RGB(255,80,180), RGB(80,255,140), RGB(255,70,70), RGB(0,220,255) };
-            for (int l = 0; l < 4; l++) {
-                gu_rect(148 + l * 46, HIT_Y - 4, 40, 8, lcols[l]);
-            }
-            for (int i = 0; i < 24; i++) if (notes[i].active) {
-                gu_rect(152 + notes[i].lane * 46, (int)notes[i].y - 5, 32, 10, lcols[notes[i].lane]);
-            }
-        }
+            if (inTitle) {
+                draw_ff_window(fb, 64, 52, 352, 168);
+                draw_text(fb, 115, 72, "S Y M P H O N Y   O F   T H E   A B Y S S", RGB(255, 225, 80));
+                draw_text(fb, 138, 92, "32-BIT GUITAR HERO + RPG ROGUELIKE", RGB(100, 235, 255));
+                draw_spr24(fb, spr_bard,  192, 110);
+                draw_spr24(fb, spr_band1, 228, 110);
+                draw_spr24(fb, spr_band2, 264, 110);
+                sprintf(buf, "RECORD MAXIMO: %d PTS", best);
+                draw_text(fb, 174, 144, buf, RGB(140, 255, 160));
+                draw_text(fb, 136, 170, "> PULSA [X] O [START] PARA JUGAR <", RGB(255, 255, 255));
+                draw_text(fb, 92, 194, "Explora el Reino, Toca Melodias y Vence al Mal", RGB(190, 205, 235));
+            } else if (inStory) {
+                draw_ff_window(fb, 64, 56, 352, 160);
+                const unsigned int *bspr = (chapter == 0) ? boss_golem : (chapter == 1 ? boss_automaton : boss_dragon);
+                draw_boss64(fb, bspr, 82, 86, 0);
+                sprintf(buf, "DUNGEON %d: %s", chapter + 1, bossNames[chapter]);
+                draw_text(fb, 158, 78, buf, RGB(255, 225, 80));
+                sprintf(buf, "DEBILIDAD: %s (Dano x2)", styleNames[bossWeak[chapter]]);
+                draw_text(fb, 158, 104, buf, RGB(100, 255, 160));
+                draw_text(fb, 158, 130, "Combate por turnos clasico FF.", RGB(220, 230, 255));
+                draw_text(fb, 158, 146, "Toca las notas para atacar!", RGB(220, 230, 255));
+                draw_text(fb, 165, 182, "> PULSA [X] PARA LUCHAR <", RGB(255, 235, 90));
+            } else if (inRelic) {
+                draw_ff_window(fb, 56, 52, 368, 168);
+                draw_spr24(fb, spr_chest, 228, 62);
+                draw_text(fb, 140, 92, "BOSS DERROTADO! ELIGE RELIQUIA:", RGB(255, 225, 80));
+                draw_text(fb, 96, 118, "[[]] Amplificador (+4 Dano por Nota)", RGB(255, 140, 210));
+                draw_text(fb, 96, 144, "[Tri] Pua Vampirica (+3 HP por Perfect)", RGB(120, 255, 150));
+                draw_text(fb, 96, 170, "[O] Escudo Ritmico (-40% Dano + Cura 100%)", RGB(100, 225, 255));
+            } else if (gameOver || victory) {
+                draw_ff_window(fb, 80, 66, 320, 140);
+                draw_text(fb, 168, 90, victory ? "LEYENDA DEL ROCK!" : "CAISTE EN EL ABISMO", victory ? RGB(255,230,80) : RGB(255,80,90));
+                draw_text(fb, 118, 112, victory ? "Has liberado los 3 Reinos del Mal!" : "Muerte permanente: la historia reinicia.", RGB(210, 225, 255));
+                sprintf(buf, "PUNTOS: %d   RECORD: %d", score, best);
+                draw_text(fb, 148, 140, buf, RGB(140, 255, 160));
+                draw_text(fb, 148, 172, "Pulsa [X] para Nueva Partida", RGB(255, 255, 255));
+            } else {
+                /* Battle Scene: Top Status Windows + 32-bit Character & Boss Sprites */
+                draw_ff_window(fb, 8, 6, 184, 36);
+                fill_rect(fb, 16, 14, 168, 8, RGB(30, 20, 35));
+                fill_rect(fb, 16, 14, (pHp * 168) / pMaxHp, 8, RGB(60, 215, 255));
+                sprintf(buf, "BANDA HP:%d/%d MP:%d", pHp, pMaxHp, pMp);
+                draw_text(fb, 16, 26, buf, RGB(220, 240, 255));
 
-        sceGuFinish();
-        sceGuSync(0, 0);
+                draw_ff_window(fb, 288, 6, 184, 36);
+                fill_rect(fb, 296, 14, 168, 8, RGB(30, 20, 35));
+                fill_rect(fb, 296, 14, (bHp * 168) / bMaxHp, 8, RGB(255, 55, 85));
+                draw_text(fb, 296, 26, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 180, 180));
 
-        char buf[64];
-        if (inTitle) {
-            draw_text(fb, 118, 76, "S Y M P H O N Y   O F   T H E   A B Y S S", RGB(255, 225, 80));
-        } else if (inOverworld) {
-            sprintf(buf, "MODO AVENTURA | HP:%d | BOSSES:%d/3 | POS:(%d,%d)", pHp, bossDefeated[0]+bossDefeated[1]+bossDefeated[2], mapX, mapY);
-            draw_text(fb, 10, 8, buf, RGB(255, 235, 100));
-            if (dlgTimer > 0) draw_text(fb, 24, 238, dlgText, RGB(255, 255, 255));
-            draw_text(fb, 145, 96, "32-BIT GUITAR HERO + RPG ROGUELIKE", RGB(0, 235, 255));
-            sprintf(buf, "RECORD: %d PTS", best);
-            draw_text(fb, 190, 126, buf, RGB(140, 255, 160));
-            draw_text(fb, 148, 160, "Pulsa [X] o [START] para Tocar!", RGB(255, 255, 255));
-            draw_text(fb, 98, 186, "L/R: Cambiar Estilo | [] Tri O X: Notas", RGB(190, 200, 230));
-        } else if (inStory) {
-            sprintf(buf, "CAPITULO %d: %s", chapter + 1, bossNames[chapter]);
-            draw_text(fb, 135, 84, buf, RGB(255, 225, 80));
-            sprintf(buf, "DEBILIDAD MUSICAL: %s", styleNames[bossWeak[chapter]]);
-            draw_text(fb, 145, 114, buf, RGB(0, 235, 255));
-            draw_text(fb, 120, 144, "Usa L/R para elegir su estilo debil!", RGB(255, 255, 255));
-            draw_text(fb, 155, 178, "Pulsa [X] para Comenzar", RGB(140, 255, 160));
-        } else if (inRelic) {
-            draw_text(fb, 165, 78, "BOSS DERROTADO! ELIGE RELIQUIA:", RGB(255, 225, 80));
-            draw_text(fb, 105, 110, "[[]] Amplificador (+4 Dano por Nota)", RGB(255, 120, 200));
-            draw_text(fb, 105, 136, "[Tri] Pua Vampirica (+3 HP por Perfect)", RGB(120, 255, 140));
-            draw_text(fb, 105, 162, "[O] Escudo Ritmico (-40% Dano + Cura)", RGB(100, 220, 255));
-        } else if (gameOver || victory) {
-            draw_text(fb, 175, 92, victory ? "LEYENDA DEL ROCK!" : "RITMO ROTO...", victory ? RGB(255,230,80) : RGB(255,70,90));
-            sprintf(buf, "PUNTOS: %d   RECORD: %d", score, best);
-            draw_text(fb, 148, 128, buf, RGB(255, 255, 255));
-            draw_text(fb, 155, 164, "Pulsa [X] para Reintentar", RGB(160, 225, 255));
-        } else if (inFFMenu) {
-            sprintf(buf, "HP:%d  MP:%d", pHp, pMp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
-            draw_text(fb, 306, 28, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 140, 140));
-            const char *opts[4] = { "ATACAR (Melodia)", "ESTILO MUSICAL", "CURAR (+40HP 15MP)", "HUIR" };
-            for (int i = 0; i < 4; i++) {
-                draw_text(fb, 28, 174 + i * 20, ffCursor == i ? ">" : " ", RGB(255, 235, 80));
-                draw_text(fb, 40, 174 + i * 20, opts[i], ffCursor == i ? RGB(255, 235, 80) : RGB(255, 255, 255));
+                /* Draw Band on Left & Boss/Monster on Right */
+                draw_spr24_scaled(fb, spr_band2, 14, 70, 2);
+                draw_spr24_scaled(fb, spr_band1, 36, 92, 2);
+                draw_spr24_scaled(fb, spr_bard,  64, 82, 2);
+
+                const unsigned int *espr;
+                if (isMobBattle) espr = (chapter == 0) ? mob_slime : (chapter == 1 ? mob_goblin : mob_wraith);
+                else             espr = (chapter == 0) ? boss_golem : (chapter == 1 ? boss_automaton : boss_dragon);
+                draw_boss64(fb, espr, 376, 72, bossHitFlash > 0);
+
+                if (inFFMenu) {
+                    /* Classic Final Fantasy Turn-Based Command Menu */
+                    draw_ff_window(fb, 12, 162, 224, 102);
+                    draw_ff_window(fb, 244, 162, 224, 102);
+                    const char *opts[4] = {
+                        "ATACAR (Melodia)",
+                        "CAMBIAR ESTILO",
+                        "CURAR (+45HP / 15MP)",
+                        "HUIR"
+                    };
+                    for (int i = 0; i < 4; i++) {
+                        draw_text(fb, 24, 174 + i * 21, ffCursor == i ? ">" : " ", RGB(255, 235, 80));
+                        draw_text(fb, 36, 174 + i * 21, opts[i], ffCursor == i ? RGB(255, 235, 80) : RGB(255, 255, 255));
+                    }
+                    sprintf(buf, "ESTILO: %s", styleNames[curStyle]);
+                    draw_text(fb, 256, 176, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 225, 90));
+                    sprintf(buf, "DEBIL A: %s", styleNames[bossWeak[chapter]]);
+                    draw_text(fb, 256, 198, buf, RGB(180, 220, 255));
+                    sprintf(buf, "ENEMIGO HP: %d/%d", bHp, bMaxHp);
+                    draw_text(fb, 256, 220, buf, RGB(255, 170, 170));
+                    draw_text(fb, 256, 242, "TURNO DE TU BANDA [X]", RGB(255, 255, 255));
+                } else if (inDefense) {
+                    /* Enemy Turn: Dodge Box */
+                    draw_ff_window(fb, 128, 114, 224, 150);
+                    draw_text(fb, 140, 98, "TURNO ENEMIGO: ESQUIVA!", RGB(255, 90, 90));
+                    draw_spr24(fb, spr_bard, (int)bardX - 12, (int)bardY - 12);
+                    for (int p = 0; p < 6; p++) if (projAlive[p]) {
+                        fill_rect(fb, (int)projX[p] - 5, (int)projY[p] - 5, 10, 10, RGB(255, 60, 80));
+                        draw_border(fb, (int)projX[p] - 5, (int)projY[p] - 5, 10, 10, RGB(255, 230, 90));
+                    }
+                } else {
+                    /* Guitar Hero 4-Lane Rhythm Highway */
+                    draw_ff_window(fb, 140, 114, 200, 152);
+                    unsigned int lcols[4] = { RGB(255,80,180), RGB(80,255,140), RGB(255,70,70), RGB(0,220,255) };
+                    for (int l = 0; l < 4; l++) {
+                        int lx = 148 + l * 47;
+                        fill_rect(fb, lx + 18, 118, 2, 142, RGB(45, 50, 90));
+                        fill_rect(fb, lx, HIT_Y - 7, 38, 14, RGB(25, 30, 65));
+                        draw_border(fb, lx, HIT_Y - 7, 38, 14, lcols[l]);
+                        draw_text(fb, lx + 13, HIT_Y - 3, laneLabels[l], RGB(255, 255, 255));
+                    }
+                    for (int i = 0; i < 24; i++) if (notes[i].active) {
+                        int lx = 151 + notes[i].lane * 47;
+                        int ny = (int)notes[i].y;
+                        fill_rect(fb, lx, ny - 6, 32, 12, lcols[notes[i].lane]);
+                        draw_border(fb, lx, ny - 6, 32, 12, RGB(255, 255, 255));
+                        draw_text(fb, lx + 10, ny - 3, laneLabels[notes[i].lane], RGB(255, 255, 255));
+                    }
+                    sprintf(buf, "ESTILO:%s  COMBO:x%d", styleNames[curStyle], combo);
+                    draw_text(fb, 158, 98, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
+                    if (judgeT > 0) draw_text(fb, 185, 82, judge, RGB(255, 255, 120));
+                }
             }
-            sprintf(buf, "ESTILO: %s", styleNames[curStyle]);
-            draw_text(fb, 258, 176, buf, RGB(120, 255, 160));
-            draw_text(fb, 258, 200, "Elige accion [X]", RGB(200, 220, 255));
-        } else if (inDefense) {
-            sprintf(buf, "HP:%d", pHp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
-            draw_text(fb, 306, 28, bossNames[chapter], RGB(255, 140, 140));
-            draw_text(fb, 130, 56, "FASE 3: ESQUIVA EL ATAQUE DEL BOSS!", RGB(255, 90, 90));
-        } else {
-            sprintf(buf, "HP:%d", pHp); draw_text(fb, 16, 28, buf, RGB(140, 230, 255));
-            draw_text(fb, 306, 28, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 140, 140));
-            for (int l = 0; l < 4; l++) {
-                draw_text(fb, 162 + l * 46, HIT_Y - 3, laneLabels[l], RGB(255, 255, 255));
-            }
-            sprintf(buf, "ESTILO:%s  COMBO:x%d", styleNames[curStyle], combo);
-            draw_text(fb, 165, 102, buf, curStyle == bossWeak[chapter] ? RGB(100, 255, 140) : RGB(255, 235, 100));
-            if (judgeT > 0) draw_text(fb, 190, 122, judge, RGB(255, 255, 255));
         }
 
         sceDisplayWaitVblankStart();
-        sceGuSwapBuffers();
+        sceDisplaySetFrameBuf(fb, BUF_W, PSP_DISPLAY_PIXEL_FORMAT_8888, PSP_DISPLAY_SETBUF_IMMEDIATE);
         cur_fb ^= 1;
     }
 
@@ -512,7 +695,6 @@ int main(void) {
     arun = 0;
     if (ath >= 0) sceKernelWaitThreadEnd(ath, NULL);
     if (ach >= 0) sceAudioChRelease(ach);
-    sceGuTerm();
     sceKernelExitGame();
     return 0;
 }
