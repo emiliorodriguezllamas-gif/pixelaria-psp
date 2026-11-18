@@ -310,20 +310,20 @@ void render3d_frame(void) {
     if (ui.inTitle) {
         fill_rect(fb, 110, 18, 260, 44, RGB(14, 18, 32));
         draw_outline(fb, 110, 18, 260, 44, RGB(70, 200, 255));
-        draw_text(154, 28, "N O V A   W I N G   6 4", RGB(255, 235, 120));
-        draw_text(150, 44, "3D HARDWARE SPACE COMBAT", RGB(100, 225, 255));
+        draw_text(fb, 154, 28, "N O V A   W I N G   6 4", RGB(255, 235, 120));
+        draw_text(fb, 150, 44, "3D HARDWARE SPACE COMBAT", RGB(100, 225, 255));
 
         sprintf(buf, "RECORD MAXIMO: %d PTS", player.bestScore);
-        draw_text(165, 198, buf, RGB(140, 255, 160));
-        draw_text(152, 222, "Pulsa [X] o [START] para Despegar!", RGB(255, 255, 255));
-        draw_text(80, 248, "L/R: Barrel Roll | X: Laser | Tri: Misil Guiado | O: Bomba", RGB(170, 190, 220));
+        draw_text(fb, 165, 198, buf, RGB(140, 255, 160));
+        draw_text(fb, 152, 222, "Pulsa [X] o [START] para Despegar!", RGB(255, 255, 255));
+        draw_text(fb, 80, 248, "L/R: Barrel Roll | X: Laser | Tri: Misil Guiado | O: Bomba", RGB(170, 190, 220));
     } else if (ui.gameOver || ui.victory) {
         fill_rect(fb, 90, 70, 300, 120, RGB(14, 18, 28));
         draw_outline(fb, 90, 70, 300, 120, ui.victory ? RGB(255,220,80) : RGB(255,60,60));
-        draw_text(155, 90, ui.victory ? "GALAXIA LIBERADA!" : "NAVE DESTRUIDA", ui.victory ? RGB(255,230,90) : RGB(255,90,90));
+        draw_text(fb, 155, 90, ui.victory ? "GALAXIA LIBERADA!" : "NAVE DESTRUIDA", ui.victory ? RGB(255,230,90) : RGB(255,90,90));
         sprintf(buf, "PUNTUACION: %d   RECORD: %d", player.score, player.bestScore);
-        draw_text(135, 122, buf, RGB(230, 240, 255));
-        draw_text(145, 158, "Pulsa [X] para volver al Menu", RGB(180, 220, 255));
+        draw_text(fb, 135, 122, buf, RGB(230, 240, 255));
+        draw_text(fb, 145, 158, "Pulsa [X] para volver al Menu", RGB(180, 220, 255));
     } else {
         /* 3D Crosshair Reticle */
         int rx, ry;
@@ -338,29 +338,29 @@ void render3d_frame(void) {
                 int lx, ly;
                 project_3d(enemies[ei].x, enemies[ei].y, enemies[ei].z, &lx, &ly);
                 draw_outline(fb, lx - 12, ly - 12, 24, 24, RGB(80, 255, 110));
-                draw_text(lx - 10, ly - 20, "LOCK", RGB(80, 255, 110));
+                draw_text(fb, lx - 10, ly - 20, "LOCK", RGB(80, 255, 110));
             }
         }
 
         /* Shield & Boost Bars (Top-Left) */
         fill_rect(fb, 6, 6, 146, 26, RGB(12, 16, 26));
         draw_outline(fb, 6, 6, 146, 26, RGB(60, 140, 210));
-        draw_text(10, 10, "SHD", RGB(180, 225, 255));
+        draw_text(fb, 10, 10, "SHD", RGB(180, 225, 255));
         int hpW = (player.hp * 108) / (player.maxHp > 0 ? player.maxHp : 100);
         if (hpW < 0) hpW = 0; if (hpW > 108) hpW = 108;
         fill_rect(fb, 34, 10, 110, 7, RGB(30, 38, 52));
         fill_rect(fb, 35, 11, hpW, 5, player.hp > 30 ? RGB(60, 210, 255) : RGB(255, 60, 60));
 
-        draw_text(10, 21, "BST", RGB(255, 220, 120));
+        draw_text(fb, 10, 21, "BST", RGB(255, 220, 120));
         int bW = (player.boost * 108) / 100;
         fill_rect(fb, 34, 21, 110, 7, RGB(30, 38, 52));
         fill_rect(fb, 35, 22, bW, 5, RGB(255, 195, 50));
 
         /* Score, Stage & Bombs (Top-Right) */
         sprintf(buf, "ZONA %d | PTS:%d", player.stage, player.score);
-        draw_text(320, 8, buf, RGB(255, 235, 120));
+        draw_text(fb, 320, 8, buf, RGB(255, 235, 120));
         sprintf(buf, "BOMBAS:%d  COMBO:x%d", player.bombs, player.combo > 1 ? player.combo : 1);
-        draw_text(320, 20, buf, RGB(140, 255, 170));
+        draw_text(fb, 320, 20, buf, RGB(140, 255, 170));
 
         /* Boss HP Bar */
         for (int i = 0; i < MAX_ENEMIES; i++) {
@@ -370,15 +370,15 @@ void render3d_frame(void) {
                 int bw = (enemies[i].hp * 232) / (enemies[i].maxHp > 0 ? enemies[i].maxHp : 1);
                 if (bw < 0) bw = 0; if (bw > 232) bw = 232;
                 fill_rect(fb, 124, 41, bw, 5, RGB(255, 55, 85));
-                draw_text(175, 39, "DREADNOUGHT BOSS", RGB(255, 220, 180));
+                draw_text(fb, 175, 39, "DREADNOUGHT BOSS", RGB(255, 220, 180));
                 break;
             }
         }
 
         if (ui.msgTimer > 0) {
-            draw_text(10, 256, ui.msg, RGB(140, 245, 255));
+            draw_text(fb, 10, 256, ui.msg, RGB(140, 245, 255));
         }
-        draw_text(310, 256, "[X]Laser [^]Misil [O]Bomba", RGB(160, 180, 210));
+        draw_text(fb, 310, 256, "[X]Laser [^]Misil [O]Bomba", RGB(160, 180, 210));
     }
 
     sceDisplayWaitVblankStart();
