@@ -991,8 +991,8 @@ static void draw_tile_vegetation(unsigned int *fb, int wx, int wy, int sx, int s
     if (isWater) {
         if ((h % 19u) == 0u) {
             int lx = sx + 5 + (int)(h % 10u), ly = sy + 6 + (int)((h >> 4) % 10u);
-            fill_ellipse_alpha(fb, lx + 4, ly + 3, 5, 3, RGB(32, 130, 62), 210);
-            fill_rect_alpha(fb, lx + 3, ly + 1, 2, 2, RGB(245, 165, 205), 220);
+            fill_rect(fb, lx, ly + 1, 8, 5, RGB(32, 130, 62));
+            fill_rect(fb, lx + 3, ly + 1, 2, 2, RGB(245, 165, 205));
         }
         return;
     }
@@ -1087,14 +1087,24 @@ static void update_draw_weather_and_lighting(unsigned int *fb, int mapXPos, int 
             fill_rect_alpha(fb, ex, ey, 2, 2, (e & 1) ? RGB(255, 155, 45) : RGB(255, 85, 35), 185);
         }
     } else if (weatherMode == 2 || weatherMode == 3) {
-        /* Overcast cool lighting + diagonal rain + ground splashes */
-        fill_rect_alpha(fb, 0, 24, SCR_W, SCR_H - 24, RGB(14, 24, 52), (weatherMode == 3) ? 46 : 30);
-        int dropCount = (weatherMode == 3) ? MAX_RAIN : 36;
+        /* Fast 64-bit cool overcast mood tint (2 pixels per iteration, zero multiplies) */
+        for (int y = 24; y < SCR_H; y++) {
+            unsigned long long *row64 = (unsigned long long *)&fb[y * BUF_W];
+            unsigned long long addBlue = (weatherMode == 3) ? 0x0014080200140802ULL : 0x000E0501000E0501ULL;
+            for (int x = 0; x < SCR_W / 2; x++) {
+                unsigned long long p = row64[x];
+                unsigned long long half = (p & 0x00FEFEFE00FEFEFEULL) >> 1;
+                unsigned long long qtr  = (p & 0x00FCFCFC00FCFCFCULL) >> 2;
+                row64[x] = 0xFF000000FF000000ULL | (half + qtr + addBlue);
+            }
+        }
+        int dropCount = (weatherMode == 3) ? 32 : 22;
+        if (dropCount > MAX_RAIN) dropCount = MAX_RAIN;
         for (int i = 0; i < dropCount; i++) {
             RainDrop *r = &rain[i];
             if (r->splash > 0) {
                 int rad = 5 - r->splash;
-                fill_ellipse_alpha(fb, (int)r->x, (int)r->y, rad, 2, RGB(180, 220, 255), r->splash * 35);
+                fill_rect_alpha(fb, (int)r->x - rad, (int)r->y, rad * 2 + 1, 1, RGB(180, 220, 255), r->splash * 38);
                 r->splash--;
                 if (r->splash == 0) {
                     r->x = (float)(xr() % (SCR_W + 40));
@@ -1106,8 +1116,7 @@ static void update_draw_weather_and_lighting(unsigned int *fb, int mapXPos, int 
                 r->y += r->spd;
                 int rx = (int)r->x, ry = (int)r->y;
                 if (rx >= 0 && rx < SCR_W && ry >= 24 && ry < SCR_H - 6) {
-                    fill_rect_alpha(fb, rx, ry, 1, 5, RGB(175, 215, 255), 155);
-                    fill_rect_alpha(fb, rx + 1, ry - 4, 1, 4, RGB(140, 185, 235), 95);
+                    fill_rect(fb, rx, ry, 1, 5, RGB(175, 215, 255));
                 }
                 if (r->y >= r->groundY || r->y >= SCR_H - 4) {
                     r->splash = 4;
@@ -1140,13 +1149,13 @@ static void update_draw_weather_and_lighting(unsigned int *fb, int mapXPos, int 
 static void draw_chimney_smoke(unsigned int *fb, int cx, int cy, int wx, int wy) {
     for (int k = 0; k < 3; k++) {
         int phase = (animFrame + k * 36 + wx * 17 + wy * 31) % 108;
-        float t = (float)phase / 108.0f;
-        int py = cy - (int)(t * 30.0f);
-        int px = cx + (int)(t * 11.0f + sinf(t * 6.28318f + (float)wx) * 2.5f);
-        int rx = 3 + (int)(t * 6.0f);
-        int ry = 2 + (int)(t * 4.0f);
-        int a = (int)((1.0f - t) * 78.0f);
-        if (a > 8) fill_ellipse_alpha(fb, px, py, rx, ry, RGB(205, 212, 224), a);
+        int py = cy - (phase * 30) / 108;
+        int sw = ((phase >> 3) & 1) ? 2 : -2;
+        int px = cx + (phase * 11) / 108 + sw;
+        int rx = 3 + (phase * 6) / 108;
+        int ry = 2 + (phase * 4) / 108;
+        int a = ((108 - phase) * 78) / 108;
+        if (a > 8) fill_rect_alpha(fb, px - rx, py - ry, rx * 2, ry * 2, RGB(205, 212, 224), a);
     }
 }
 
@@ -1154,9 +1163,16 @@ static void draw_chimney_smoke(unsigned int *fb, int cx, int cy, int wx, int wy)
 typedef struct { int x, y, r, g, b, rad; } LightSrc;
 
 static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int ambB, const LightSrc *ls, int nLights) {
+    int allNeutral = (ambR == 256 && ambG == 256 && ambB == 256);
+    if (nLights <= 0 && allNeutral) return;
+    static unsigned char clampLUT[512];
+    static int lutInit = 0;
+    if (!lutInit) {
+        for (int i = 0; i < 512; i++) clampLUT[i] = (unsigned char)(i > 255 ? 255 : i);
+        lutInit = 1;
+    }
     static short gR[18][31], gG[18][31], gB[18][31];
     unsigned char rowDirty[18];
-    int allNeutral = (ambR == 256 && ambG == 256 && ambB == 256);
     for (int gy = 0; gy < 18; gy++) {
         rowDirty[gy] = allNeutral ? 0 : 1;
         for (int gx = 0; gx < 31; gx++) {
@@ -1217,12 +1233,9 @@ static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int 
             int baseX = bx << 4;
             for (int i = 0; i < 16; i++) {
                 unsigned int c = dst[baseX + i];
-                unsigned int r = ((c & 0xFFu) * (unsigned int)(lr >> 4)) >> 8;
-                unsigned int g = (((c >> 8) & 0xFFu) * (unsigned int)(lg >> 4)) >> 8;
-                unsigned int b = (((c >> 16) & 0xFFu) * (unsigned int)(lb >> 4)) >> 8;
-                r = (r > 255u) ? 255u : r;
-                g = (g > 255u) ? 255u : g;
-                b = (b > 255u) ? 255u : b;
+                unsigned int r = clampLUT[((c & 0xFFu) * (unsigned int)(lr >> 4)) >> 8];
+                unsigned int g = clampLUT[(((c >> 8) & 0xFFu) * (unsigned int)(lg >> 4)) >> 8];
+                unsigned int b = clampLUT[(((c >> 16) & 0xFFu) * (unsigned int)(lb >> 4)) >> 8];
                 dst[baseX + i] = 0xFF000000u | (b << 16) | (g << 8) | r;
                 lr += dlr; lg += dlg; lb += dlb;
             }
@@ -2520,7 +2533,7 @@ int main(void) {
                 int sx = (roam[i].x - ox) * 30 + camOffX, sy = (roam[i].y - oy) * 30 - 4 + camOffY;
                 if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                     int mBob = ((animFrame / 14 + i) & 1);
-                    fill_ellipse_alpha(fb, sx + 15, sy + 26, 11, 5, RGB(190, 30, 45), 115);
+                    fill_rect_alpha(fb, sx + 5, sy + 24, 20, 4, RGB(190, 30, 45), 115);
                     const unsigned int *mspr = (roam[i].type == 0) ? mob_slime : (roam[i].type == 1 ? mob_goblin : mob_wraith);
                     draw_spr64_to_30(fb, mspr, sx, sy - mBob, roam[i].flip);
                 }
@@ -2530,7 +2543,7 @@ int main(void) {
                 int sx = (townNpcs[i].x - ox) * 30 + camOffX, sy = (townNpcs[i].y - oy) * 30 - 4 + camOffY;
                 if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                     int bob = ((animFrame / 16 + i) & 1);
-                    fill_ellipse_alpha(fb, sx + 15, sy + 26, 10, 4, RGB(0, 0, 0), 115);
+                    fill_rect_alpha(fb, sx + 6, sy + 24, 18, 4, RGB(0, 0, 0), 115);
                     const unsigned int *tspr = (townNpcs[i].kind == 0) ? spr_npc_villager : spr_npc_guard;
                     draw_spr24_30_dir(fb, tspr, sx, sy - bob, townNpcs[i].flip);
                 }
@@ -2541,7 +2554,7 @@ int main(void) {
                 if (mx >= -30 && mx < SCR_W && my >= -30 && my < SCR_H) {
                     int mFlip = (mapX < shopMerchX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i) & 1);
-                    fill_ellipse_alpha(fb, mx + 15, my + 26, 10, 4, RGB(0, 0, 0), 120);
+                    fill_rect_alpha(fb, mx + 6, my + 24, 18, 4, RGB(0, 0, 0), 120);
                     draw_spr24_30_dir(fb, spr_npc_merchant, mx, my - bob, mFlip);
                     draw_text(fb, mx + 12, my - 9 - bob, "$", RGB(110, 255, 140));
                 }
@@ -2549,7 +2562,7 @@ int main(void) {
                 if (ax >= -30 && ax < SCR_W && ay >= -30 && ay < SCR_H) {
                     int aFlip = (mapX < shopAlchX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i + 1) & 1);
-                    fill_ellipse_alpha(fb, ax + 15, ay + 26, 10, 4, RGB(0, 0, 0), 120);
+                    fill_rect_alpha(fb, ax + 6, ay + 24, 18, 4, RGB(0, 0, 0), 120);
                     draw_spr24_30_dir(fb, spr_npc_alchemist, ax, ay - bob, aFlip);
                     draw_text(fb, ax + 12, ay - 9 - bob, "A", RGB(110, 225, 255));
                 }
@@ -2627,13 +2640,14 @@ int main(void) {
             }
             update_draw_weather_and_lighting(fb, mapX, mapY);
 
-            /* RTX Real-Time Shader Lighting Pass (Dynamic Point Lights, HDR Bloom & Ambient Mood) */
+            /* RTX Real-Time Shader Lighting Pass (Dynamic Point Lights & Ambient Mood) */
             {
                 LightSrc rtxL[12];
                 int nL = 0;
-                int flicker = (int)(sinf((float)animFrame * 0.17f) * 14.0f);
-                if (weatherMode >= 1 || mapX >= 165) {
-                    rtxL[nL++] = (LightSrc){ 255, 130, 110 + flicker / 2, 95 + flicker / 2, 65, 92 };
+                int inVolc = (mapX >= 165 && mapY < 85);
+                int flicker = ((animFrame & 16) ? 6 : -6);
+                if (inVolc) {
+                    rtxL[nL++] = (LightSrc){ 255, 130, 110 + flicker / 2, 95 + flicker / 2, 65, 72 };
                 }
                 for (int ty = 0; ty < 10 && nL < 12; ty++) {
                     for (int tx = 0; tx < 16 && nL < 12; tx++) {
@@ -2641,16 +2655,15 @@ int main(void) {
                         if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
                             unsigned char t = worldMap[wy][wx];
                             int lx = tx * 30 + 15, ly = ty * 30 + 11;
-                            if (t == 14) rtxL[nL++] = (LightSrc){ lx, ly, 210 + flicker, 155 + flicker, 70, 110 };
-                            else if (t == 9) rtxL[nL++] = (LightSrc){ lx, ly, 70, 185, 230, 95 };
-                            else if (t == 5) rtxL[nL++] = (LightSrc){ lx, ly, 185, 75, 235, 100 };
+                            if (t == 14) rtxL[nL++] = (LightSrc){ lx, ly, 195 + flicker, 145 + flicker, 65, 64 };
+                            else if (t == 9) rtxL[nL++] = (LightSrc){ lx, ly, 65, 175, 220, 56 };
+                            else if (t == 5) rtxL[nL++] = (LightSrc){ lx, ly, 175, 70, 225, 60 };
                         }
                     }
                 }
-                int inVolc = (mapX >= 165 && mapY < 85);
-                int ambR = inVolc ? 235 : (weatherMode >= 2 ? 155 : (weatherMode == 1 ? 195 : 256));
-                int ambG = inVolc ? 185 : (weatherMode >= 2 ? 170 : (weatherMode == 1 ? 205 : 256));
-                int ambB = inVolc ? 165 : (weatherMode >= 2 ? 210 : (weatherMode == 1 ? 225 : 256));
+                int ambR = inVolc ? 235 : 256;
+                int ambG = inVolc ? 185 : 256;
+                int ambB = inVolc ? 165 : 256;
                 apply_rtx_shader_lighting(fb, ambR, ambG, ambB, rtxL, nL);
             }
 
