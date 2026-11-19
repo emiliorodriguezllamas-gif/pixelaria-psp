@@ -315,52 +315,17 @@ static void draw_spr32_scale2x(unsigned int *fb, const unsigned int *spr, int dx
     }
 }
 
-static void draw_spr32_96_scale2x(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
-    static const unsigned int *ptrs[4] = {0};
-    static unsigned int data[4][96 * 96];
-    static int count = 0;
-    const unsigned int *cached = NULL;
-    for (int k = 0; k < count; k++) if (ptrs[k] == spr) { cached = data[k]; break; }
-    if (!cached) {
-        int slot = (count < 4) ? count++ : 3;
-        ptrs[slot] = spr;
-        static unsigned int tmp64[64 * 64];
-        for (int y = 0; y < 32; y++) {
-            int ym = (y > 0) ? y - 1 : 0, yp = (y < 31) ? y + 1 : 31;
-            for (int x = 0; x < 32; x++) {
-                unsigned int P = spr[y * 32 + x];
-                int xm = (x > 0) ? x - 1 : 0, xp = (x < 31) ? x + 1 : 31;
-                unsigned int A = spr[ym * 32 + x], B = spr[y * 32 + xp];
-                unsigned int C = spr[y * 32 + xm], D = spr[yp * 32 + x];
-                unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
-                if (C == A && C != D && A != B) e0 = A;
-                if (A == B && A != C && B != D) e1 = B;
-                if (D == C && D != B && C != A) e2 = C;
-                if (B == D && B != A && D != C) e3 = D;
-                int idx = (y * 2) * 64 + (x * 2);
-                tmp64[idx] = e0; tmp64[idx + 1] = e1;
-                tmp64[idx + 64] = e2; tmp64[idx + 65] = e3;
-            }
-        }
-        for (int j = 0; j < 96; j++) {
-            int sj = (j * 64) / 96;
-            for (int i = 0; i < 96; i++) data[slot][j * 96 + i] = tmp64[sj * 64 + (i * 64) / 96];
-        }
-        cached = data[slot];
-    }
-    for (int j = 0; j < 96; j++) {
-        int py = dy + j;
-        if ((unsigned)py >= SCR_H) continue;
-        unsigned int *dst = &fb[py * BUF_W];
-        const unsigned int *src = &cached[j * 96];
-        for (int i = 0; i < 96; i++) {
-            int px = dx + i;
-            if ((unsigned)px < SCR_W) {
-                unsigned int c = src[i];
-                if (c) dst[px] = c;
-            }
-        }
-    }
+static unsigned int sample_bilinear_opaque(const unsigned int *src, int sw, int sh, int sxfp, int syfp) {
+    int x0 = sxfp >> 8, y0 = syfp >> 8, fx = sxfp & 255, fy = syfp & 255;
+    int x1 = (x0 + 1 < sw) ? x0 + 1 : sw - 1;
+    int y1 = (y0 + 1 < sh) ? y0 + 1 : sh - 1;
+    unsigned int c00 = src[y0 * sw + x0], c10 = src[y0 * sw + x1];
+    unsigned int c01 = src[y1 * sw + x0], c11 = src[y1 * sw + x1];
+    unsigned int center = src[((syfp + 128) >> 8) * sw + ((sxfp + 128) >> 8)];
+    if (!center) return 0;
+    if (!c00) c00 = center; if (!c10) c10 = center;
+    if (!c01) c01 = center; if (!c11) c11 = center;
+    return 0xFF000000u | blend_rgb_4(c00, c10, c01, c11, fx, fy);
 }
 
 static void draw_spr32_40_scale2x(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
@@ -387,8 +352,8 @@ static void draw_spr32_40_scale2x(unsigned int *fb, const unsigned int *spr, int
             }
         }
         for (int j = 0; j < 40; j++) {
-            int sj = (j * 64) / 40;
-            for (int i = 0; i < 40; i++) data[j * 40 + i] = tmp64[sj * 64 + (i * 64) / 40];
+            int syfp = (j * 63 * 256) / 39;
+            for (int i = 0; i < 40; i++) data[j * 40 + i] = sample_bilinear_opaque(tmp64, 64, 64, (i * 63 * 256) / 39, syfp);
         }
     }
     for (int j = 0; j < 40; j++) {
@@ -434,8 +399,8 @@ static void draw_spr24_30_dir(unsigned int *fb, const unsigned int *spr, int dx,
             }
         }
         for (int j = 0; j < 30; j++) {
-            int sj = (j * 48) / 30;
-            for (int i = 0; i < 30; i++) data[slot][j * 30 + i] = tmp48[sj * 48 + (i * 48) / 30];
+            int syfp = (j * 47 * 256) / 29;
+            for (int i = 0; i < 30; i++) data[slot][j * 30 + i] = sample_bilinear_opaque(tmp48, 48, 48, (i * 47 * 256) / 29, syfp);
         }
         cached = data[slot];
     }
@@ -2431,7 +2396,7 @@ int main(void) {
                             draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
                         } else if (wt == 10 || wt == 11) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
-                            draw_spr32_96_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 33, sy - 66);
+                            draw_spr_wh(fb, (wt == 10) ? spr_house_96 : spr_tavern_96, 96, 96, sx - 33, sy - 66);
                             if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
                         } else if (wt == 12) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 26, 26, 8, RGB(0, 0, 0), 125);
@@ -2533,7 +2498,7 @@ int main(void) {
                             draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
                         } else if (wt == 10 || wt == 11) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
-                            draw_spr32_96_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 33, sy - 66);
+                            draw_spr_wh(fb, (wt == 10) ? spr_house_96 : spr_tavern_96, 96, 96, sx - 33, sy - 66);
                             if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
                         } else if (wt == 12) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 26, 26, 8, RGB(0, 0, 0), 125);
