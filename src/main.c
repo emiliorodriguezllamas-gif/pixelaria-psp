@@ -2331,24 +2331,23 @@ int main(void) {
                                 fill_rect_alpha(fb, sx + 26, sy, 4, 30, RGB(205, 185, 130), 175);
                             draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 1);
                         } else if (t == 4 || t >= 10) {
-                            draw_tile24_30(fb, tile_castle, sx, sy);
-                            /* Rich Town Floor Details: Golden Plaza Carpets, Flowerbeds & Festive Banners */
+                            if (t == 4 && (wx == 28 || wy == 84 || wx == 81 || wy == 60 || wx == 155 || wy == 112)) {
+                                draw_tile24_30(fb, tile_plaza, sx, sy);
+                            } else {
+                                draw_tile24_30(fb, tile_castle, sx, sy);
+                            }
+                            /* 32-Bit Image-Based Town Decorations (Flowerbeds, Benches, Crates, Barrels, Signposts) */
                             if (t == 4) {
                                 unsigned int th = ((unsigned int)wx * 2654435761u) ^ ((unsigned int)wy * 2246822519u);
-                                if (wx == 28 || wy == 84 || wx == 81 || wy == 60 || wx == 155 || wy == 112) {
-                                    fill_rect_alpha(fb, sx + 2, sy + 2, 26, 26, RGB(195, 145, 55), 55);
-                                    draw_border(fb, sx + 3, sy + 3, 24, 24, RGB(230, 190, 95));
-                                } else if ((th % 9u) == 0u) {
-                                    /* Town Flowerbed Planter */
-                                    fill_rect(fb, sx + 5, sy + 17, 20, 8, RGB(120, 75, 42));
-                                    fill_rect(fb, sx + 7, sy + 14, 16, 5, RGB(34, 130, 48));
-                                    fill_rect(fb, sx + 9, sy + 14, 3, 3, RGB(255, 110, 145));
-                                    fill_rect(fb, sx + 18, sy + 14, 3, 3, RGB(255, 225, 70));
-                                } else if (is_town_crate(wx, wy)) {
-                                    /* Solid Wooden Crate / Barrel Prop */
-                                    fill_rect(fb, sx + 8, sy + 12, 12, 12, RGB(145, 92, 46));
-                                    draw_border(fb, sx + 8, sy + 12, 12, 12, RGB(78, 45, 22));
-                                    fill_rect(fb, sx + 8, sy + 16, 12, 2, RGB(95, 95, 110));
+                                if (is_town_crate(wx, wy)) {
+                                    fill_ellipse_alpha(fb, sx + 15, sy + 26, 11, 4, RGB(0, 0, 0), 100);
+                                    draw_spr24_30(fb, (th & 1) ? spr_crates : spr_barrels, sx, sy);
+                                } else if (!(wx == 28 || wy == 84 || wx == 81 || wy == 60 || wx == 155 || wy == 112)) {
+                                    if ((th % 11u) == 0u) {
+                                        draw_spr24_30(fb, (th & 1) ? spr_flowerbed : spr_bench, sx, sy);
+                                    } else if ((th % 37u) == 0u) {
+                                        draw_spr24_30(fb, spr_signpost, sx, sy);
+                                    }
                                 }
                             }
                             if (t == 12) {
