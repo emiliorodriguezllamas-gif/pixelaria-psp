@@ -1266,9 +1266,6 @@ static int is_tile_blocked(int x, int y) {
     for (int i = 0; i < 3; i++) {
         if ((x == shopMerchX[i] && y == shopMerchY[i]) || (x == shopAlchX[i] && y == shopAlchY[i])) return 1;
     }
-    for (int i = 0; i < MAX_TOWN_NPC; i++) {
-        if (x == townNpcs[i].x && y == townNpcs[i].y) return 1;
-    }
     return 0;
 }
 
