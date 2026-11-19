@@ -2331,11 +2331,7 @@ int main(void) {
                                 fill_rect_alpha(fb, sx + 26, sy, 4, 30, RGB(205, 185, 130), 175);
                             draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 1);
                         } else if (t == 4 || t >= 10) {
-                            if (t == 4 && (wx == 28 || wy == 84 || wx == 81 || wy == 60 || wx == 155 || wy == 112)) {
-                                draw_tile24_30(fb, tile_plaza, sx, sy);
-                            } else {
-                                draw_tile24_30(fb, tile_castle, sx, sy);
-                            }
+                            draw_tile24_30(fb, tile_castle, sx, sy);
                             /* 32-Bit Image-Based Town Decorations (Flowerbeds, Benches, Crates, Barrels, Signposts) */
                             if (t == 4) {
                                 unsigned int th = ((unsigned int)wx * 2654435761u) ^ ((unsigned int)wy * 2246822519u);
