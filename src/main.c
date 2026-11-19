@@ -197,6 +197,24 @@ static void draw_spr32(unsigned int *fb, const unsigned int *spr, int dx, int dy
     }
 }
 
+static void draw_spr64_as24(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
+    for (int j = 0; j < 24; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        int sj = (j * 64) / 24;
+        const unsigned int *src = &spr[sj * 64];
+        for (int i = 0; i < 24; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                int si = ((flipX ? (23 - i) : i) * 64) / 24;
+                unsigned int c = src[si];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
 static void draw_spr16(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
     for (int j = 0; j < 16; j++) {
         int py = dy + j;
@@ -504,6 +522,29 @@ static int bardFlip = 0, band1Flip = 0, band2Flip = 0;
 static int bossDefeated[3] = { 0, 0, 0 };
 static int shrineClaimed[2] = { 0, 0 };
 static const int dngX[3] = { 88, 178, 228 };
+#define MAX_ROAM 32
+typedef struct { int x, y, type, alive, flip, respawn; } RoamMob;
+static RoamMob roam[MAX_ROAM];
+
+static void spawn_roam_mob(int idx, int nearGate) {
+    int rx = 50, ry = 84;
+    if (nearGate == 0) { rx = 43; ry = 84; }
+    else if (nearGate == 1) { rx = 48; ry = 78; }
+    else if (nearGate == 2) { rx = 28; ry = 69; }
+    else {
+        for (int tries = 0; tries < 40; tries++) {
+            int tx = 6 + (xr() % (MW - 12));
+            int ty = 6 + (xr() % (MH - 12));
+            unsigned char t = worldMap[ty][tx];
+            if ((t == 0 || t == 1 || t == 7) && (abs(tx - mapX) + abs(ty - mapY) > 10)) {
+                rx = tx; ry = ty; break;
+            }
+        }
+    }
+    roam[idx].x = rx; roam[idx].y = ry;
+    roam[idx].type = (rx < 118) ? 0 : ((ry >= 85) ? 1 : 2);
+    roam[idx].alive = 1; roam[idx].flip = 0; roam[idx].respawn = 0;
+}
 static const int dngY[3] = { 36, 138, 28 };
 static const int shrineX[2] = { 132, 206 };
 static const int shrineY[2] = { 24, 168 };
@@ -644,6 +685,7 @@ static void init_world(void) {
     mapX = 28; mapY = 84; prevX1 = 27; prevY1 = 84; prevX2 = 26; prevY2 = 84;
     bardFlip = 0; band1Flip = 0; band2Flip = 0;
     dlgTimer = 0;
+    for (int i = 0; i < MAX_ROAM; i++) spawn_roam_mob(i, i < 3 ? i : -1);
 }
 
 static void gain_xp(int amount) {
@@ -670,12 +712,9 @@ static void gain_xp(int amount) {
 static void load_best(void) { FILE *f = fopen("cb_save.dat", "rb"); if (f) { int v=0; if (fread(&v,4,1,f)==1 && v>0) best=v; fclose(f); } }
 static void save_best(void) { if (score > best) { best = score; FILE *f = fopen("cb_save.dat", "wb"); if (f) { fwrite(&best,4,1,f); fclose(f); } } }
 
-static void start_mob_battle(void) {
+static void start_mob_battle_type(int mtype) {
     isMobBattle = 1;
-    /* Region-based difficulty tier: West=Slime(0), East-South=Goblin(1), Ash-NorthEast=Wraith(2) */
-    if (mapX < 118) chapter = 0;
-    else if (mapY >= 85) chapter = 1;
-    else chapter = 2;
+    chapter = mtype;
     static const int mobHpTbl[3] = { 55, 115, 190 };
     bHp = bMaxHp = mobHpTbl[chapter];
     combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
@@ -683,6 +722,11 @@ static void start_mob_battle(void) {
     memset(notes, 0, sizeof(notes));
     memset(projAlive, 0, sizeof(projAlive));
     inOverworld = 0; inStory = 0; inFFMenu = 1; ffCursor = 0; inDefense = 0; inAttackResolve = 0; pendingDmg = 0;
+}
+
+static void start_mob_battle(void) {
+    int mtype = (mapX < 118) ? 0 : ((mapY >= 85) ? 1 : 2);
+    start_mob_battle_type(mtype);
 }
 
 static void start_chapter(int ch) {
@@ -781,7 +825,10 @@ int main(void) {
                     prevX2 = prevX1; prevY2 = prevY1;
                     prevX1 = mapX;   prevY1 = mapY;
                     mapX = nx;       mapY = ny;
-                    for (int i = 0; i < 3; i++) {
+                    for (int i = 0; i < MAX_ROAM; i++) if (roam[i].alive) {
+                fill_rect(fb, 408 + roam[i].x / 4, 32 + roam[i].y / 4, 2, 2, RGB(255, 65, 75));
+            }
+            for (int i = 0; i < 3; i++) {
                         if (!bossDefeated[i] && mapX == dngX[i] && mapY == dngY[i]) {
                             start_chapter(i);
                             break;
@@ -796,8 +843,41 @@ int main(void) {
                             play_sfx(920.0f, 1800);
                         }
                     }
-                    if (inOverworld && worldMap[mapY][mapX] == 1 && (xr() % 7) == 0) {
+                    for (int i = 0; i < MAX_ROAM; i++) {
+                        if (roam[i].alive && roam[i].x == mapX && roam[i].y == mapY) {
+                            roam[i].alive = 0; roam[i].respawn = 300;
+                            start_mob_battle_type(roam[i].type);
+                            break;
+                        }
+                    }
+                    if (inOverworld && worldMap[mapY][mapX] == 1 && (xr() % 11) == 0) {
                         start_mob_battle();
+                    }
+                }
+            }
+            /* Patrol visible roaming enemies every 45 frames */
+            if (inOverworld && (animFrame % 45) == 0) {
+                static const int rdx[4] = { 1, -1, 0, 0 };
+                static const int rdy[4] = { 0, 0, 1, -1 };
+                for (int i = 0; i < MAX_ROAM; i++) {
+                    if (!roam[i].alive) {
+                        if (--roam[i].respawn <= 0) spawn_roam_mob(i, -1);
+                        continue;
+                    }
+                    int dir = xr() & 3;
+                    int nx = roam[i].x + rdx[dir], ny = roam[i].y + rdy[dir];
+                    if (nx > 4 && nx < MW - 4 && ny > 4 && ny < MH - 4) {
+                        unsigned char rt = worldMap[ny][nx];
+                        if (rt == 0 || rt == 1 || rt == 7) {
+                            if (rdx[dir] > 0) roam[i].flip = 1;
+                            else if (rdx[dir] < 0) roam[i].flip = 0;
+                            roam[i].x = nx; roam[i].y = ny;
+                            if (roam[i].x == mapX && roam[i].y == mapY) {
+                                roam[i].alive = 0; roam[i].respawn = 300;
+                                start_mob_battle_type(roam[i].type);
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -1119,6 +1199,16 @@ int main(void) {
                     }
                 }
             }
+            /* Visible Roaming Enemies across the map (Slimes, Goblins, Wraiths) */
+            for (int i = 0; i < MAX_ROAM; i++) if (roam[i].alive) {
+                int sx = (roam[i].x - ox) * 24, sy = (roam[i].y - oy) * 24 - 8;
+                if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
+                    int mBob = ((animFrame / 14 + i) & 1);
+                    fill_ellipse_alpha(fb, sx + 12, sy + 21, 9, 4, RGB(190, 30, 45), 115);
+                    const unsigned int *mspr = (roam[i].type == 0) ? mob_slime : (roam[i].type == 1 ? mob_goblin : mob_wraith);
+                    draw_spr64_as24(fb, mspr, sx, sy - mBob, roam[i].flip);
+                }
+            }
             /* 8 NPCs across the 6 regions dynamically turning to look towards your Bard */
             for (int i = 0; i < 8; i++) {
                 int sx = (npcX[i] - ox) * 24, sy = (npcY[i] - oy) * 24 - 8;
@@ -1177,6 +1267,9 @@ int main(void) {
                     else if (mt == 7) mc = RGB(165, 130, 85);
                     put_px(fb, 408 + mx, 32 + my, mc);
                 }
+            }
+            for (int i = 0; i < MAX_ROAM; i++) if (roam[i].alive) {
+                fill_rect(fb, 408 + roam[i].x / 4, 32 + roam[i].y / 4, 2, 2, RGB(255, 65, 75));
             }
             for (int i = 0; i < 3; i++) {
                 fill_rect(fb, 408 + dngX[i] / 4 - 1, 32 + dngY[i] / 4 - 1, 3, 3, bossDefeated[i] ? RGB(90, 240, 120) : RGB(215, 65, 255));
