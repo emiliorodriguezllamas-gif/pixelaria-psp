@@ -396,29 +396,29 @@ static void draw_spr32_40_scale2x(unsigned int *fb, const unsigned int *spr, int
             for (int i = 0; i < 40; i++) data[j * 40 + i] = sample_bilinear_opaque(tmp64, 64, 64, (i * 63 * 256) / 39, syfp);
         }
     }
-    for (int j = 0; j < 40; j++) {
-        int py = dy + j;
-        if ((unsigned)py >= SCR_H) continue;
-        unsigned int *dst = &fb[py * BUF_W];
+    int j0 = (dy < 0) ? -dy : 0;
+    int j1 = (dy + 40 > SCR_H) ? (SCR_H - dy) : 40;
+    int i0 = (dx < 0) ? -dx : 0;
+    int i1 = (dx + 40 > SCR_W) ? (SCR_W - dx) : 40;
+    if (j0 >= j1 || i0 >= i1) return;
+    for (int j = j0; j < j1; j++) {
+        unsigned int *dst = &fb[(dy + j) * BUF_W + dx];
         const unsigned int *src = &data[j * 40];
-        for (int i = 0; i < 40; i++) {
-            int px = dx + i;
-            if ((unsigned)px < SCR_W) {
-                unsigned int c = src[i];
-                if (c) dst[px] = c;
-            }
+        for (int i = i0; i < i1; i++) {
+            unsigned int c = src[i];
+            if (c) dst[i] = c;
         }
     }
 }
 
 static void draw_spr24_30_dir(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
-    static const unsigned int *ptrs[20] = {0};
-    static unsigned int data[20][30 * 30];
+    static const unsigned int *ptrs[32] = {0};
+    static unsigned int data[32][30 * 30];
     static int count = 0;
     const unsigned int *cached = NULL;
     for (int k = 0; k < count; k++) if (ptrs[k] == spr) { cached = data[k]; break; }
     if (!cached) {
-        int slot = (count < 20) ? count++ : 19;
+        int slot = (count < 32) ? count++ : 31;
         ptrs[slot] = spr;
         static unsigned int tmp48[48 * 48];
         for (int y = 0; y < 24; y++) {
@@ -464,13 +464,13 @@ static void draw_spr24_30(unsigned int *fb, const unsigned int *spr, int dx, int
 }
 
 static void draw_spr64_to_30(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
-    static const unsigned int *ptrs[6] = {0};
-    static unsigned int data[6][30 * 30];
+    static const unsigned int *ptrs[12] = {0};
+    static unsigned int data[12][30 * 30];
     static int count = 0;
     const unsigned int *cached = NULL;
     for (int k = 0; k < count; k++) if (ptrs[k] == spr) { cached = data[k]; break; }
     if (!cached) {
-        int slot = (count < 6) ? count++ : 5;
+        int slot = (count < 12) ? count++ : 11;
         ptrs[slot] = spr;
         for (int j = 0; j < 30; j++) {
             int sj0 = (j * 64) / 30, sj1 = (sj0 < 63) ? sj0 + 1 : 63;
@@ -996,6 +996,7 @@ static void draw_tile_vegetation(unsigned int *fb, int wx, int wy, int sx, int s
         }
         return;
     }
+    if ((wx ^ wy) & 1) return;
     unsigned int kind = h % 29u;
     static const signed char swayLUT[16] = { 0, 1, 1, 1, 1, 1, 0, 0, 0, -1, -1, -1, -1, -1, 0, 0 };
     int sway = swayLUT[((animFrame >> 3) + wx + wy) & 15];
@@ -2640,31 +2641,33 @@ int main(void) {
             }
             update_draw_weather_and_lighting(fb, mapX, mapY);
 
-            /* RTX Real-Time Shader Lighting Pass (Dynamic Point Lights & Ambient Mood) */
+            /* RTX Real-Time Shader Lighting Pass (Volcano & Storm Point Lights) */
             {
-                LightSrc rtxL[12];
-                int nL = 0;
                 int inVolc = (mapX >= 165 && mapY < 85);
-                int flicker = ((animFrame & 16) ? 6 : -6);
-                if (inVolc) {
-                    rtxL[nL++] = (LightSrc){ 255, 130, 110 + flicker / 2, 95 + flicker / 2, 65, 72 };
-                }
-                for (int ty = 0; ty < 10 && nL < 12; ty++) {
-                    for (int tx = 0; tx < 16 && nL < 12; tx++) {
-                        int wx = ox + tx, wy = oy + ty;
-                        if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
-                            unsigned char t = worldMap[wy][wx];
-                            int lx = tx * 30 + 15, ly = ty * 30 + 11;
-                            if (t == 14) rtxL[nL++] = (LightSrc){ lx, ly, 195 + flicker, 145 + flicker, 65, 64 };
-                            else if (t == 9) rtxL[nL++] = (LightSrc){ lx, ly, 65, 175, 220, 56 };
-                            else if (t == 5) rtxL[nL++] = (LightSrc){ lx, ly, 175, 70, 225, 60 };
+                if (inVolc || weatherMode >= 2) {
+                    LightSrc rtxL[12];
+                    int nL = 0;
+                    int flicker = ((animFrame & 16) ? 6 : -6);
+                    if (inVolc) {
+                        rtxL[nL++] = (LightSrc){ 255, 130, 110 + flicker / 2, 95 + flicker / 2, 65, 64 };
+                    }
+                    for (int ty = 0; ty < 10 && nL < 12; ty++) {
+                        for (int tx = 0; tx < 16 && nL < 12; tx++) {
+                            int wx = ox + tx, wy = oy + ty;
+                            if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
+                                unsigned char t = worldMap[wy][wx];
+                                int lx = tx * 30 + 15, ly = ty * 30 + 11;
+                                if (t == 14) rtxL[nL++] = (LightSrc){ lx, ly, 195 + flicker, 145 + flicker, 65, 56 };
+                                else if (t == 9) rtxL[nL++] = (LightSrc){ lx, ly, 65, 175, 220, 52 };
+                                else if (t == 5) rtxL[nL++] = (LightSrc){ lx, ly, 175, 70, 225, 56 };
+                            }
                         }
                     }
+                    int ambR = inVolc ? 235 : 256;
+                    int ambG = inVolc ? 185 : 256;
+                    int ambB = inVolc ? 165 : 256;
+                    apply_rtx_shader_lighting(fb, ambR, ambG, ambB, rtxL, nL);
                 }
-                int ambR = inVolc ? 235 : 256;
-                int ambG = inVolc ? 185 : 256;
-                int ambB = inVolc ? 165 : 256;
-                apply_rtx_shader_lighting(fb, ambR, ambG, ambB, rtxL, nL);
             }
 
             /* Top Adventure HUD Window with Level, XP, HP & MP bars + Region Name */
@@ -3288,12 +3291,12 @@ int main(void) {
             draw_text(fb, fx + 6, fy + 3, buf, (curFps >= 55) ? RGB(110, 255, 140) : (curFps >= 35 ? RGB(255, 225, 85) : RGB(255, 90, 95)));
         }
 
-        /* Fast 64-bit sequential write-only transfer from cached sys_fb to VRAM */
-        for (int y = 0; y < SCR_H; y++) {
-            const unsigned long long *src64 = (const unsigned long long *)&sys_fb[y * BUF_W];
-            unsigned long long *dst64 = (unsigned long long *)&vram_bufs[cur_fb][y * BUF_W];
-            for (int x = 0; x < SCR_W / 2; x++) dst64[x] = src64[x];
-        }
+        /* Hardware GE DMA transfer from L1-cached sys_fb to VRAM */
+        sceKernelDcacheWritebackRange(sys_fb, BUF_W * SCR_H * 4);
+        sceGuStart(GU_DIRECT, gulist);
+        sceGuCopyImage(GU_PSM_8888, 0, 0, SCR_W, SCR_H, BUF_W, sys_fb, 0, 0, BUF_W, (void *)(((unsigned int)vram_bufs[cur_fb]) & 0x1FFFFFFFu));
+        sceGuFinish();
+        sceGuSync(0, 0);
 
         sceDisplayWaitVblankStart();
         sceGuSwapBuffers();
