@@ -206,135 +206,185 @@ static inline unsigned int blend_rgb_4(unsigned int c00, unsigned int c10, unsig
     return (b << 16) | (g << 8) | r;
 }
 
-static void draw_tile24_30(unsigned int *fb, const unsigned int *tile, int dx, int dy) {
+static const unsigned int* get_cached_tile30(const unsigned int *tile) {
+    static const unsigned int *ptrs[8] = {0};
+    static unsigned int data[8][30 * 30];
+    static int count = 0;
+    for (int k = 0; k < count; k++) if (ptrs[k] == tile) return data[k];
+    int slot = (count < 8) ? count++ : 7;
+    ptrs[slot] = tile;
     for (int j = 0; j < 30; j++) {
-        int py = dy + j;
-        if ((unsigned)py >= SCR_H) continue;
-        unsigned int *dst = &fb[py * BUF_W];
         int syfp = (j * 24 * 256) / 30;
         int sy0 = syfp >> 8, sy1 = (sy0 + 1) % 24, fy = syfp & 255;
         const unsigned int *r0 = &tile[sy0 * 24], *r1 = &tile[sy1 * 24];
         for (int i = 0; i < 30; i++) {
-            int px = dx + i;
-            if ((unsigned)px >= SCR_W) continue;
             int sxfp = (i * 24 * 256) / 30;
             int sx0 = sxfp >> 8, sx1 = (sx0 + 1) % 24, fx = sxfp & 255;
-            dst[px] = blend_rgb_4(r0[sx0], r0[sx1], r1[sx0], r1[sx1], fx, fy);
+            data[slot][j * 30 + i] = blend_rgb_4(r0[sx0], r0[sx1], r1[sx0], r1[sx1], fx, fy);
+        }
+    }
+    return data[slot];
+}
+
+static void draw_tile24_30(unsigned int *fb, const unsigned int *tile, int dx, int dy) {
+    const unsigned int *c = get_cached_tile30(tile);
+    for (int j = 0; j < 30; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &c[j * 30];
+        for (int i = 0; i < 30; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) dst[px] = src[i];
         }
     }
 }
 
 static void draw_tile24_30_scroll(unsigned int *fb, const unsigned int *tile, int dx, int dy, int sxOff) {
+    const unsigned int *c = get_cached_tile30(tile);
+    int off = (sxOff * 30) / 24;
     for (int j = 0; j < 30; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
         unsigned int *dst = &fb[py * BUF_W];
-        int syfp = (j * 24 * 256) / 30;
-        int sy0 = syfp >> 8, sy1 = (sy0 + 1) % 24, fy = syfp & 255;
-        const unsigned int *r0 = &tile[sy0 * 24], *r1 = &tile[sy1 * 24];
+        const unsigned int *src = &c[j * 30];
         for (int i = 0; i < 30; i++) {
             int px = dx + i;
-            if ((unsigned)px >= SCR_W) continue;
-            int sxfp = (i * 24 * 256) / 30;
-            int sx0 = ((sxfp >> 8) + sxOff) % 24, sx1 = (sx0 + 1) % 24, fx = sxfp & 255;
-            dst[px] = blend_rgb_4(r0[sx0], r0[sx1], r1[sx0], r1[sx1], fx, fy);
+            if ((unsigned)px < SCR_W) dst[px] = src[(i + off) % 30];
         }
     }
 }
 
 static void draw_spr32_scale2x(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
-    for (int y = 0; y < 32; y++) {
-        int ym = (y > 0) ? y - 1 : 0, yp = (y < 31) ? y + 1 : 31;
-        for (int x = 0; x < 32; x++) {
-            unsigned int P = spr[y * 32 + x];
-            if (!P) continue;
-            int xm = (x > 0) ? x - 1 : 0, xp = (x < 31) ? x + 1 : 31;
-            unsigned int A = spr[ym * 32 + x], B = spr[y * 32 + xp];
-            unsigned int C = spr[y * 32 + xm], D = spr[yp * 32 + x];
-            unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
-            if (C == A && C != D && A != B) e0 = A;
-            if (A == B && A != C && B != D) e1 = B;
-            if (D == C && D != B && C != A) e2 = C;
-            if (B == D && B != A && D != C) e3 = D;
-            int px = dx + x * 2, py = dy + y * 2;
-            if ((unsigned)py < SCR_H) {
-                if ((unsigned)px < SCR_W && e0) fb[py * BUF_W + px] = e0;
-                if ((unsigned)(px + 1) < SCR_W && e1) fb[py * BUF_W + px + 1] = e1;
+    static const unsigned int *ptrs[4] = {0};
+    static unsigned int data[4][64 * 64];
+    static int count = 0;
+    const unsigned int *cached = NULL;
+    for (int k = 0; k < count; k++) if (ptrs[k] == spr) { cached = data[k]; break; }
+    if (!cached) {
+        int slot = (count < 4) ? count++ : 3;
+        ptrs[slot] = spr;
+        for (int y = 0; y < 32; y++) {
+            int ym = (y > 0) ? y - 1 : 0, yp = (y < 31) ? y + 1 : 31;
+            for (int x = 0; x < 32; x++) {
+                unsigned int P = spr[y * 32 + x];
+                int xm = (x > 0) ? x - 1 : 0, xp = (x < 31) ? x + 1 : 31;
+                unsigned int A = spr[ym * 32 + x], B = spr[y * 32 + xp];
+                unsigned int C = spr[y * 32 + xm], D = spr[yp * 32 + x];
+                unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
+                if (C == A && C != D && A != B) e0 = A;
+                if (A == B && A != C && B != D) e1 = B;
+                if (D == C && D != B && C != A) e2 = C;
+                if (B == D && B != A && D != C) e3 = D;
+                int idx = (y * 2) * 64 + (x * 2);
+                data[slot][idx] = e0; data[slot][idx + 1] = e1;
+                data[slot][idx + 64] = e2; data[slot][idx + 65] = e3;
             }
-            if ((unsigned)(py + 1) < SCR_H) {
-                if ((unsigned)px < SCR_W && e2) fb[(py + 1) * BUF_W + px] = e2;
-                if ((unsigned)(px + 1) < SCR_W && e3) fb[(py + 1) * BUF_W + px + 1] = e3;
+        }
+        cached = data[slot];
+    }
+    for (int j = 0; j < 64; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &cached[j * 64];
+        for (int i = 0; i < 64; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
             }
         }
     }
 }
 
 static void draw_spr32_40_scale2x(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
-    static unsigned int tmp64[64 * 64];
-    for (int y = 0; y < 32; y++) {
-        int ym = (y > 0) ? y - 1 : 0, yp = (y < 31) ? y + 1 : 31;
-        for (int x = 0; x < 32; x++) {
-            unsigned int P = spr[y * 32 + x];
-            int xm = (x > 0) ? x - 1 : 0, xp = (x < 31) ? x + 1 : 31;
-            unsigned int A = spr[ym * 32 + x], B = spr[y * 32 + xp];
-            unsigned int C = spr[y * 32 + xm], D = spr[yp * 32 + x];
-            unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
-            if (C == A && C != D && A != B) e0 = A;
-            if (A == B && A != C && B != D) e1 = B;
-            if (D == C && D != B && C != A) e2 = C;
-            if (B == D && B != A && D != C) e3 = D;
-            int idx = (y * 2) * 64 + (x * 2);
-            tmp64[idx] = e0; tmp64[idx + 1] = e1;
-            tmp64[idx + 64] = e2; tmp64[idx + 65] = e3;
+    static const unsigned int *cPtr = NULL;
+    static unsigned int data[40 * 40];
+    if (cPtr != spr) {
+        cPtr = spr;
+        static unsigned int tmp64[64 * 64];
+        for (int y = 0; y < 32; y++) {
+            int ym = (y > 0) ? y - 1 : 0, yp = (y < 31) ? y + 1 : 31;
+            for (int x = 0; x < 32; x++) {
+                unsigned int P = spr[y * 32 + x];
+                int xm = (x > 0) ? x - 1 : 0, xp = (x < 31) ? x + 1 : 31;
+                unsigned int A = spr[ym * 32 + x], B = spr[y * 32 + xp];
+                unsigned int C = spr[y * 32 + xm], D = spr[yp * 32 + x];
+                unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
+                if (C == A && C != D && A != B) e0 = A;
+                if (A == B && A != C && B != D) e1 = B;
+                if (D == C && D != B && C != A) e2 = C;
+                if (B == D && B != A && D != C) e3 = D;
+                int idx = (y * 2) * 64 + (x * 2);
+                tmp64[idx] = e0; tmp64[idx + 1] = e1;
+                tmp64[idx + 64] = e2; tmp64[idx + 65] = e3;
+            }
+        }
+        for (int j = 0; j < 40; j++) {
+            int sj = (j * 64) / 40;
+            for (int i = 0; i < 40; i++) data[j * 40 + i] = tmp64[sj * 64 + (i * 64) / 40];
         }
     }
     for (int j = 0; j < 40; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
         unsigned int *dst = &fb[py * BUF_W];
-        int sj = (j * 64) / 40;
-        const unsigned int *src = &tmp64[sj * 64];
+        const unsigned int *src = &data[j * 40];
         for (int i = 0; i < 40; i++) {
             int px = dx + i;
-            if ((unsigned)px >= SCR_W) continue;
-            unsigned int c = src[(i * 64) / 40];
-            if (c) dst[px] = c;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
+            }
         }
     }
 }
 
 static void draw_spr24_30_dir(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
-    static unsigned int tmp48[48 * 48];
-    for (int y = 0; y < 24; y++) {
-        int ym = (y > 0) ? y - 1 : 0, yp = (y < 23) ? y + 1 : 23;
-        for (int x = 0; x < 24; x++) {
-            int sx = flipX ? (23 - x) : x;
-            int xm = flipX ? ((sx < 23) ? sx + 1 : 23) : ((sx > 0) ? sx - 1 : 0);
-            int xp = flipX ? ((sx > 0) ? sx - 1 : 0)   : ((sx < 23) ? sx + 1 : 23);
-            unsigned int P = spr[y * 24 + sx];
-            unsigned int A = spr[ym * 24 + sx], B = spr[y * 24 + xp];
-            unsigned int C = spr[y * 24 + xm], D = spr[yp * 24 + sx];
-            unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
-            if (C == A && C != D && A != B) e0 = A;
-            if (A == B && A != C && B != D) e1 = B;
-            if (D == C && D != B && C != A) e2 = C;
-            if (B == D && B != A && D != C) e3 = D;
-            int idx = (y * 2) * 48 + (x * 2);
-            tmp48[idx] = e0; tmp48[idx + 1] = e1;
-            tmp48[idx + 48] = e2; tmp48[idx + 49] = e3;
+    static const unsigned int *ptrs[20] = {0};
+    static unsigned int data[20][30 * 30];
+    static int count = 0;
+    const unsigned int *cached = NULL;
+    for (int k = 0; k < count; k++) if (ptrs[k] == spr) { cached = data[k]; break; }
+    if (!cached) {
+        int slot = (count < 20) ? count++ : 19;
+        ptrs[slot] = spr;
+        static unsigned int tmp48[48 * 48];
+        for (int y = 0; y < 24; y++) {
+            int ym = (y > 0) ? y - 1 : 0, yp = (y < 23) ? y + 1 : 23;
+            for (int x = 0; x < 24; x++) {
+                int xm = (x > 0) ? x - 1 : 0, xp = (x < 23) ? x + 1 : 23;
+                unsigned int P = spr[y * 24 + x];
+                unsigned int A = spr[ym * 24 + x], B = spr[y * 24 + xp];
+                unsigned int C = spr[y * 24 + xm], D = spr[yp * 24 + x];
+                unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
+                if (C == A && C != D && A != B) e0 = A;
+                if (A == B && A != C && B != D) e1 = B;
+                if (D == C && D != B && C != A) e2 = C;
+                if (B == D && B != A && D != C) e3 = D;
+                int idx = (y * 2) * 48 + (x * 2);
+                tmp48[idx] = e0; tmp48[idx + 1] = e1;
+                tmp48[idx + 48] = e2; tmp48[idx + 49] = e3;
+            }
         }
+        for (int j = 0; j < 30; j++) {
+            int sj = (j * 48) / 30;
+            for (int i = 0; i < 30; i++) data[slot][j * 30 + i] = tmp48[sj * 48 + (i * 48) / 30];
+        }
+        cached = data[slot];
     }
     for (int j = 0; j < 30; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
         unsigned int *dst = &fb[py * BUF_W];
-        int sj = (j * 48) / 30;
-        const unsigned int *src = &tmp48[sj * 48];
+        const unsigned int *src = &cached[j * 30];
         for (int i = 0; i < 30; i++) {
             int px = dx + i;
-            if ((unsigned)px >= SCR_W) continue;
-            unsigned int c = src[(i * 48) / 30];
-            if (c) dst[px] = c;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[flipX ? (29 - i) : i];
+                if (c) dst[px] = c;
+            }
         }
     }
 }
@@ -344,30 +394,45 @@ static void draw_spr24_30(unsigned int *fb, const unsigned int *spr, int dx, int
 }
 
 static void draw_spr64_to_30(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
+    static const unsigned int *ptrs[6] = {0};
+    static unsigned int data[6][30 * 30];
+    static int count = 0;
+    const unsigned int *cached = NULL;
+    for (int k = 0; k < count; k++) if (ptrs[k] == spr) { cached = data[k]; break; }
+    if (!cached) {
+        int slot = (count < 6) ? count++ : 5;
+        ptrs[slot] = spr;
+        for (int j = 0; j < 30; j++) {
+            int sj0 = (j * 64) / 30, sj1 = (sj0 < 63) ? sj0 + 1 : 63;
+            for (int i = 0; i < 30; i++) {
+                int si0 = (i * 64) / 30, si1 = (si0 < 63) ? si0 + 1 : 63;
+                unsigned int c0 = spr[sj0 * 64 + si0], c1 = spr[sj0 * 64 + si1];
+                unsigned int c2 = spr[sj1 * 64 + si0], c3 = spr[sj1 * 64 + si1];
+                int cnt = (c0 != 0) + (c1 != 0) + (c2 != 0) + (c3 != 0);
+                if (cnt >= 2) {
+                    unsigned int r = 0, g = 0, b = 0;
+                    unsigned int cs[4] = { c0, c1, c2, c3 };
+                    for (int k = 0; k < 4; k++) if (cs[k]) {
+                        r += cs[k] & 0xFF; g += (cs[k] >> 8) & 0xFF; b += (cs[k] >> 16) & 0xFF;
+                    }
+                    data[slot][j * 30 + i] = ((b / cnt) << 16) | ((g / cnt) << 8) | (r / cnt);
+                } else {
+                    data[slot][j * 30 + i] = 0;
+                }
+            }
+        }
+        cached = data[slot];
+    }
     for (int j = 0; j < 30; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
         unsigned int *dst = &fb[py * BUF_W];
-        int sj0 = (j * 64) / 30;
-        int sj1 = (sj0 < 63) ? sj0 + 1 : 63;
+        const unsigned int *src = &cached[j * 30];
         for (int i = 0; i < 30; i++) {
             int px = dx + i;
-            if ((unsigned)px >= SCR_W) continue;
-            int si0 = (i * 64) / 30;
-            if (flipX) si0 = 63 - si0;
-            int si1 = flipX ? ((si0 > 0) ? si0 - 1 : 0) : ((si0 < 63) ? si0 + 1 : 63);
-            unsigned int c0 = spr[sj0 * 64 + si0];
-            unsigned int c1 = spr[sj0 * 64 + si1];
-            unsigned int c2 = spr[sj1 * 64 + si0];
-            unsigned int c3 = spr[sj1 * 64 + si1];
-            int cnt = (c0 != 0) + (c1 != 0) + (c2 != 0) + (c3 != 0);
-            if (cnt >= 2) {
-                unsigned int r = 0, g = 0, b = 0;
-                unsigned int cs[4] = { c0, c1, c2, c3 };
-                for (int k = 0; k < 4; k++) if (cs[k]) {
-                    r += cs[k] & 0xFF; g += (cs[k] >> 8) & 0xFF; b += (cs[k] >> 16) & 0xFF;
-                }
-                dst[px] = ((b / cnt) << 16) | ((g / cnt) << 8) | (r / cnt);
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[flipX ? (29 - i) : i];
+                if (c) dst[px] = c;
             }
         }
     }
@@ -1382,8 +1447,9 @@ int main(void) {
             else if ((pad.Buttons & PSP_CTRL_UP)    || ay < -0.45f) dy = -1;
             else if ((pad.Buttons & PSP_CTRL_DOWN)  || ay >  0.45f) dy =  1;
 
+            if (dx == 0 && dy == 0) moveCd = 0;
             if ((dx != 0 || dy != 0) && moveCd <= 0) {
-                moveCd = 9;
+                moveCd = 6;
                 int nx = mapX + dx, ny = mapY + dy;
                 if (!is_tile_blocked(nx, ny)) {
                     band2Flip = (prevX2 > prevX1) ? 1 : (prevX2 < prevX1 ? 0 : band1Flip);
@@ -1466,8 +1532,9 @@ int main(void) {
             else if ((pad.Buttons & PSP_CTRL_UP)    || ay < -0.45f) dy = -1;
             else if ((pad.Buttons & PSP_CTRL_DOWN)  || ay >  0.45f) dy =  1;
 
+            if (dx == 0 && dy == 0) moveCd = 0;
             if ((dx != 0 || dy != 0) && moveCd <= 0) {
-                moveCd = 9;
+                moveCd = 6;
                 int nx = dngPx + dx, ny = dngPy + dy;
                 if (nx >= 0 && nx < DW && ny >= 0 && ny < DH && dngMap[ny][nx] != 0) {
                     band2Flip = (dngP2x > dngP1x) ? 1 : (dngP2x < dngP1x ? 0 : band1Flip);
@@ -1859,9 +1926,9 @@ int main(void) {
             }
 
             for (int i = 0; i < 24; i++) if (notes[i].active) {
-                /* Phase-locked to audio clock: lands on HIT_Y (238) exactly 4 beats after spawnStep */
+                /* Phase-locked to audio clock: lands on HIT_Y (238) exactly 7 beats after spawnStep */
                 float elapsedBeats = (float)(curBeat - notes[i].spawnStep) + curSub;
-                notes[i].y = 104.0f + elapsedBeats * (134.0f / 4.0f);
+                notes[i].y = 104.0f + elapsedBeats * (134.0f / 7.0f);
                 if (notes[i].y > SCR_H - 10) {
                     int ml = notes[i].lane;
                     notes[i].active = 0; combo = 0;
