@@ -1246,20 +1246,6 @@ static RoamMob roam[MAX_ROAM];
 typedef struct { int x, y, homeX, homeY, flip, kind; } TownNPC;
 static TownNPC townNpcs[MAX_TOWN_NPC];
 
-static int is_town_crate(int x, int y) {
-    if (x < 0 || x >= MW || y < 0 || y >= MH || worldMap[y][x] != 4) return 0;
-    if (x == 28 || y == 84 || x == 81 || y == 60 || x == 155 || y == 112) return 0;
-    if (abs(x - 28) <= 1 && (y <= 76 || y >= 92)) return 0;
-    if (abs(y - 84) <= 1 && (x <= 20 || x >= 36)) return 0;
-    for (int i = 0; i < 8; i++) if (x == npcX[i] && y == npcY[i]) return 0;
-    for (int i = 0; i < 3; i++) {
-        if ((x == shopMerchX[i] && y == shopMerchY[i]) || (x == shopAlchX[i] && y == shopAlchY[i])) return 0;
-    }
-    for (int i = 0; i < MAX_TOWN_NPC; i++) if (x == townNpcs[i].homeX && y == townNpcs[i].homeY) return 0;
-    unsigned int th = ((unsigned int)x * 2654435761u) ^ ((unsigned int)y * 2246822519u);
-    return ((th % 13u) == 0u);
-}
-
 static int is_tile_blocked(int x, int y) {
     if (x < 0 || x >= MW || y < 0 || y >= MH) return 1;
     unsigned char t = worldMap[y][x];
@@ -1274,7 +1260,6 @@ static int is_tile_blocked(int x, int y) {
             }
         }
     }
-    if (is_town_crate(x, y)) return 1;
     for (int i = 0; i < 8; i++) {
         if (x == npcX[i] && y == npcY[i]) return 1;
     }
@@ -1370,7 +1355,8 @@ static void init_world(void) {
     build_walled_town(76, 56, 86, 64);     /* Aldea de Bruma */
     build_walled_town(150, 108, 160, 116); /* Taberna del Trovador */
 
-    /* Decoracion de Solaria: Casas (10), Taberna (11), Fuente (12), Mercado (13), Farolas (14), Pozo (15) */
+    /* Decoracion de Solaria: Casas (10), Taberna (11), Fuente (12), Mercado (13), Farolas (14), Pozo (15),
+       Jardineras (16), Bancos (17), Cajas (18), Barriles (19), Carteles (20) */
     worldMap[77][21] = 10; worldMap[77][25] = 10; worldMap[77][31] = 11; worldMap[77][35] = 10;
     worldMap[90][21] = 10; worldMap[90][26] = 10; worldMap[90][30] = 10; worldMap[90][35] = 10;
     worldMap[82][20] = 10; worldMap[82][36] = 10; worldMap[87][20] = 11; worldMap[87][36] = 10;
@@ -1381,17 +1367,34 @@ static void init_world(void) {
     worldMap[78][28] = 14; worldMap[82][22] = 14; worldMap[82][34] = 14;
     worldMap[86][22] = 14; worldMap[86][34] = 14; worldMap[89][28] = 14; /* Farolas */
     worldMap[79][20] = 1;  worldMap[79][36] = 1;  /* Arboles ornamentales */
+    /* Plaza central: 4 bancos mirando a la fuente y jardineras simetricas */
+    worldMap[84][26] = 17; worldMap[84][30] = 17; worldMap[82][28] = 17; worldMap[86][28] = 17;
+    worldMap[82][26] = 16; worldMap[82][30] = 16; worldMap[86][26] = 16; worldMap[86][30] = 16;
+    /* Jardineras en fachadas y entradas */
+    worldMap[78][21] = 16; worldMap[78][25] = 16; worldMap[78][35] = 16;
+    worldMap[91][21] = 16; worldMap[91][35] = 16;
+    worldMap[76][27] = 16; worldMap[92][29] = 16;
+    /* Cajas y barriles junto a los puestos de mercado y la taberna */
+    worldMap[80][23] = 18; worldMap[80][25] = 19; worldMap[80][31] = 18; worldMap[80][33] = 19;
+    worldMap[78][30] = 19; worldMap[88][21] = 19; /* Barriles junto a las tabernas */
+    /* Carteles solo en las puertas principales y frente a la taberna */
+    worldMap[75][29] = 20; worldMap[93][27] = 20; worldMap[83][37] = 20; worldMap[78][32] = 20;
 
     /* Decoracion de Aldea de Bruma */
     worldMap[58][78] = 10; worldMap[58][83] = 10;
     worldMap[61][78] = 13; worldMap[61][83] = 13; worldMap[62][80] = 15;
     worldMap[59][81] = 12; /* Fuente de Bruma */
     worldMap[60][77] = 14; worldMap[60][84] = 14; worldMap[57][81] = 14;
+    worldMap[59][79] = 17; worldMap[59][82] = 17; /* Bancos junto a la fuente */
+    worldMap[61][77] = 18; worldMap[61][84] = 19; /* Cajas y barriles junto al mercado */
+    worldMap[57][82] = 20; /* Cartel de entrada norte */
 
     /* Decoracion de Taberna del Trovador */
     worldMap[110][153] = 11; worldMap[110][157] = 10;
     worldMap[113][157] = 13; worldMap[113][153] = 13; worldMap[114][152] = 12;
     worldMap[112][151] = 14; worldMap[112][159] = 14; worldMap[114][158] = 15;
+    worldMap[111][152] = 19; worldMap[111][154] = 20; /* Barriles y cartel de laud frente a la taberna */
+    worldMap[113][158] = 18; worldMap[114][153] = 17; /* Cajas junto al mercado y banco junto a la fuente */
 
     /* Ciudadanos ambulantes en las 3 ciudades */
     static const int tnCoords[MAX_TOWN_NPC][2] = {
@@ -2375,20 +2378,6 @@ int main(void) {
                             draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 1);
                         } else if (t == 4 || t >= 10) {
                             draw_tile24_30(fb, tile_castle, sx, sy);
-                            /* 32-Bit Image-Based Town Decorations (Flowerbeds, Benches, Crates, Barrels, Signposts) */
-                            if (t == 4) {
-                                unsigned int th = ((unsigned int)wx * 2654435761u) ^ ((unsigned int)wy * 2246822519u);
-                                if (is_town_crate(wx, wy)) {
-                                    fill_ellipse_alpha(fb, sx + 15, sy + 26, 11, 4, RGB(0, 0, 0), 100);
-                                    draw_spr24_30(fb, (th & 1) ? spr_crates : spr_barrels, sx, sy);
-                                } else if (!(wx == 28 || wy == 84 || wx == 81 || wy == 60 || wx == 155 || wy == 112)) {
-                                    if ((th % 11u) == 0u) {
-                                        draw_spr24_30(fb, (th & 1) ? spr_flowerbed : spr_bench, sx, sy);
-                                    } else if ((th % 37u) == 0u) {
-                                        draw_spr24_30(fb, spr_signpost, sx, sy);
-                                    }
-                                }
-                            }
                             if (t == 12) {
                                 draw_spr24_30(fb, spr_fountain, sx, sy);
                                 int sp1 = (animFrame / 3) % 8;
@@ -2397,6 +2386,11 @@ int main(void) {
                             }
                             else if (t == 13) draw_spr24_30(fb, spr_market, sx, sy);
                             else if (t == 15) draw_spr24_30(fb, spr_well, sx, sy);
+                            else if (t == 16) draw_spr24_30(fb, spr_flowerbed, sx, sy);
+                            else if (t == 17) draw_spr24_30(fb, spr_bench, sx, sy);
+                            else if (t == 18) draw_spr24_30(fb, spr_crates, sx, sy);
+                            else if (t == 19) draw_spr24_30(fb, spr_barrels, sx, sy);
+                            else if (t == 20) draw_spr24_30(fb, spr_signpost, sx, sy);
                         } else if (t == 6) {
                             draw_tile24_30(fb, tile_bridge, sx, sy);
                         } else if (t == 7) {
