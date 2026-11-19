@@ -420,27 +420,11 @@ static void draw_spr24_30_dir(unsigned int *fb, const unsigned int *spr, int dx,
     if (!cached) {
         int slot = (count < 32) ? count++ : 31;
         ptrs[slot] = spr;
-        static unsigned int tmp48[48 * 48];
-        for (int y = 0; y < 24; y++) {
-            int ym = (y > 0) ? y - 1 : 0, yp = (y < 23) ? y + 1 : 23;
-            for (int x = 0; x < 24; x++) {
-                int xm = (x > 0) ? x - 1 : 0, xp = (x < 23) ? x + 1 : 23;
-                unsigned int P = spr[y * 24 + x];
-                unsigned int A = spr[ym * 24 + x], B = spr[y * 24 + xp];
-                unsigned int C = spr[y * 24 + xm], D = spr[yp * 24 + x];
-                unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
-                if (C == A && C != D && A != B) e0 = A;
-                if (A == B && A != C && B != D) e1 = B;
-                if (D == C && D != B && C != A) e2 = C;
-                if (B == D && B != A && D != C) e3 = D;
-                int idx = (y * 2) * 48 + (x * 2);
-                tmp48[idx] = e0; tmp48[idx + 1] = e1;
-                tmp48[idx + 48] = e2; tmp48[idx + 49] = e3;
-            }
-        }
         for (int j = 0; j < 30; j++) {
-            int syfp = (j * 47 * 256) / 29;
-            for (int i = 0; i < 30; i++) data[slot][j * 30 + i] = sample_bilinear_opaque(tmp48, 48, 48, (i * 47 * 256) / 29, syfp);
+            int syfp = (j * 23 * 256) / 29;
+            for (int i = 0; i < 30; i++) {
+                data[slot][j * 30 + i] = sample_bilinear_opaque(spr, 24, 24, (i * 23 * 256) / 29, syfp);
+            }
         }
         cached = data[slot];
     }
@@ -473,22 +457,9 @@ static void draw_spr64_to_30(unsigned int *fb, const unsigned int *spr, int dx, 
         int slot = (count < 12) ? count++ : 11;
         ptrs[slot] = spr;
         for (int j = 0; j < 30; j++) {
-            int sj0 = (j * 64) / 30, sj1 = (sj0 < 63) ? sj0 + 1 : 63;
+            int syfp = (j * 63 * 256) / 29;
             for (int i = 0; i < 30; i++) {
-                int si0 = (i * 64) / 30, si1 = (si0 < 63) ? si0 + 1 : 63;
-                unsigned int c0 = spr[sj0 * 64 + si0], c1 = spr[sj0 * 64 + si1];
-                unsigned int c2 = spr[sj1 * 64 + si0], c3 = spr[sj1 * 64 + si1];
-                int cnt = (c0 != 0) + (c1 != 0) + (c2 != 0) + (c3 != 0);
-                if (cnt >= 2) {
-                    unsigned int r = 0, g = 0, b = 0;
-                    unsigned int cs[4] = { c0, c1, c2, c3 };
-                    for (int k = 0; k < 4; k++) if (cs[k]) {
-                        r += cs[k] & 0xFF; g += (cs[k] >> 8) & 0xFF; b += (cs[k] >> 16) & 0xFF;
-                    }
-                    data[slot][j * 30 + i] = ((b / cnt) << 16) | ((g / cnt) << 8) | (r / cnt);
-                } else {
-                    data[slot][j * 30 + i] = 0;
-                }
+                data[slot][j * 30 + i] = sample_bilinear_opaque(spr, 64, 64, (i * 63 * 256) / 29, syfp);
             }
         }
         cached = data[slot];
