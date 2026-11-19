@@ -473,7 +473,7 @@ static int pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 1
 static int pLevel = 1, pXp = 0, pNextXp = 60, pBaseAtk = 5;
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
 static int relicDmg = 0, relicVamp = 0, relicShield = 0;
-static int inTitle = 1, inOverworld = 0, inStory = 0, inFFMenu = 0, inDefense = 0, inAttackResolve = 0, inRelic = 0, gameOver = 0, victory = 0;
+static int inTitle = 1, inOverworld = 0, inDungeon = 0, wasInDungeon = 0, inStory = 0, inFFMenu = 0, inDefense = 0, inAttackResolve = 0, inRelic = 0, gameOver = 0, victory = 0;
 static int ffCursor = 0, pendingDmg = 0;
 static float bardX = 240.0f, bardY = 195.0f;
 static float projX[6], projY[6], projVx[6], projVy[6];
@@ -723,6 +723,84 @@ static void gain_xp(int amount) {
 static void load_best(void) { FILE *f = fopen("cb_save.dat", "rb"); if (f) { int v=0; if (fread(&v,4,1,f)==1 && v>0) best=v; fclose(f); } }
 static void save_best(void) { if (score > best) { best = score; FILE *f = fopen("cb_save.dat", "wb"); if (f) { fwrite(&best,4,1,f); fclose(f); } } }
 
+/* PARTE 1B: Dungeons Aleatorios Estilo Diablo (Salas + Pasillos + Pisos + Niebla de Guerra) */
+#define DW 44
+#define DH 34
+static unsigned char dngMap[DH][DW];  /* 0=muro, 1=suelo, 2=escalera/altar, 3=cofre, 4=salida */
+static unsigned char dngSeen[DH][DW];
+static int curDngId = 0, dngFloor = 1, dngMaxFloors = 2;
+static int dngPx = 6, dngPy = 6, dngP1x = 6, dngP1y = 6, dngP2x = 6, dngP2y = 6;
+static int dngExitX = 6, dngExitY = 6, dngStairX = 36, dngStairY = 26;
+static RoamMob dngMobs[6];
+
+static void reveal_dungeon_fog(int px, int py) {
+    for (int dy = -5; dy <= 5; dy++) {
+        for (int dx = -5; dx <= 5; dx++) {
+            int nx = px + dx, ny = py + dy;
+            if (nx >= 0 && nx < DW && ny >= 0 && ny < DH && (dx * dx + dy * dy <= 26)) {
+                dngSeen[ny][nx] = 1;
+            }
+        }
+    }
+}
+
+static void generate_dungeon_floor(int dId, int flr) {
+    curDngId = dId;
+    dngFloor = flr;
+    dngMaxFloors = (dId == 0) ? 2 : 3;
+    memset(dngMap, 0, sizeof(dngMap));
+    memset(dngSeen, 0, sizeof(dngSeen));
+
+    int rcx[8], rcy[8];
+    for (int r = 0; r < 7; r++) {
+        int rw = 4 + (xr() % 5);
+        int rh = 4 + (xr() % 4);
+        int rx = 2 + (xr() % (DW - rw - 4));
+        int ry = 2 + (xr() % (DH - rh - 4));
+        for (int y = ry; y < ry + rh; y++) {
+            for (int x = rx; x < rx + rw; x++) dngMap[y][x] = 1;
+        }
+        rcx[r] = rx + rw / 2;
+        rcy[r] = ry + rh / 2;
+        if (r > 0) {
+            int cx = rcx[r - 1], cy = rcy[r - 1];
+            while (cx != rcx[r]) { dngMap[cy][cx] = 1; cx += (rcx[r] > cx) ? 1 : -1; }
+            while (cy != rcy[r]) { dngMap[cy][cx] = 1; cy += (rcy[r] > cy) ? 1 : -1; }
+        }
+    }
+    /* Player starts in Room 0, Exit/Up Stairs on Floor 1 */
+    dngPx = rcx[0]; dngPy = rcy[0];
+    dngP1x = dngPx; dngP1y = dngPy; dngP2x = dngPx; dngP2y = dngPy;
+    dngExitX = rcx[0]; dngExitY = rcy[0] - 1;
+    if (flr == 1 && dngExitY > 1) { dngMap[dngExitY][dngExitX] = 4; }
+
+    /* Stairs Down / Boss Altar in Room 6 */
+    dngStairX = rcx[6]; dngStairY = rcy[6];
+    dngMap[dngStairY][dngStairX] = 2;
+
+    /* 2 Treasure Chests in side rooms (Rooms 2 & 4) */
+    dngMap[rcy[2]][rcx[2]] = 3;
+    dngMap[rcy[4]][rcx[4]] = 3;
+
+    /* 5 Visible Patrolling Dungeon Monsters */
+    for (int m = 0; m < 5; m++) {
+        int rm = 1 + (m % 5);
+        dngMobs[m].x = rcx[rm]; dngMobs[m].y = rcy[rm];
+        dngMobs[m].type = dId; dngMobs[m].alive = 1; dngMobs[m].flip = 0; dngMobs[m].respawn = 0;
+    }
+    reveal_dungeon_fog(dngPx, dngPy);
+    snprintf(dlgText, sizeof(dlgText), "MAZMORRA %d - PISO %d/%d! Busca la escalera.", dId + 1, flr, dngMaxFloors);
+    dlgTimer = 180;
+}
+
+static void enter_dungeon(int dId) {
+    inOverworld = 0;
+    inDungeon = 1;
+    wasInDungeon = 1;
+    generate_dungeon_floor(dId, 1);
+    play_sfx(420.0f, 1400);
+}
+
 static void start_mob_battle_type(int mtype) {
     isMobBattle = 1;
     chapter = mtype;
@@ -732,7 +810,8 @@ static void start_mob_battle_type(int mtype) {
     bardX = 240.0f; bardY = 195.0f;
     memset(notes, 0, sizeof(notes));
     memset(projAlive, 0, sizeof(projAlive));
-    inOverworld = 0; inStory = 0; inFFMenu = 1; ffCursor = 0; inDefense = 0; inAttackResolve = 0; pendingDmg = 0;
+    wasInDungeon = inDungeon;
+    inOverworld = 0; inDungeon = 0; inStory = 0; inFFMenu = 1; ffCursor = 0; inDefense = 0; inAttackResolve = 0; pendingDmg = 0;
 }
 
 static void start_mob_battle(void) {
@@ -749,7 +828,7 @@ static void start_chapter(int ch) {
     bardX = 240.0f; bardY = 195.0f;
     memset(notes, 0, sizeof(notes));
     memset(projAlive, 0, sizeof(projAlive));
-    inOverworld = 0; inStory = 1; inFFMenu = 0; ffCursor = 0; inDefense = 0; inAttackResolve = 0; pendingDmg = 0;
+    inOverworld = 0; inDungeon = 0; wasInDungeon = 0; inStory = 1; inFFMenu = 0; ffCursor = 0; inDefense = 0; inAttackResolve = 0; pendingDmg = 0;
 }
 
 static void start_game(void) {
@@ -757,7 +836,7 @@ static void start_game(void) {
     pHp = pMaxHp = 100; pMp = pMaxMp = 50; score = 0;
     relicDmg = 0; relicVamp = 0; relicShield = 0;
     init_world();
-    inTitle = 0; inOverworld = 1; inStory = 0; inFFMenu = 0; inDefense = 0; inAttackResolve = 0; inRelic = 0; gameOver = 0; victory = 0; pendingDmg = 0;
+    inTitle = 0; inOverworld = 1; inDungeon = 0; wasInDungeon = 0; inStory = 0; inFFMenu = 0; inDefense = 0; inAttackResolve = 0; inRelic = 0; gameOver = 0; victory = 0; pendingDmg = 0;
     snprintf(dlgText, sizeof(dlgText), "Explora Aethel! Sube nivel antes de retar a los Bosses.");
     dlgTimer = 180;
     play_sfx(660.0f, 2000);
@@ -805,8 +884,9 @@ int main(void) {
         if (bossHitFlash > 0) bossHitFlash--;
         animFrame++;
 
-        /* Select Song dynamically: 0=Overworld/Title, 1=Forest Mobs, 2=Boss1 Rock, 3=Boss2 Synth, 4=Boss3 Symphonic */
+        /* Select Song dynamically: 0=Overworld/Title, 1=Forest Mobs/Dungeon, 2=Boss1 Rock, 3=Boss2 Synth, 4=Boss3 Symphonic */
         if (inTitle || inOverworld) curSong = 0;
+        else if (inDungeon) curSong = (curDngId == 0) ? 1 : (curDngId == 1 ? 3 : 4);
         else if (isMobBattle) curSong = 1;
         else curSong = 2 + chapter;
 
@@ -837,7 +917,7 @@ int main(void) {
                     mapX = nx;       mapY = ny;
                     for (int i = 0; i < 3; i++) {
                         if (!bossDefeated[i] && mapX == dngX[i] && mapY == dngY[i]) {
-                            start_chapter(i);
+                            enter_dungeon(i);
                             break;
                         }
                     }
@@ -898,6 +978,80 @@ int main(void) {
                     }
                 }
             }
+        } else if (inDungeon) {
+            if (dlgTimer > 0) dlgTimer--;
+            if (moveCd > 0) moveCd--;
+            int dx = 0, dy = 0;
+            float ax = ((float)pad.Lx - 128.0f) / 128.0f, ay = ((float)pad.Ly - 128.0f) / 128.0f;
+            if ((pad.Buttons & PSP_CTRL_LEFT)  || ax < -0.45f) dx = -1;
+            else if ((pad.Buttons & PSP_CTRL_RIGHT) || ax >  0.45f) dx =  1;
+            else if ((pad.Buttons & PSP_CTRL_UP)    || ay < -0.45f) dy = -1;
+            else if ((pad.Buttons & PSP_CTRL_DOWN)  || ay >  0.45f) dy =  1;
+
+            if ((dx != 0 || dy != 0) && moveCd <= 0) {
+                moveCd = 9;
+                int nx = dngPx + dx, ny = dngPy + dy;
+                if (nx >= 0 && nx < DW && ny >= 0 && ny < DH && dngMap[ny][nx] != 0) {
+                    band2Flip = (dngP2x > dngP1x) ? 1 : (dngP2x < dngP1x ? 0 : band1Flip);
+                    band1Flip = (dngP1x > dngPx)  ? 1 : (dngP1x < dngPx  ? 0 : bardFlip);
+                    if (dx < 0) bardFlip = 1;
+                    else if (dx > 0) bardFlip = 0;
+                    dngP2x = dngP1x; dngP2y = dngP1y;
+                    dngP1x = dngPx;  dngP1y = dngPy;
+                    dngPx = nx;      dngPy = ny;
+                    reveal_dungeon_fog(dngPx, dngPy);
+
+                    unsigned char dt = dngMap[dngPy][dngPx];
+                    if (dt == 3) {
+                        dngMap[dngPy][dngPx] = 1;
+                        pHp = (pHp + 35 > pMaxHp) ? pMaxHp : pHp + 35;
+                        pMp = (pMp + 20 > pMaxMp) ? pMaxMp : pMp + 20;
+                        pBaseAtk += 1;
+                        snprintf(dlgText, sizeof(dlgText), "COFRE DE MAZMORRA! +35HP +20MP +1ATQ!");
+                        dlgTimer = 180;
+                        play_sfx(880.0f, 1200);
+                    } else if (dt == 4) {
+                        inDungeon = 0; wasInDungeon = 0; inOverworld = 1;
+                        mapY += 1;
+                        snprintf(dlgText, sizeof(dlgText), "Saliste de la Mazmorra al Mapa.");
+                        dlgTimer = 140;
+                    } else if (dt == 2) {
+                        if (dngFloor < dngMaxFloors) {
+                            generate_dungeon_floor(curDngId, dngFloor + 1);
+                            play_sfx(660.0f, 1400);
+                        } else {
+                            start_chapter(curDngId);
+                        }
+                    }
+                    if (inDungeon) {
+                        for (int m = 0; m < 5; m++) {
+                            if (dngMobs[m].alive && dngMobs[m].x == dngPx && dngMobs[m].y == dngPy) {
+                                dngMobs[m].alive = 0;
+                                start_mob_battle_type(dngMobs[m].type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (inDungeon && (animFrame % 42) == 0) {
+                static const int ddx[4] = { 1, -1, 0, 0 };
+                static const int ddy[4] = { 0, 0, 1, -1 };
+                for (int m = 0; m < 5; m++) if (dngMobs[m].alive) {
+                    int dir = xr() & 3;
+                    int nx = dngMobs[m].x + ddx[dir], ny = dngMobs[m].y + ddy[dir];
+                    if (nx > 0 && nx < DW - 1 && ny > 0 && ny < DH - 1 && dngMap[ny][nx] == 1) {
+                        if (ddx[dir] > 0) dngMobs[m].flip = 1;
+                        else if (ddx[dir] < 0) dngMobs[m].flip = 0;
+                        dngMobs[m].x = nx; dngMobs[m].y = ny;
+                        if (dngMobs[m].x == dngPx && dngMobs[m].y == dngPy) {
+                            dngMobs[m].alive = 0;
+                            start_mob_battle_type(dngMobs[m].type);
+                            break;
+                        }
+                    }
+                }
+            }
         } else if (inStory) {
             if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) {
                 inStory = 0; inFFMenu = 1; ffCursor = 0;
@@ -949,7 +1103,9 @@ int main(void) {
                     }
                 } else if (ffCursor == 3) {
                     if (isMobBattle) {
-                        inFFMenu = 0; inOverworld = 1;
+                        inFFMenu = 0;
+                        if (wasInDungeon) inDungeon = 1;
+                        else inOverworld = 1;
                         snprintf(dlgText, sizeof(dlgText), "Escapaste del combate!"); dlgTimer = 100;
                         play_sfx(300.0f, 800);
                     } else {
@@ -1024,7 +1180,8 @@ int main(void) {
                         static const int mobXpTbl[3] = { 25, 55, 110 };
                         int xpGain = mobXpTbl[chapter];
                         score += 150 + chapter * 100;
-                        inOverworld = 1;
+                        if (wasInDungeon) inDungeon = 1;
+                        else inOverworld = 1;
                         snprintf(dlgText, sizeof(dlgText), "Enemigo vencido! +%d XP", xpGain);
                         dlgTimer = 140;
                         gain_xp(xpGain);
@@ -1292,6 +1449,98 @@ int main(void) {
                 draw_spr24(fb, spr_troubadour, 16, 235);
                 draw_border(fb, 16, 235, 24, 24, RGB(255, 215, 80));
                 draw_text(fb, 48, 236, "CRONISTA DEL REINO:", RGB(255, 225, 90));
+                draw_text(fb, 48, 250, dlgText, RGB(255, 255, 255));
+            }
+        } else if (inDungeon) {
+            /* Diablo-Style Procedural Dungeon Rendering with Fog-of-War & Torch Radius */
+            int ox = dngPx - 10, oy = dngPy - 5;
+            for (int ty = 0; ty < 12; ty++) {
+                int sy = ty * 24 - 8;
+                for (int tx = 0; tx < 20; tx++) {
+                    int sx = tx * 24;
+                    int wx = ox + tx, wy = oy + ty;
+                    if (wx < 0 || wy < 0 || wx >= DW || wy >= DH || !dngSeen[wy][wx]) {
+                        fill_rect(fb, sx, sy, 24, 24, RGB(8, 7, 14));
+                    } else {
+                        unsigned char dt = dngMap[wy][wx];
+                        if (dt == 0) {
+                            draw_tile24(fb, tile_wall, sx, sy);
+                            fill_rect_alpha(fb, sx, sy, 24, 24, RGB(14, 10, 22), 105);
+                        } else {
+                            draw_tile24(fb, tile_castle, sx, sy);
+                            fill_rect_alpha(fb, sx, sy, 24, 24, (curDngId == 0) ? RGB(28, 16, 14) : (curDngId == 1 ? RGB(14, 24, 42) : RGB(30, 10, 28)), 95);
+                            if (dt == 2) {
+                                int pulse = 65 + (int)(sinf((float)animFrame * 0.12f) * 35.0f);
+                                fill_ellipse_alpha(fb, sx + 12, sy + 12, 13, 11, (dngFloor < dngMaxFloors) ? RGB(60, 225, 255) : RGB(215, 50, 255), pulse);
+                                draw_spr24(fb, spr_dungeon, sx, sy);
+                            } else if (dt == 3) {
+                                draw_spr24(fb, spr_chest, sx, sy);
+                            } else if (dt == 4) {
+                                fill_ellipse_alpha(fb, sx + 12, sy + 12, 11, 9, RGB(80, 235, 130), 75);
+                                draw_text(fb, sx + 9, sy + 8, "^", RGB(140, 255, 170));
+                            }
+                        }
+                        int dist2 = (wx - dngPx) * (wx - dngPx) + (wy - dngPy) * (wy - dngPy);
+                        if (dist2 > 18) fill_rect_alpha(fb, sx, sy, 24, 24, RGB(6, 5, 12), 145);
+                    }
+                }
+            }
+            /* Visible Patrolling Dungeon Monsters inside Torch Radius */
+            for (int m = 0; m < 5; m++) if (dngMobs[m].alive) {
+                int dist2 = (dngMobs[m].x - dngPx) * (dngMobs[m].x - dngPx) + (dngMobs[m].y - dngPy) * (dngMobs[m].y - dngPy);
+                if (dist2 <= 26) {
+                    int sx = (dngMobs[m].x - ox) * 24, sy = (dngMobs[m].y - oy) * 24 - 8;
+                    if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
+                        int mBob = ((animFrame / 14 + m) & 1);
+                        fill_ellipse_alpha(fb, sx + 12, sy + 21, 9, 4, RGB(210, 35, 50), 120);
+                        const unsigned int *mspr = (dngMobs[m].type == 0) ? mob_slime : (dngMobs[m].type == 1 ? mob_goblin : mob_wraith);
+                        draw_spr64_as24(fb, mspr, sx, sy - mBob, dngMobs[m].flip);
+                    }
+                }
+            }
+            /* Band in Dungeon */
+            int dBob = ((animFrame / 16) & 1);
+            fill_ellipse_alpha(fb, 10 * 24 + 12, 5 * 24 + 13, 9, 4, RGB(0, 0, 0), 145);
+            draw_spr24_dir(fb, spr_band2, (dngP2x - ox) * 24, (dngP2y - oy) * 24 - 8 - dBob, band2Flip);
+            draw_spr24_dir(fb, spr_band1, (dngP1x - ox) * 24, (dngP1y - oy) * 24 - 8 - (dBob ^ 1), band1Flip);
+            draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8 - dBob, bardFlip);
+
+            /* Top Dungeon HUD */
+            draw_ff_window(fb, 4, 3, 472, 22);
+            sprintf(buf, "NV.%d", pLevel);
+            draw_text(fb, 10, 10, buf, RGB(255, 225, 90));
+            draw_text(fb, 42, 10, "HP", RGB(255, 130, 130));
+            fill_rect(fb, 58, 10, 50, 7, RGB(40, 20, 25));
+            fill_rect(fb, 58, 10, (pHp * 50) / pMaxHp, 7, RGB(70, 235, 100));
+            draw_border(fb, 58, 10, 50, 7, RGB(220, 235, 255));
+            draw_text(fb, 114, 10, "MP", RGB(130, 220, 255));
+            fill_rect(fb, 130, 10, 36, 7, RGB(20, 25, 50));
+            fill_rect(fb, 130, 10, (pMp * 36) / pMaxMp, 7, RGB(50, 200, 255));
+            draw_border(fb, 130, 10, 36, 7, RGB(220, 235, 255));
+            sprintf(buf, "MAZMORRA %d | PISO %d/%d | %s", curDngId + 1, dngFloor, dngMaxFloors, (dngFloor == dngMaxFloors) ? "ALTAR BOSS!" : "ESCALERA");
+            draw_text(fb, 176, 10, buf, RGB(255, 225, 120));
+
+            /* Diablo-Style Explored Dungeon Mini-Map (44x34) */
+            draw_ff_window(fb, 422, 28, 52, 42);
+            for (int my = 0; my < DH; my++) {
+                for (int mx = 0; mx < DW; mx++) {
+                    if (!dngSeen[my][mx]) continue;
+                    unsigned char dm = dngMap[my][mx];
+                    unsigned int mc = (dm == 0) ? RGB(52, 46, 72) : RGB(130, 115, 155);
+                    if (dm == 2) mc = (dngFloor < dngMaxFloors) ? RGB(60, 225, 255) : RGB(225, 65, 255);
+                    else if (dm == 3) mc = RGB(255, 215, 60);
+                    else if (dm == 4) mc = RGB(90, 240, 130);
+                    put_px(fb, 426 + mx, 32 + my, mc);
+                }
+            }
+            if ((animFrame / 15) & 1) fill_rect(fb, 426 + dngPx - 1, 32 + dngPy - 1, 3, 3, RGB(255, 255, 255));
+
+            if (dlgTimer > 0) {
+                draw_ff_window(fb, 10, 228, 460, 38);
+                fill_rect(fb, 16, 235, 24, 24, RGB(10, 14, 42));
+                draw_spr24(fb, spr_bard, 16, 235);
+                draw_border(fb, 16, 235, 24, 24, RGB(255, 215, 80));
+                draw_text(fb, 48, 236, "EXPLORACION DE MAZMORRA:", RGB(255, 225, 90));
                 draw_text(fb, 48, 250, dlgText, RGB(255, 255, 255));
             }
         } else if (inTitle) {
