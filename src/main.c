@@ -1186,6 +1186,7 @@ static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int 
 static unsigned char worldMap[MH][MW]; /* 0=pasto, 1=bosque, 2=montana, 3=agua, 4=reino, 5=dungeon, 6=puente, 7=camino, 8=muralla, 9=santuario */
 static int mapX = 28, mapY = 84, prevX1 = 27, prevY1 = 84, prevX2 = 26, prevY2 = 84;
 static int bardFlip = 0, band1Flip = 0, band2Flip = 0;
+static int walkTimer = 0, walkMax = 8, walkDx = 0, walkDy = 0, p1Dx = 0, p1Dy = 0, p2Dx = 0, p2Dy = 0;
 static int bossDefeated[3] = { 0, 0, 0 };
 static int shrineClaimed[2] = { 0, 0 };
 static const int dngX[3] = { 88, 178, 228 };
@@ -1609,6 +1610,7 @@ static void start_game(void) {
     pGold = 60; ingHerb = 2; ingCrystal = 1; ingEmber = 0; ingLotus = 0;
     potHp = 2; potMp = 1; potElixir = 0;
     inShop = 0; inCraft = 0; inPotionMenu = 0; shopCursor = 0;
+    walkTimer = 0; walkDx = 0; walkDy = 0; p1Dx = 0; p1Dy = 0; p2Dx = 0; p2Dy = 0;
     relicDmg = 0; relicVamp = 0; relicShield = 0;
     lastRegionId = -1; regionBannerTimer = 0;
     init_world();
@@ -1680,7 +1682,7 @@ int main(void) {
                 lastRegionId = curRegId;
                 regionBannerTimer = 165;
             }
-            if (moveCd > 0) moveCd--;
+            if (walkTimer > 0) walkTimer--;
 
             int dx = 0, dy = 0;
             float ax = ((float)pad.Lx - 128.0f) / 128.0f, ay = ((float)pad.Ly - 128.0f) / 128.0f;
@@ -1689,21 +1691,22 @@ int main(void) {
             else if ((pad.Buttons & PSP_CTRL_UP)    || ay < -0.45f) dy = -1;
             else if ((pad.Buttons & PSP_CTRL_DOWN)  || ay >  0.45f) dy =  1;
 
-            if (dx == 0 && dy == 0) moveCd = 0;
-            if ((dx != 0 || dy != 0) && moveCd <= 0) {
-                moveCd = 6;
+            if ((dx != 0 || dy != 0) && walkTimer <= 0) {
                 int nx = mapX + dx, ny = mapY + dy;
                 if (!is_tile_blocked(nx, ny)) {
                     band2Flip = (prevX2 > prevX1) ? 1 : (prevX2 < prevX1 ? 0 : band1Flip);
                     band1Flip = (prevX1 > mapX)   ? 1 : (prevX1 < mapX   ? 0 : bardFlip);
                     if (dx < 0) bardFlip = 1;
                     else if (dx > 0) bardFlip = 0;
+                    p2Dx = prevX1 - prevX2; p2Dy = prevY1 - prevY2;
+                    p1Dx = mapX - prevX1;   p1Dy = mapY - prevY1;
                     prevX2 = prevX1; prevY2 = prevY1;
                     prevX1 = mapX;   prevY1 = mapY;
                     mapX = nx;       mapY = ny;
+                    walkDx = dx; walkDy = dy; walkTimer = walkMax;
                     for (int i = 0; i < 3; i++) {
                         if (!bossDefeated[i] && mapX == dngX[i] && mapY == dngY[i]) {
-                            enter_dungeon(i);
+                            walkTimer = 0; enter_dungeon(i);
                             break;
                         }
                     }
@@ -1794,7 +1797,7 @@ int main(void) {
             }
         } else if (inDungeon) {
             if (dlgTimer > 0) dlgTimer--;
-            if (moveCd > 0) moveCd--;
+            if (walkTimer > 0) walkTimer--;
             int dx = 0, dy = 0;
             float ax = ((float)pad.Lx - 128.0f) / 128.0f, ay = ((float)pad.Ly - 128.0f) / 128.0f;
             if ((pad.Buttons & PSP_CTRL_LEFT)  || ax < -0.45f) dx = -1;
@@ -1802,18 +1805,19 @@ int main(void) {
             else if ((pad.Buttons & PSP_CTRL_UP)    || ay < -0.45f) dy = -1;
             else if ((pad.Buttons & PSP_CTRL_DOWN)  || ay >  0.45f) dy =  1;
 
-            if (dx == 0 && dy == 0) moveCd = 0;
-            if ((dx != 0 || dy != 0) && moveCd <= 0) {
-                moveCd = 6;
+            if ((dx != 0 || dy != 0) && walkTimer <= 0) {
                 int nx = dngPx + dx, ny = dngPy + dy;
                 if (nx >= 0 && nx < DW && ny >= 0 && ny < DH && dngMap[ny][nx] != 0) {
                     band2Flip = (dngP2x > dngP1x) ? 1 : (dngP2x < dngP1x ? 0 : band1Flip);
                     band1Flip = (dngP1x > dngPx)  ? 1 : (dngP1x < dngPx  ? 0 : bardFlip);
                     if (dx < 0) bardFlip = 1;
                     else if (dx > 0) bardFlip = 0;
+                    p2Dx = dngP1x - dngP2x; p2Dy = dngP1y - dngP2y;
+                    p1Dx = dngPx - dngP1x;  p1Dy = dngPy - dngP1y;
                     dngP2x = dngP1x; dngP2y = dngP1y;
                     dngP1x = dngPx;  dngP1y = dngPy;
                     dngPx = nx;      dngPy = ny;
+                    walkDx = dx; walkDy = dy; walkTimer = walkMax;
                     reveal_dungeon_fog(dngPx, dngPy);
 
                     unsigned char dt = dngMap[dngPy][dngPx];
@@ -2305,13 +2309,15 @@ int main(void) {
         char buf[64];
 
         if (inOverworld) {
-            /* Render 16x10 native 30x30 smooth-filtered 32-bit tiles (25% closer, zero jagged zoom!) */
+            /* Render 16x10 native 30x30 smooth-filtered 32-bit tiles with smooth sub-tile camera glide! */
             int ox = mapX - 8, oy = mapY - 4;
+            int camOffX = (walkTimer > 0) ? (walkDx * walkTimer * 30) / walkMax : 0;
+            int camOffY = (walkTimer > 0) ? (walkDy * walkTimer * 30) / walkMax : 0;
             int waterOff = (animFrame / 8) % 24;
-            for (int ty = 0; ty < 10; ty++) {
-                int sy = ty * 30 - 4;
-                for (int tx = 0; tx < 16; tx++) {
-                    int sx = tx * 30;
+            for (int ty = -1; ty < 11; ty++) {
+                int sy = ty * 30 - 4 + camOffY;
+                for (int tx = -1; tx < 17; tx++) {
+                    int sx = tx * 30 + camOffX;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx < 0 || wy < 0 || wx >= MW || wy >= MH) {
                         draw_tile24_30(fb, tile_grass, sx, sy);
@@ -2391,10 +2397,10 @@ int main(void) {
                 }
             }
             /* 2.5D Y-Sorted Trees & 96x96 Buildings: Pass 1 (wy <= mapY, behind player) */
-            for (int ty = 0; ty < 13; ty++) {
-                int sy = ty * 30 - 4;
+            for (int ty = -1; ty < 13; ty++) {
+                int sy = ty * 30 - 4 + camOffY;
                 for (int tx = -2; tx < 18; tx++) {
-                    int sx = tx * 30;
+                    int sx = tx * 30 + camOffX;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx >= 0 && wy >= 0 && wx < MW && wy <= mapY) {
                         unsigned char wt = worldMap[wy][wx];
@@ -2410,7 +2416,7 @@ int main(void) {
             }
             /* Visible Roaming Enemies across the map (2x2 Supersampled 64->30) */
             for (int i = 0; i < MAX_ROAM; i++) if (roam[i].alive) {
-                int sx = (roam[i].x - ox) * 30, sy = (roam[i].y - oy) * 30 - 4;
+                int sx = (roam[i].x - ox) * 30 + camOffX, sy = (roam[i].y - oy) * 30 - 4 + camOffY;
                 if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                     int mBob = ((animFrame / 14 + i) & 1);
                     fill_ellipse_alpha(fb, sx + 15, sy + 26, 11, 5, RGB(190, 30, 45), 115);
@@ -2420,7 +2426,7 @@ int main(void) {
             }
             /* Wandering Town Villagers bringing cities to life */
             for (int i = 0; i < MAX_TOWN_NPC; i++) {
-                int sx = (townNpcs[i].x - ox) * 30, sy = (townNpcs[i].y - oy) * 30 - 4;
+                int sx = (townNpcs[i].x - ox) * 30 + camOffX, sy = (townNpcs[i].y - oy) * 30 - 4 + camOffY;
                 if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                     int bob = ((animFrame / 16 + i) & 1);
                     fill_ellipse_alpha(fb, sx + 15, sy + 26, 10, 4, RGB(0, 0, 0), 115);
@@ -2433,7 +2439,7 @@ int main(void) {
             }
             /* 6 City Shop NPCs: Ingredient Merchants ($) & Potion Alchemists (A) */
             for (int i = 0; i < 3; i++) {
-                int mx = (shopMerchX[i] - ox) * 30, my = (shopMerchY[i] - oy) * 30 - 4;
+                int mx = (shopMerchX[i] - ox) * 30 + camOffX, my = (shopMerchY[i] - oy) * 30 - 4 + camOffY;
                 if (mx >= -30 && mx < SCR_W && my >= -30 && my < SCR_H) {
                     int mFlip = (mapX < shopMerchX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i) & 1);
@@ -2441,7 +2447,7 @@ int main(void) {
                     draw_spr24_30_dir(fb, spr_elder, mx, my - bob, mFlip);
                     draw_text(fb, mx + 8, my - 9 - bob, "$", RGB(110, 255, 140));
                 }
-                int ax = (shopAlchX[i] - ox) * 30, ay = (shopAlchY[i] - oy) * 30 - 4;
+                int ax = (shopAlchX[i] - ox) * 30 + camOffX, ay = (shopAlchY[i] - oy) * 30 - 4 + camOffY;
                 if (ax >= -30 && ax < SCR_W && ay >= -30 && ay < SCR_H) {
                     int aFlip = (mapX < shopAlchX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i + 1) & 1);
@@ -2452,7 +2458,7 @@ int main(void) {
             }
             /* 8 NPCs across the 6 regions dynamically turning to look towards your Bard */
             for (int i = 0; i < 8; i++) {
-                int sx = (npcX[i] - ox) * 30, sy = (npcY[i] - oy) * 30 - 4;
+                int sx = (npcX[i] - ox) * 30 + camOffX, sy = (npcY[i] - oy) * 30 - 4 + camOffY;
                 if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                     int npcFlip = (mapX < npcX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i) & 1);
@@ -2461,20 +2467,24 @@ int main(void) {
                     draw_text(fb, sx + 12, sy - 9 - bob, "!", RGB(255, 235, 60));
                 }
             }
-            /* Your 3-Piece Band following in formation with Scale2x crisp 30x30 sprites */
-            int bBob = ((animFrame / 16) & 1);
-            fill_ellipse_alpha(fb, (prevX2 - ox) * 30 + 15, (prevY2 - oy) * 30 + 22, 10, 4, RGB(0, 0, 0), 120);
-            fill_ellipse_alpha(fb, (prevX1 - ox) * 30 + 15, (prevY1 - oy) * 30 + 22, 10, 4, RGB(0, 0, 0), 120);
+            /* Your 3-Piece Band following in formation with smooth sub-tile glide */
+            int bBob = (walkTimer > 0) ? ((walkTimer >> 1) & 1) : ((animFrame / 16) & 1);
+            int b1x = (prevX1 - ox) * 30 + camOffX - ((walkTimer > 0) ? (p1Dx * walkTimer * 30) / walkMax : 0);
+            int b1y = (prevY1 - oy) * 30 + camOffY - ((walkTimer > 0) ? (p1Dy * walkTimer * 30) / walkMax : 0);
+            int b2x = (prevX2 - ox) * 30 + camOffX - ((walkTimer > 0) ? (p2Dx * walkTimer * 30) / walkMax : 0);
+            int b2y = (prevY2 - oy) * 30 + camOffY - ((walkTimer > 0) ? (p2Dy * walkTimer * 30) / walkMax : 0);
+            fill_ellipse_alpha(fb, b2x + 15, b2y + 22, 10, 4, RGB(0, 0, 0), 120);
+            fill_ellipse_alpha(fb, b1x + 15, b1y + 22, 10, 4, RGB(0, 0, 0), 120);
             fill_ellipse_alpha(fb, 8 * 30 + 15, 4 * 30 + 22, 11, 5, RGB(0, 0, 0), 135);
-            draw_spr24_30_dir(fb, spr_band2, (prevX2 - ox) * 30, (prevY2 - oy) * 30 - 4 - bBob, band2Flip);
-            draw_spr24_30_dir(fb, spr_band1, (prevX1 - ox) * 30, (prevY1 - oy) * 30 - 4 - (bBob ^ 1), band1Flip);
+            draw_spr24_30_dir(fb, spr_band2, b2x, b2y - 4 - bBob, band2Flip);
+            draw_spr24_30_dir(fb, spr_band1, b1x, b1y - 4 - (bBob ^ 1), band1Flip);
             draw_spr24_30_dir(fb, spr_bard,  8 * 30, 4 * 30 - 4 - bBob, bardFlip);
 
             /* 2.5D Y-Sorted Trees & 96x96 Buildings: Pass 2 (wy > mapY, roofs in front of player) */
-            for (int ty = 0; ty < 13; ty++) {
-                int sy = ty * 30 - 4;
+            for (int ty = -1; ty < 13; ty++) {
+                int sy = ty * 30 - 4 + camOffY;
                 for (int tx = -2; tx < 18; tx++) {
-                    int sx = tx * 30;
+                    int sx = tx * 30 + camOffX;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx >= 0 && wy > mapY && wx < MW && wy < MH) {
                         unsigned char wt = worldMap[wy][wx];
@@ -2646,12 +2656,14 @@ int main(void) {
             }
             draw_text(fb, 44, 226, inShop ? "[X] COMPRAR   [O] SALIR" : (inCraft ? "[X] CRAFTEAR   [O] SALIR" : "[X] USAR POCION   [O] VOLVER"), RGB(255, 225, 95));
         } else if (inDungeon) {
-            /* Diablo-Style Procedural Dungeon Rendering (Native 30x30 smooth-filtered tiles) */
+            /* Diablo-Style Procedural Dungeon Rendering (Native 30x30 smooth-filtered tiles + smooth glide) */
             int ox = dngPx - 8, oy = dngPy - 4;
-            for (int ty = 0; ty < 10; ty++) {
-                int sy = ty * 30 - 4;
-                for (int tx = 0; tx < 16; tx++) {
-                    int sx = tx * 30;
+            int camOffX = (walkTimer > 0) ? (walkDx * walkTimer * 30) / walkMax : 0;
+            int camOffY = (walkTimer > 0) ? (walkDy * walkTimer * 30) / walkMax : 0;
+            for (int ty = -1; ty < 11; ty++) {
+                int sy = ty * 30 - 4 + camOffY;
+                for (int tx = -1; tx < 17; tx++) {
+                    int sx = tx * 30 + camOffX;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx < 0 || wy < 0 || wx >= DW || wy >= DH || !dngSeen[wy][wx]) {
                         fill_rect(fb, sx, sy, 30, 30, RGB(8, 7, 14));
@@ -2683,7 +2695,7 @@ int main(void) {
             for (int m = 0; m < 5; m++) if (dngMobs[m].alive) {
                 int dist2 = (dngMobs[m].x - dngPx) * (dngMobs[m].x - dngPx) + (dngMobs[m].y - dngPy) * (dngMobs[m].y - dngPy);
                 if (dist2 <= 26) {
-                    int sx = (dngMobs[m].x - ox) * 30, sy = (dngMobs[m].y - oy) * 30 - 4;
+                    int sx = (dngMobs[m].x - ox) * 30 + camOffX, sy = (dngMobs[m].y - oy) * 30 - 4 + camOffY;
                     if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                         int mBob = ((animFrame / 14 + m) & 1);
                         fill_ellipse_alpha(fb, sx + 15, sy + 26, 11, 5, RGB(210, 35, 50), 120);
@@ -2692,11 +2704,15 @@ int main(void) {
                     }
                 }
             }
-            /* Band in Dungeon */
-            int dBob = ((animFrame / 16) & 1);
+            /* Band in Dungeon with smooth sub-tile glide */
+            int dBob = (walkTimer > 0) ? ((walkTimer >> 1) & 1) : ((animFrame / 16) & 1);
+            int d1x = (dngP1x - ox) * 30 + camOffX - ((walkTimer > 0) ? (p1Dx * walkTimer * 30) / walkMax : 0);
+            int d1y = (dngP1y - oy) * 30 + camOffY - ((walkTimer > 0) ? (p1Dy * walkTimer * 30) / walkMax : 0);
+            int d2x = (dngP2x - ox) * 30 + camOffX - ((walkTimer > 0) ? (p2Dx * walkTimer * 30) / walkMax : 0);
+            int d2y = (dngP2y - oy) * 30 + camOffY - ((walkTimer > 0) ? (p2Dy * walkTimer * 30) / walkMax : 0);
             fill_ellipse_alpha(fb, 8 * 30 + 15, 4 * 30 + 22, 11, 5, RGB(0, 0, 0), 145);
-            draw_spr24_30_dir(fb, spr_band2, (dngP2x - ox) * 30, (dngP2y - oy) * 30 - 4 - dBob, band2Flip);
-            draw_spr24_30_dir(fb, spr_band1, (dngP1x - ox) * 30, (dngP1y - oy) * 30 - 4 - (dBob ^ 1), band1Flip);
+            draw_spr24_30_dir(fb, spr_band2, d2x, d2y - 4 - dBob, band2Flip);
+            draw_spr24_30_dir(fb, spr_band1, d1x, d1y - 4 - (dBob ^ 1), band1Flip);
             draw_spr24_30_dir(fb, spr_bard,  8 * 30, 4 * 30 - 4 - dBob, bardFlip);
 
             /* RTX Real-Time Dungeon Torch & Altar Radiance Shader */
