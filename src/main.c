@@ -242,6 +242,18 @@ static void draw_tile_30_scroll(unsigned int *fb, const unsigned int *tile, int 
     }
 }
 
+static void copy_tile30_rect(unsigned int *fb, const unsigned int *tile, int dx, int dy, int rx, int ry, int rw, int rh) {
+    int j0 = (dy + ry < 0) ? -(dy + ry) : 0;
+    int j1 = (dy + ry + rh > SCR_H) ? (SCR_H - (dy + ry)) : rh;
+    int i0 = (dx + rx < 0) ? -(dx + rx) : 0;
+    int i1 = (dx + rx + rw > SCR_W) ? (SCR_W - (dx + rx)) : rw;
+    if (j0 >= j1 || i0 >= i1) return;
+    int cnt = i1 - i0;
+    for (int j = j0; j < j1; j++) {
+        memcpy(&fb[(dy + ry + j) * BUF_W + dx + rx + i0], &tile[(ry + j) * 30 + rx + i0], cnt * 4);
+    }
+}
+
 static inline unsigned int blend_rgb_4(unsigned int c00, unsigned int c10, unsigned int c01, unsigned int c11, int fx, int fy) {
     int ifx = 256 - fx, ify = 256 - fy;
     int w00 = (ifx * ify) >> 8, w10 = (fx * ify) >> 8, w01 = (ifx * fy) >> 8, w11 = (fx * fy) >> 8;
@@ -2376,13 +2388,33 @@ int main(void) {
                             if (wShimmer < 2) {
                                 fill_rect_alpha(fb, sx + 5 + ((wx * 7) & 7), sy + 8 + ((wy * 5) & 11), 9, 2, RGB(215, 245, 255), 115);
                             }
-                            if (wx > 0 && worldMap[wy][wx - 1] != 3 && worldMap[wy][wx - 1] != 6)
+                            if (wx > 0 && worldMap[wy][wx - 1] != 3 && worldMap[wy][wx - 1] != 6) {
                                 fill_rect_alpha(fb, sx, sy, 4, 30, RGB(205, 185, 130), 175);
-                            if (wx < MW - 1 && worldMap[wy][wx + 1] != 3 && worldMap[wy][wx + 1] != 6)
+                                fill_rect_alpha(fb, sx + 4, sy, 2, 30, RGB(220, 245, 255), 90);
+                            }
+                            if (wx < MW - 1 && worldMap[wy][wx + 1] != 3 && worldMap[wy][wx + 1] != 6) {
                                 fill_rect_alpha(fb, sx + 26, sy, 4, 30, RGB(205, 185, 130), 175);
+                                fill_rect_alpha(fb, sx + 24, sy, 2, 30, RGB(220, 245, 255), 90);
+                            }
+                            if (wy > 0 && worldMap[wy - 1][wx] != 3 && worldMap[wy - 1][wx] != 6) {
+                                fill_rect_alpha(fb, sx, sy, 30, 4, RGB(205, 185, 130), 175);
+                                fill_rect_alpha(fb, sx, sy + 4, 30, 2, RGB(220, 245, 255), 90);
+                            }
+                            if (wy < MH - 1 && worldMap[wy + 1][wx] != 3 && worldMap[wy + 1][wx] != 6) {
+                                fill_rect_alpha(fb, sx, sy + 26, 30, 4, RGB(205, 185, 130), 175);
+                                fill_rect_alpha(fb, sx, sy + 24, 30, 2, RGB(220, 245, 255), 90);
+                            }
                             draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 1);
                         } else if (t == 4 || t >= 10) {
                             draw_tile_30(fb, tile_castle_30, sx, sy);
+                            unsigned char nL = (wx > 0) ? worldMap[wy][wx - 1] : 0;
+                            unsigned char nR = (wx < MW - 1) ? worldMap[wy][wx + 1] : 0;
+                            unsigned char nU = (wy > 0) ? worldMap[wy - 1][wx] : 0;
+                            unsigned char nD = (wy < MH - 1) ? worldMap[wy + 1][wx] : 0;
+                            if (nL == 0 || nL == 1 || nL == 2) { copy_tile30_rect(fb, tile_grass_30, sx, sy, 0, 0, 2, 30); fill_rect_alpha(fb, sx + 2, sy, 2, 30, RGB(42, 38, 44), 110); }
+                            if (nR == 0 || nR == 1 || nR == 2) { copy_tile30_rect(fb, tile_grass_30, sx, sy, 28, 0, 2, 30); fill_rect_alpha(fb, sx + 26, sy, 2, 30, RGB(42, 38, 44), 110); }
+                            if (nU == 0 || nU == 1 || nU == 2) { copy_tile30_rect(fb, tile_grass_30, sx, sy, 0, 0, 30, 2); fill_rect_alpha(fb, sx, sy + 2, 30, 2, RGB(42, 38, 44), 110); }
+                            if (nD == 0 || nD == 1 || nD == 2) { copy_tile30_rect(fb, tile_grass_30, sx, sy, 0, 28, 30, 2); fill_rect_alpha(fb, sx, sy + 26, 30, 2, RGB(42, 38, 44), 110); }
                             if (t == 16) draw_spr24_30(fb, spr_flowerbed, sx, sy);
                             else if (t == 17) draw_spr24_30(fb, spr_bench, sx, sy);
                             else if (t == 18) draw_spr24_30(fb, spr_crates, sx, sy);
@@ -2396,14 +2428,28 @@ int main(void) {
                             int bVert = (bU || bD) && !(bL && bR);
                             draw_tile_30(fb, bVert ? tile_bridge_v_30 : tile_bridge_h_30, sx, sy);
                         } else if (t == 7) {
-                            int pL = (wx > 0 && (worldMap[wy][wx - 1] == 7 || worldMap[wy][wx - 1] == 6 || worldMap[wy][wx - 1] == 4 || worldMap[wy][wx - 1] >= 10));
-                            int pR = (wx < MW - 1 && (worldMap[wy][wx + 1] == 7 || worldMap[wy][wx + 1] == 6 || worldMap[wy][wx + 1] == 4 || worldMap[wy][wx + 1] >= 10));
-                            int pU = (wy > 0 && (worldMap[wy - 1][wx] == 7 || worldMap[wy - 1][wx] == 6 || worldMap[wy - 1][wx] == 4 || worldMap[wy - 1][wx] >= 10));
-                            int pD = (wy < MH - 1 && (worldMap[wy + 1][wx] == 7 || worldMap[wy + 1][wx] == 6 || worldMap[wy + 1][wx] == 4 || worldMap[wy + 1][wx] >= 10));
+                            unsigned char nL = (wx > 0) ? worldMap[wy][wx - 1] : 0;
+                            unsigned char nR = (wx < MW - 1) ? worldMap[wy][wx + 1] : 0;
+                            unsigned char nU = (wy > 0) ? worldMap[wy - 1][wx] : 0;
+                            unsigned char nD = (wy < MH - 1) ? worldMap[wy + 1][wx] : 0;
+                            int pL = (nL == 7 || nL == 6 || nL == 4 || nL >= 10);
+                            int pR = (nR == 7 || nR == 6 || nR == 4 || nR >= 10);
+                            int pU = (nU == 7 || nU == 6 || nU == 4 || nU >= 10);
+                            int pD = (nD == 7 || nD == 6 || nD == 4 || nD >= 10);
                             int hasH = pL || pR, hasV = pU || pD;
                             if (hasH && !hasV) draw_tile_30(fb, tile_path_h_30, sx, sy);
                             else if (hasV && !hasH) draw_tile_30(fb, tile_path_v_30, sx, sy);
-                            else draw_tile_30(fb, tile_path_c_30, sx, sy);
+                            else {
+                                draw_tile_30(fb, tile_path_c_30, sx, sy);
+                                if (!pL) { copy_tile30_rect(fb, tile_grass_30, sx, sy, 0, 0, 5, 30); fill_rect_alpha(fb, sx + 5, sy, 1, 30, RGB(115, 78, 44), 145); }
+                                if (!pR) { copy_tile30_rect(fb, tile_grass_30, sx, sy, 25, 0, 5, 30); fill_rect_alpha(fb, sx + 24, sy, 1, 30, RGB(115, 78, 44), 145); }
+                                if (!pU) { copy_tile30_rect(fb, tile_grass_30, sx, sy, 0, 0, 30, 5); fill_rect_alpha(fb, sx, sy + 5, 30, 1, RGB(115, 78, 44), 145); }
+                                if (!pD) { copy_tile30_rect(fb, tile_grass_30, sx, sy, 0, 25, 30, 5); fill_rect_alpha(fb, sx, sy + 24, 30, 1, RGB(115, 78, 44), 145); }
+                            }
+                            if (nL == 4 || nL >= 10) fill_rect_alpha(fb, sx, sy, 3, 30, RGB(148, 126, 102), 135);
+                            if (nR == 4 || nR >= 10) fill_rect_alpha(fb, sx + 27, sy, 3, 30, RGB(148, 126, 102), 135);
+                            if (nU == 4 || nU >= 10) fill_rect_alpha(fb, sx, sy, 30, 3, RGB(148, 126, 102), 135);
+                            if (nD == 4 || nD >= 10) fill_rect_alpha(fb, sx, sy + 27, 30, 3, RGB(148, 126, 102), 135);
                         } else if (t == 8) {
                             int wL = (wx > 0 && worldMap[wy][wx - 1] == 8);
                             int wR = (wx < MW - 1 && worldMap[wy][wx + 1] == 8);
