@@ -2403,20 +2403,20 @@ int main(void) {
                             fill_rect_alpha(fb, sx + 4, sy + 22, 22, 6, RGB(0, 0, 0), 105);
                             draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
                         } else if (wt == 10 || wt == 11) {
-                            draw_spr_wh(fb, (wt == 10) ? spr_house_96 : spr_tavern_96, 96, 96, sx - 33, sy - 66);
-                            if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
+                            draw_spr_wh(fb, (wt == 10) ? spr_house_96 : spr_tavern_96, 96, 96, sx - 33, sy - 62);
+                            if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 47, wx, wy);
                         } else if (wt == 12) {
-                            draw_spr_wh(fb, spr_fountain_56, 56, 56, sx - 13, sy - 26);
+                            draw_spr_wh(fb, spr_fountain_56, 56, 56, sx - 13, sy - 24);
                             int sp1 = (animFrame / 3) % 10;
-                            fill_rect_alpha(fb, sx + 15, sy - 4 - sp1, 2, 4, RGB(195, 242, 255), 210);
-                            fill_rect_alpha(fb, sx + 5, sy + 2 - ((sp1 + 5) % 10), 2, 3, RGB(175, 235, 255), 195);
-                            fill_rect_alpha(fb, sx + 24, sy + 2 - ((sp1 + 3) % 10), 2, 3, RGB(175, 235, 255), 195);
+                            fill_rect_alpha(fb, sx + 15, sy - 2 - sp1, 2, 4, RGB(195, 242, 255), 210);
+                            fill_rect_alpha(fb, sx + 5, sy + 4 - ((sp1 + 5) % 10), 2, 3, RGB(175, 235, 255), 195);
+                            fill_rect_alpha(fb, sx + 24, sy + 4 - ((sp1 + 3) % 10), 2, 3, RGB(175, 235, 255), 195);
                         } else if (wt == 13) {
-                            draw_spr_wh(fb, spr_market_48, 48, 48, sx - 9, sy - 20);
+                            draw_spr_wh(fb, spr_market_48, 48, 48, sx - 9, sy - 15);
                         } else if (wt == 14) {
-                            draw_spr_wh(fb, spr_lamp_32x52, 32, 52, sx - 1, sy - 24);
+                            draw_spr_wh(fb, spr_lamp_32x52, 32, 52, sx - 1, sy - 21);
                         } else if (wt == 15) {
-                            draw_spr_wh(fb, spr_well_42, 42, 42, sx - 6, sy - 14);
+                            draw_spr_wh(fb, spr_well_42, 42, 42, sx - 6, sy - 11);
                         }
                     }
                 }
@@ -2497,20 +2497,20 @@ int main(void) {
                             fill_rect_alpha(fb, sx + 4, sy + 22, 22, 6, RGB(0, 0, 0), 105);
                             draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
                         } else if (wt == 10 || wt == 11) {
-                            draw_spr_wh(fb, (wt == 10) ? spr_house_96 : spr_tavern_96, 96, 96, sx - 33, sy - 66);
-                            if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
+                            draw_spr_wh(fb, (wt == 10) ? spr_house_96 : spr_tavern_96, 96, 96, sx - 33, sy - 62);
+                            if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 47, wx, wy);
                         } else if (wt == 12) {
-                            draw_spr_wh(fb, spr_fountain_56, 56, 56, sx - 13, sy - 26);
+                            draw_spr_wh(fb, spr_fountain_56, 56, 56, sx - 13, sy - 24);
                             int sp1 = (animFrame / 3) % 10;
-                            fill_rect_alpha(fb, sx + 15, sy - 4 - sp1, 2, 4, RGB(195, 242, 255), 210);
-                            fill_rect_alpha(fb, sx + 5, sy + 2 - ((sp1 + 5) % 10), 2, 3, RGB(175, 235, 255), 195);
-                            fill_rect_alpha(fb, sx + 24, sy + 2 - ((sp1 + 3) % 10), 2, 3, RGB(175, 235, 255), 195);
+                            fill_rect_alpha(fb, sx + 15, sy - 2 - sp1, 2, 4, RGB(195, 242, 255), 210);
+                            fill_rect_alpha(fb, sx + 5, sy + 4 - ((sp1 + 5) % 10), 2, 3, RGB(175, 235, 255), 195);
+                            fill_rect_alpha(fb, sx + 24, sy + 4 - ((sp1 + 3) % 10), 2, 3, RGB(175, 235, 255), 195);
                         } else if (wt == 13) {
-                            draw_spr_wh(fb, spr_market_48, 48, 48, sx - 9, sy - 20);
+                            draw_spr_wh(fb, spr_market_48, 48, 48, sx - 9, sy - 15);
                         } else if (wt == 14) {
-                            draw_spr_wh(fb, spr_lamp_32x52, 32, 52, sx - 1, sy - 24);
+                            draw_spr_wh(fb, spr_lamp_32x52, 32, 52, sx - 1, sy - 21);
                         } else if (wt == 15) {
-                            draw_spr_wh(fb, spr_well_42, 42, 42, sx - 6, sy - 14);
+                            draw_spr_wh(fb, spr_well_42, 42, 42, sx - 6, sy - 11);
                         }
                     }
                 }
