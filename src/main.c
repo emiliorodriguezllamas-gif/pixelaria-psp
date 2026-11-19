@@ -2365,7 +2365,15 @@ int main(void) {
                         } else if (t == 7) {
                             draw_tile24_30(fb, tile_path, sx, sy);
                         } else if (t == 8) {
-                            draw_tile24_30(fb, tile_wall, sx, sy);
+                            int wL = (wx > 0 && worldMap[wy][wx - 1] == 8);
+                            int wR = (wx < MW - 1 && worldMap[wy][wx + 1] == 8);
+                            int wU = (wy > 0 && worldMap[wy - 1][wx] == 8);
+                            int wD = (wy < MH - 1 && worldMap[wy + 1][wx] == 8);
+                            int hasH = wL || wR, hasV = wU || wD;
+                            draw_tile24_30(fb, tile_grass, sx, sy);
+                            if (hasH && !hasV) draw_spr_wh(fb, spr_wall_h, 30, 30, sx, sy);
+                            else if (hasV && !hasH) draw_spr_wh(fb, spr_wall_v, 30, 30, sx, sy);
+                            else draw_spr_wh(fb, spr_wall_corner, 30, 30, sx, sy);
                         } else {
                             draw_tile24_30(fb, tile_grass, sx, sy);
                             if (t == 0) draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 0);
