@@ -213,6 +213,31 @@ static void draw_spr32_x2(unsigned int *fb, const unsigned int *spr, int dx, int
     }
 }
 
+static unsigned int zoomTmp[SCR_H][SCR_W];
+static void zoom_world_20pct(unsigned int *fb) {
+    static int srcX[SCR_W], init = 0;
+    if (!init) {
+        init = 1;
+        for (int x = 0; x < SCR_W; x++) {
+            int sx = 252 + ((x - 252) * 5) / 6;
+            if (sx < 0) sx = 0; else if (sx >= SCR_W) sx = SCR_W - 1;
+            srcX[x] = sx;
+        }
+    }
+    for (int y = 21; y < 248; y++) {
+        memcpy(zoomTmp[y], &fb[y * BUF_W], SCR_W * sizeof(unsigned int));
+    }
+    for (int y = 24; y < SCR_H; y++) {
+        int sy = 124 + ((y - 124) * 5) / 6;
+        if (sy < 21) sy = 21; else if (sy > 247) sy = 247;
+        const unsigned int *src = zoomTmp[sy];
+        unsigned int *dst = &fb[y * BUF_W];
+        for (int x = 0; x < SCR_W; x++) {
+            dst[x] = src[srcX[x]];
+        }
+    }
+}
+
 static void draw_spr64_as24(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
     for (int j = 0; j < 24; j++) {
         int py = dy + j;
@@ -1837,6 +1862,9 @@ int main(void) {
             update_draw_bugs(fb, (mapX >= 118 && mapX < 165), (weatherMode >= 2));
             update_draw_weather_and_lighting(fb, mapX, mapY);
 
+            /* 20% Camera Zoom-In centered on the player (HUD stays razor-sharp 1:1) */
+            zoom_world_20pct(fb);
+
             /* Top Adventure HUD Window with Level, XP, HP & MP bars + Region Name */
             draw_ff_window(fb, 4, 3, 472, 22);
             sprintf(buf, "NV.%d", pLevel);
@@ -1948,6 +1976,9 @@ int main(void) {
             draw_spr24_dir(fb, spr_band2, (dngP2x - ox) * 24, (dngP2y - oy) * 24 - 8 - dBob, band2Flip);
             draw_spr24_dir(fb, spr_band1, (dngP1x - ox) * 24, (dngP1y - oy) * 24 - 8 - (dBob ^ 1), band1Flip);
             draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8 - dBob, bardFlip);
+
+            /* 20% Camera Zoom-In centered on the player in Dungeons too */
+            zoom_world_20pct(fb);
 
             /* Top Dungeon HUD */
             draw_ff_window(fb, 4, 3, 472, 22);
