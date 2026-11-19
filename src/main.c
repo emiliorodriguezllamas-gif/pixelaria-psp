@@ -738,7 +738,7 @@ static const int bossWeak[3] = { 0, 1, 2 };
 
 static int chapter = 0, isMobBattle = 0, bossHitFlash = 0;
 static int pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 120;
-static int numEnemies = 1, targetEnemy = 0, turnMember = 0, guardActive = 0, attackMode = 0;
+static int numEnemies = 1, targetEnemy = 0, turnMember = 0, dodgeMember = 0, guardActive = 0, attackMode = 0;
 static int eHp[3] = { 100, 0, 0 }, eMaxHp[3] = { 100, 0, 0 }, eType[3] = { 0, 0, 0 }, eIsBoss[3] = { 0, 0, 0 };
 static int pLevel = 1, pXp = 0, pNextXp = 60, pBaseAtk = 5;
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
@@ -1657,6 +1657,7 @@ int main(void) {
                         ffCursor = 0;
                         if (turnMember >= 3) {
                             turnMember = 0; inFFMenu = 0; inDefense = 1; phaseTimer = 0;
+                            dodgeMember = guardActive ? 2 : ((dodgeMember + 1) % 3);
                             bardX = 240.0f; bardY = 195.0f; memset(projAlive, 0, sizeof(projAlive));
                         }
                     }
@@ -1770,6 +1771,7 @@ int main(void) {
                     if (turnMember >= 3) {
                         turnMember = 0;
                         inDefense = 1;
+                        dodgeMember = guardActive ? 2 : ((dodgeMember + 1) % 3);
                         bardX = 240.0f; bardY = 195.0f;
                         memset(projAlive, 0, sizeof(projAlive));
                     } else {
@@ -2239,12 +2241,15 @@ int main(void) {
                 draw_spr16(fb, spr_btn_cr16, 187, 168);
             } else {
                 const unsigned int * const btns20_arr[4] = { spr_btn_sq20, spr_btn_tr20, spr_btn_ci20, spr_btn_cr20 };
+                const unsigned int * const partyAvatars[3] = { spr_bard, spr_band1, spr_band2 };
+                const char * const partyNames[3] = { "KAEL", "LYRA", "THORIN" };
+                int activeAvatar = inDefense ? dodgeMember : turnMember;
                 /* Battle Scene: Top Status Windows + 32-bit High-Res Band (48x48) & Boss (64x64) */
                 draw_ff_window(fb, 8, 6, 206, 42);
                 fill_rect(fb, 14, 12, 26, 28, RGB(14, 18, 48));
-                draw_spr24(fb, spr_bard, 15, 14);
+                draw_spr24(fb, partyAvatars[activeAvatar], 15, 14);
                 draw_border(fb, 14, 12, 26, 28, RGB(240, 200, 80));
-                sprintf(buf, "BANDA DEL BARDO  NV.%d", pLevel);
+                sprintf(buf, "%s (BANDA) NV.%d", partyNames[activeAvatar], pLevel);
                 draw_text(fb, 46, 11, buf, RGB(255, 225, 85));
                 draw_text(fb, 46, 23, "HP", RGB(120, 255, 140));
                 fill_rect(fb, 62, 23, 80, 7, RGB(20, 35, 25));
@@ -2384,10 +2389,11 @@ int main(void) {
                     sprintf(buf, "RELIQUIAS:+%dDMG +%dVAMP %s", relicDmg, relicVamp, relicShield ? "ESC" : "-");
                     draw_text(fb, 246, 248, buf, RGB(255, 215, 85));
                 } else if (inDefense) {
-                    /* Enemy Turn: 32-Bit Runic Dodge Arena with Survival Bar & Fiery Shadow Orbs */
+                    /* Enemy Turn: 32-Bit Runic Dodge Arena with Active Party Member Avatar */
                     draw_ff_window(fb, 132, 110, 216, 156);
                     fill_rect(fb, 136, 114, 208, 13, RGB(88, 22, 42));
-                    draw_text(fb, 140, 117, "3. ESQUIVA ATAQUE!", RGB(255, 235, 80));
+                    sprintf(buf, "ESQUIVA: %s!", partyNames[dodgeMember]);
+                    draw_text(fb, 140, 117, buf, RGB(255, 235, 80));
                     fill_rect(fb, 266, 117, 72, 7, RGB(25, 10, 15));
                     fill_rect(fb, 266, 117, ((240 - phaseTimer) * 72) / 240, 7, RGB(255, 185, 50));
                     draw_border(fb, 266, 117, 72, 7, RGB(255, 255, 255));
@@ -2398,9 +2404,9 @@ int main(void) {
                     for (int gy = 148; gy < 258; gy += 18) fill_rect(fb, 139, gy, 202, 1, RGB(34, 28, 64));
                     draw_border(fb, 138, 130, 204, 130, (judgeT > 18) ? RGB(255, 80, 90) : RGB(140, 110, 225));
 
-                    /* Glowing Cyan Aegis Shield Ring around Bard */
-                    draw_ellipse_ring(fb, (int)bardX, (int)bardY, 15, 14, (judgeT > 16) ? RGB(255, 80, 90) : RGB(70, 235, 255));
-                    draw_spr24(fb, spr_bard, (int)bardX - 12, (int)bardY - 12);
+                    /* Glowing Cyan Aegis Shield Ring around Active Character Avatar */
+                    draw_ellipse_ring(fb, (int)bardX, (int)bardY, 15, 14, (judgeT > 16) ? RGB(255, 80, 90) : (guardActive ? RGB(255, 225, 85) : RGB(70, 235, 255)));
+                    draw_spr24(fb, partyAvatars[dodgeMember], (int)bardX - 12, (int)bardY - 12);
                     if (judgeT > 0) draw_text(fb, (int)bardX - 18, (int)bardY - 24 - (26 - judgeT) / 2, judge, RGB(255, 90, 90));
 
                     /* 32-Bit Layered Fiery Shadow-Flame Orbs with Comet Trails */
