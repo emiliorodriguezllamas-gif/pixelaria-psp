@@ -531,6 +531,190 @@ static void update_draw_sparks(unsigned int *fb) {
     }
 }
 
+/* ================= VEGETACION, INSECTOS, ILUMINACION Y CLIMA ================= */
+#define MAX_BUGS 22
+#define MAX_RAIN 56
+typedef struct { float x, y, vx, vy, phase; unsigned char type, active; } Bug;
+typedef struct { float x, y, groundY, spd; unsigned char splash; } RainDrop;
+static Bug bugs[MAX_BUGS];
+static RainDrop rain[MAX_RAIN];
+static int atmoInit = 0, weatherMode = 0, weatherTimer = 0; /* 0=Sol/Claro, 1=Niebla, 2=Lluvia, 3=Tormenta+Niebla */
+
+static void init_atmosphere(void) {
+    if (atmoInit) return;
+    atmoInit = 1;
+    for (int i = 0; i < MAX_BUGS; i++) {
+        bugs[i].x = (float)(xr() % SCR_W);
+        bugs[i].y = (float)(26 + (xr() % (SCR_H - 36)));
+        bugs[i].vx = ((float)((int)(xr() % 13) - 6)) * 0.08f;
+        bugs[i].vy = ((float)((int)(xr() % 11) - 5)) * 0.06f;
+        bugs[i].phase = (float)(xr() % 628) * 0.01f;
+        bugs[i].type = (unsigned char)(i % 3); /* 0=Mariposa, 1=Luciernaga, 2=Libelula */
+        bugs[i].active = 1;
+    }
+    for (int i = 0; i < MAX_RAIN; i++) {
+        rain[i].x = (float)(xr() % SCR_W);
+        rain[i].y = (float)(xr() % SCR_H);
+        rain[i].groundY = (float)(40 + (xr() % (SCR_H - 44)));
+        rain[i].spd = 4.5f + (float)(xr() % 25) * 0.14f;
+        rain[i].splash = 0;
+    }
+}
+
+static void draw_tile_vegetation(unsigned int *fb, int wx, int wy, int sx, int sy, int isWater) {
+    unsigned int h = ((unsigned int)wx * 73856093u) ^ ((unsigned int)wy * 19349663u);
+    if (isWater) {
+        if ((h % 19u) == 0u) {
+            int lx = sx + 5 + (int)(h % 10u), ly = sy + 6 + (int)((h >> 4) % 10u);
+            fill_ellipse_alpha(fb, lx + 4, ly + 3, 5, 3, RGB(32, 130, 62), 210);
+            fill_rect_alpha(fb, lx + 3, ly + 1, 2, 2, RGB(245, 165, 205), 220);
+        }
+        return;
+    }
+    unsigned int kind = h % 29u;
+    int sway = (int)(sinf((float)animFrame * 0.07f + (float)(wx + wy) * 0.7f) * 1.4f);
+    if (kind < 6u) {
+        /* Swaying tall grass blades */
+        int gx = sx + 4 + (int)((h >> 3) % 13u);
+        int gy = sy + 14 + (int)((h >> 7) % 6u);
+        for (int b = 0; b < 3; b++) {
+            int bx = gx + b * 3;
+            fill_rect(fb, bx, gy - 2, 1, 4, RGB(24, 98, 36));
+            fill_rect(fb, bx + sway, gy - 5, 1, 3, RGB(78, 192, 74));
+        }
+    } else if (kind < 9u) {
+        /* Wildflowers (gold, sky blue, crimson) */
+        static const unsigned int fcols[3] = { RGB(255, 220, 65), RGB(115, 205, 255), RGB(255, 110, 145) };
+        unsigned int fc = fcols[(h >> 5) % 3u];
+        for (int f = 0; f < 2; f++) {
+            int fx = sx + 5 + f * 9 + (int)((h >> (f * 3)) % 5u);
+            int fy = sy + 11 + (int)((h >> (f * 4 + 2)) % 8u);
+            fill_rect(fb, fx, fy + 2, 1, 3, RGB(34, 125, 48));
+            fill_rect(fb, fx - 1 + sway, fy, 3, 2, fc);
+            fill_rect(fb, fx + sway, fy + 1, 1, 1, RGB(255, 250, 210));
+        }
+    } else if (kind == 10u) {
+        /* Lush fern / bush cluster */
+        int bx = sx + 12, by = sy + 14;
+        fill_ellipse_alpha(fb, bx, by + 2, 7, 4, RGB(0, 0, 0), 75);
+        fill_ellipse_alpha(fb, bx, by, 7, 5, RGB(22, 95, 38), 235);
+        fill_ellipse_alpha(fb, bx + sway - 1, by - 2, 5, 3, RGB(64, 175, 68), 235);
+    }
+}
+
+static void update_draw_bugs(unsigned int *fb, int isForest, int isDarkWeather) {
+    init_atmosphere();
+    int activeLimit = isForest ? MAX_BUGS : 14;
+    for (int i = 0; i < activeLimit; i++) {
+        Bug *b = &bugs[i];
+        b->phase += 0.14f;
+        if ((xr() % 45) == 0) {
+            b->vx += ((float)((int)(xr() % 9) - 4)) * 0.05f;
+            b->vy += ((float)((int)(xr() % 9) - 4)) * 0.04f;
+            if (b->vx > 0.9f) b->vx = 0.9f; if (b->vx < -0.9f) b->vx = -0.9f;
+            if (b->vy > 0.7f) b->vy = 0.7f; if (b->vy < -0.7f) b->vy = -0.7f;
+        }
+        b->x += b->vx + cosf(b->phase * 0.5f) * 0.25f;
+        b->y += b->vy + sinf(b->phase) * 0.35f;
+        if (b->x < -6) b->x = SCR_W + 4; if (b->x > SCR_W + 6) b->x = -4;
+        if (b->y < 24) b->y = SCR_H - 8; if (b->y > SCR_H - 4) b->y = 26;
+
+        int ix = (int)b->x, iy = (int)b->y;
+        if (b->type == 1 || isDarkWeather || isForest) {
+            /* Glowing Firefly */
+            int glow = 65 + (int)(sinf(b->phase * 1.3f) * 45.0f);
+            if (glow < 20) glow = 20;
+            fill_ellipse_alpha(fb, ix, iy, 5, 5, RGB(175, 255, 85), glow);
+            fill_rect(fb, ix, iy, 2, 2, RGB(245, 255, 170));
+        } else if (b->type == 0) {
+            /* Fluttering Butterfly */
+            int flap = ((animFrame / 4 + i) & 1) ? 2 : 1;
+            unsigned int wcol = (i & 1) ? RGB(255, 195, 70) : RGB(115, 225, 255);
+            fill_rect_alpha(fb, ix - flap, iy - 1, flap, 2, wcol, 230);
+            fill_rect_alpha(fb, ix + 1, iy - 1, flap, 2, wcol, 230);
+            fill_rect(fb, ix, iy - 1, 1, 3, RGB(40, 28, 18));
+        } else {
+            /* Iridescent Dragonfly */
+            fill_rect(fb, ix - 1, iy, 4, 1, RGB(70, 225, 210));
+            if ((animFrame + i) & 1) fill_rect_alpha(fb, ix, iy - 2, 2, 4, RGB(215, 245, 255), 160);
+        }
+    }
+}
+
+static void update_draw_weather_and_lighting(unsigned int *fb, int mapXPos, int mapYPos) {
+    init_atmosphere();
+    weatherTimer++;
+    if (weatherTimer >= 1200) { /* Shift weather every ~20 seconds */
+        weatherTimer = 0;
+        weatherMode = (weatherMode + 1 + (xr() & 1)) & 3;
+    }
+
+    int inVolcano = (mapXPos >= 165 && mapYPos < 85);
+    int inArcane  = (mapXPos >= 118 && mapXPos < 165);
+
+    if (inVolcano) {
+        /* Warm volcanic ambient + drifting glowing embers */
+        fill_rect_alpha(fb, 0, 24, SCR_W, SCR_H - 24, RGB(75, 22, 8), 28);
+        for (int e = 0; e < 14; e++) {
+            int ex = ((e * 37 + animFrame * (1 + (e & 1))) % SCR_W);
+            int ey = SCR_H - ((animFrame * (1 + (e % 3)) + e * 29) % (SCR_H - 24));
+            fill_rect_alpha(fb, ex, ey, 2, 2, (e & 1) ? RGB(255, 155, 45) : RGB(255, 85, 35), 185);
+        }
+    } else if (weatherMode == 2 || weatherMode == 3) {
+        /* Overcast cool lighting + diagonal rain + ground splashes */
+        fill_rect_alpha(fb, 0, 24, SCR_W, SCR_H - 24, RGB(14, 24, 52), (weatherMode == 3) ? 46 : 30);
+        int dropCount = (weatherMode == 3) ? MAX_RAIN : 36;
+        for (int i = 0; i < dropCount; i++) {
+            RainDrop *r = &rain[i];
+            if (r->splash > 0) {
+                int rad = 5 - r->splash;
+                fill_ellipse_alpha(fb, (int)r->x, (int)r->y, rad, 2, RGB(180, 220, 255), r->splash * 35);
+                r->splash--;
+                if (r->splash == 0) {
+                    r->x = (float)(xr() % (SCR_W + 40));
+                    r->y = 24.0f;
+                    r->groundY = (float)(45 + (xr() % (SCR_H - 48)));
+                }
+            } else {
+                r->x -= 1.2f;
+                r->y += r->spd;
+                int rx = (int)r->x, ry = (int)r->y;
+                if (rx >= 0 && rx < SCR_W && ry >= 24 && ry < SCR_H - 6) {
+                    fill_rect_alpha(fb, rx, ry, 1, 5, RGB(175, 215, 255), 155);
+                    fill_rect_alpha(fb, rx + 1, ry - 4, 1, 4, RGB(140, 185, 235), 95);
+                }
+                if (r->y >= r->groundY || r->y >= SCR_H - 4) {
+                    r->splash = 4;
+                }
+            }
+        }
+    } else if (weatherMode == 0) {
+        /* Golden Sunlight Shafts (God Rays) */
+        for (int g = 0; g < 3; g++) {
+            int gx = ((g * 165 + (animFrame / 3)) % (SCR_W + 120)) - 60;
+            for (int strip = 0; strip < 10; strip++) {
+                int sx = gx + strip * 6;
+                int sy = 25 + strip * 22;
+                if (sy < SCR_H) fill_rect_alpha(fb, sx, sy, 36, 24, RGB(255, 240, 175), 14);
+            }
+        }
+    }
+
+    /* Drifting Parallax Mist / Fog Layers (stronger in Fog/Storm or Arcane Forest) */
+    int fogAlpha = (weatherMode == 1) ? 32 : (weatherMode == 3 ? 24 : (inArcane ? 20 : 10));
+    for (int f = 0; f < 5; f++) {
+        int fx = ((f * 130 + animFrame * ((f & 1) ? 1 : 2) / 2) % (SCR_W + 180)) - 90;
+        int fy = 52 + f * 44;
+        fill_ellipse_alpha(fb, fx, fy, 88, 16, inArcane ? RGB(175, 235, 215) : RGB(215, 228, 245), fogAlpha);
+    }
+
+    /* Soft Radial Hero Light Aura + Screen-Edge Atmospheric Vignette */
+    fill_ellipse_alpha(fb, 10 * 24 + 12, 5 * 24 + 6, 44, 34, RGB(255, 235, 175), (weatherMode >= 2) ? 26 : 14);
+    fill_rect_alpha(fb, 0, 24, 12, SCR_H - 24, RGB(6, 8, 18), 32);
+    fill_rect_alpha(fb, SCR_W - 12, 24, 12, SCR_H - 24, RGB(6, 8, 18), 32);
+    fill_rect_alpha(fb, 0, SCR_H - 10, SCR_W, 10, RGB(6, 8, 18), 38);
+}
+
 /* PARTE 1: Super-Mapa Continental estilo Skyrim (256x192 tiles = 49,152 casillas) */
 #define MW 256
 #define MH 192
@@ -1459,13 +1643,15 @@ int main(void) {
                                 fill_rect_alpha(fb, sx, sy, 3, 24, RGB(205, 185, 130), 175);
                             if (wx < MW - 1 && worldMap[wy][wx + 1] != 3 && worldMap[wy][wx + 1] != 6)
                                 fill_rect_alpha(fb, sx + 21, sy, 3, 24, RGB(205, 185, 130), 175);
+                            draw_tile_vegetation(fb, wx, wy, sx, sy, 1);
                         } else if (t == 4 || t >= 10) {
                             draw_tile24(fb, tile_castle, sx, sy);
                             if (t == 12) draw_spr24(fb, spr_fountain, sx, sy);
                             else if (t == 13) draw_spr24(fb, spr_market, sx, sy);
                             else if (t == 14) {
                                 int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
-                                fill_ellipse_alpha(fb, sx + 12, sy + 7, 13, 10, RGB(255, 195, 70), lGlow);
+                                fill_ellipse_alpha(fb, sx + 12, sy + 9, 26, 18, RGB(255, 175, 55), lGlow / 2);
+                                fill_ellipse_alpha(fb, sx + 12, sy + 7, 13, 10, RGB(255, 215, 95), lGlow);
                                 draw_spr24(fb, spr_lamp, sx, sy);
                             } else if (t == 15) draw_spr24(fb, spr_well, sx, sy);
                         } else if (t == 6) {
@@ -1476,6 +1662,7 @@ int main(void) {
                             draw_tile24(fb, tile_wall, sx, sy);
                         } else {
                             draw_tile24(fb, tile_grass, sx, sy);
+                            if (t == 0) draw_tile_vegetation(fb, wx, wy, sx, sy, 0);
                             if (t == 2) draw_spr24(fb, spr_mountain, sx, sy);
                             else if (t == 5) {
                                 int dIdx = -1;
@@ -1545,6 +1732,10 @@ int main(void) {
             draw_spr24_dir(fb, spr_band2, (prevX2 - ox) * 24, (prevY2 - oy) * 24 - 8 - bBob, band2Flip);
             draw_spr24_dir(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8 - (bBob ^ 1), band1Flip);
             draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8 - bBob, bardFlip);
+
+            /* Living Insects (Fireflies/Butterflies/Dragonflies) + Dynamic Weather (Rain/Fog/God-Rays) & Lighting */
+            update_draw_bugs(fb, (mapX >= 118 && mapX < 165), (weatherMode >= 2));
+            update_draw_weather_and_lighting(fb, mapX, mapY);
 
             /* Top Adventure HUD Window with Level, XP, HP & MP bars + Region Name */
             draw_ff_window(fb, 4, 3, 472, 22);
