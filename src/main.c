@@ -349,7 +349,7 @@ static void draw_boss64(unsigned int *fb, const unsigned int *spr, int dx, int d
 static int ach = -1, ath = -1;
 static volatile int arun = 0, sfx_t = 0, sfx_max = 3000, sfx_on = 1, curStyle = 0, curSong = 0;
 static volatile int bgm_step = 0;
-static float sfx_f = 440.0f, sfx_p = 0.0f, sfx_p2 = 0.0f, bgm_t = 0.0f;
+static float sfx_f = 440.0f, sfx_p = 0.0f, sfx_p2 = 0.0f;
 static short abuf[2][1024 * 2];
 
 static void play_sfx(float f, int dur) {
@@ -385,6 +385,8 @@ static int audio_th(SceSize a, void *p) {
     };
     static const float tempo[5] = { 3.7f, 4.1f, 4.4f, 4.6f, 4.8f };
     unsigned int noiseSeed = 0x13579BDFu;
+    float stepAcc = 0.0f, bp = 0.0f, lp1 = 0.0f, lp2 = 0.0f, lp3 = 0.0f, sp = 0.0f, dp = 0.0f, vibP = 0.0f;
+    const float invSR = 1.0f / 44100.0f;
 
     while (arun) {
         short *o = abuf[cur];
@@ -395,23 +397,28 @@ static int audio_th(SceSize a, void *p) {
         for (int i = 0; i < 1024; i++) {
             float lSig = 0.0f, rSig = 0.0f;
             if (sfx_on) {
-                float stepF = bgm_t * spd;
-                int st = ((int)stepF) & 15;
-                bgm_step = (int)stepF;
-                float sub = stepF - (float)((int)stepF);
+                stepAcc += spd * invSR;
+                if (stepAcc >= 1.0f) {
+                    stepAcc -= 1.0f;
+                    bgm_step++;
+                    dp = 0.0f;
+                }
+                int st = bgm_step & 15;
+                float sub = stepAcc;
 
                 /* 1. Bass Track (Warm sub + 5th harmonic) */
                 float bf = bass[sg][st];
-                float bp = bgm_t * bf; bp -= (float)((int)bp);
+                bp += bf * invSR; if (bp >= 1.0f) bp -= 1.0f;
                 float bassEnv = expf(-sub * 2.4f);
                 float bassWave = (bp < 0.5f ? 0.5f : -0.5f) * 0.35f + sinf(bp * 6.28318f) * 0.65f;
                 float bOut = bassWave * 0.14f * bassEnv;
 
                 /* 2. Lead / Chord Instrument Track (shaped by Song & Active Musical Style) */
                 float lf = lead[sg][st];
-                float lp1 = bgm_t * lf; lp1 -= (float)((int)lp1);
-                float lp2 = bgm_t * (lf * 1.498f); lp2 -= (float)((int)lp2); /* Power 5th harmony */
-                float lp3 = bgm_t * (lf * 1.004f); lp3 -= (float)((int)lp3); /* Stereo detune chorus */
+                lp1 += lf * invSR;           if (lp1 >= 1.0f) lp1 -= 1.0f;
+                lp2 += (lf * 1.498f) * invSR; if (lp2 >= 1.0f) lp2 -= 1.0f; /* Power 5th harmony */
+                lp3 += (lf * 1.004f) * invSR; if (lp3 >= 1.0f) lp3 -= 1.0f; /* Stereo detune chorus */
+                vibP += 5.09f * invSR;        if (vibP >= 1.0f) vibP -= 1.0f;
                 float leadEnv = expf(-sub * 1.8f);
                 float leadL = 0.0f, leadR = 0.0f;
                 if (stStyle == 0 || sg == 2) {
@@ -426,8 +433,8 @@ static int audio_th(SceSize a, void *p) {
                     leadR = ((2.0f * lp3 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.10f * leadEnv;
                 } else {
                     /* Symphonic Lush String Ensemble */
-                    float vibrato = 1.0f + sinf(bgm_t * 32.0f) * 0.004f;
-                    float sp = bgm_t * lf * vibrato; sp -= (float)((int)sp);
+                    float vibrato = 1.0f + sinf(vibP * 6.28318f) * 0.004f;
+                    sp += (lf * vibrato) * invSR; if (sp >= 1.0f) sp -= 1.0f;
                     leadL = (sinf(sp * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.11f * (0.4f + 0.6f * sinf(sub * 3.14159f));
                     leadR = (sinf(lp3 * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.11f * (0.4f + 0.6f * sinf(sub * 3.14159f));
                 }
@@ -436,7 +443,8 @@ static int audio_th(SceSize a, void *p) {
                 float drum = 0.0f;
                 if ((st & 3) == 0 && sub < 0.35f) {
                     float kf = 115.0f * expf(-sub * 14.0f) + 42.0f;
-                    drum += sinf(bgm_t * kf * 6.28318f) * 0.15f * expf(-sub * 12.0f);
+                    dp += kf * invSR; if (dp >= 1.0f) dp -= 1.0f;
+                    drum += sinf(dp * 6.28318f) * 0.15f * expf(-sub * 12.0f);
                 }
                 noiseSeed = noiseSeed * 1664525u + 1013904223u;
                 float nz = ((float)(int)(noiseSeed >> 16) / 32768.0f);
@@ -451,8 +459,8 @@ static int audio_th(SceSize a, void *p) {
 
                 /* 4. In-Key Guitar Hero Note Pluck / SFX Overlay */
                 if (sfx_t > 0) {
-                    sfx_p  += sfx_f / 44100.0f;
-                    sfx_p2 += (sfx_f * 1.5f) / 44100.0f;
+                    sfx_p  += sfx_f * invSR;
+                    sfx_p2 += (sfx_f * 1.5f) * invSR;
                     if (sfx_p >= 1.0f) sfx_p -= 1.0f;
                     if (sfx_p2 >= 1.0f) sfx_p2 -= 1.0f;
                     float env = (float)sfx_t / (float)sfx_max;
@@ -464,7 +472,6 @@ static int audio_th(SceSize a, void *p) {
                     sfx_t--;
                 }
             }
-            bgm_t += 1.0f / 44100.0f;
             int vl = (int)(lSig * 32767.0f), vr = (int)(rSig * 32767.0f);
             if (vl > 32767) vl = 32767; else if (vl < -32767) vl = -32767;
             if (vr > 32767) vr = 32767; else if (vr < -32767) vr = -32767;
