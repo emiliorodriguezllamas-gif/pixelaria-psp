@@ -198,6 +198,22 @@ static void draw_spr32(unsigned int *fb, const unsigned int *spr, int dx, int dy
     }
 }
 
+static void draw_spr28x44(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int j = 0; j < 44; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr[j * 28];
+        for (int i = 0; i < 28; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
 static inline unsigned int blend_rgb_4(unsigned int c00, unsigned int c10, unsigned int c01, unsigned int c11, int fx, int fy) {
     int ifx = 256 - fx, ify = 256 - fy;
     int w00 = (ifx * ify) >> 8, w10 = (fx * ify) >> 8, w01 = (ifx * fy) >> 8, w11 = (fx * fy) >> 8;
@@ -2375,12 +2391,7 @@ int main(void) {
                                 fill_rect_alpha(fb, sx + 16, sy + 9 - ((sp1 + 4) % 8), 2, 3, RGB(165, 235, 255), 210);
                             }
                             else if (t == 13) draw_spr24_30(fb, spr_market, sx, sy);
-                            else if (t == 14) {
-                                int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
-                                fill_ellipse_alpha(fb, sx + 15, sy + 11, 30, 22, RGB(255, 175, 55), lGlow / 2);
-                                fill_ellipse_alpha(fb, sx + 15, sy + 9, 15, 12, RGB(255, 215, 95), lGlow);
-                                draw_spr24_30(fb, spr_lamp, sx, sy);
-                            } else if (t == 15) draw_spr24_30(fb, spr_well, sx, sy);
+                            else if (t == 15) draw_spr24_30(fb, spr_well, sx, sy);
                         } else if (t == 6) {
                             draw_tile24_30(fb, tile_bridge, sx, sy);
                         } else if (t == 7) {
@@ -2427,6 +2438,12 @@ int main(void) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
                             draw_spr32_96_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 33, sy - 66);
                             if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
+                        } else if (wt == 14) {
+                            int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
+                            fill_ellipse_alpha(fb, sx + 10, sy + 26, 10, 4, RGB(0, 0, 0), 115);
+                            fill_ellipse_alpha(fb, sx + 19, sy + 1, 28, 20, RGB(255, 175, 55), lGlow / 2);
+                            fill_ellipse_alpha(fb, sx + 19, sy + 1, 14, 11, RGB(255, 215, 95), lGlow);
+                            draw_spr28x44(fb, spr_lamp_tall, sx + 1, sy - 16);
                         }
                     }
                 }
@@ -2512,6 +2529,12 @@ int main(void) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
                             draw_spr32_96_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 33, sy - 66);
                             if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
+                        } else if (wt == 14) {
+                            int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
+                            fill_ellipse_alpha(fb, sx + 10, sy + 26, 10, 4, RGB(0, 0, 0), 115);
+                            fill_ellipse_alpha(fb, sx + 19, sy + 1, 28, 20, RGB(255, 175, 55), lGlow / 2);
+                            fill_ellipse_alpha(fb, sx + 19, sy + 1, 14, 11, RGB(255, 215, 95), lGlow);
+                            draw_spr28x44(fb, spr_lamp_tall, sx + 1, sy - 16);
                         }
                     }
                 }
