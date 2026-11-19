@@ -719,6 +719,13 @@ static const float songTempo[7] = { 3.8f, 4.4f, 4.8f, 5.0f, 5.2f, 5.5f, 3.2f };
 
 static int audio_th(SceSize a, void *p) {
     (void)a; (void)p;
+    static float audSin[256], audExp[256];
+    for (int k = 0; k < 256; k++) {
+        audSin[k] = sinf(((float)k / 256.0f) * 6.2831853f);
+        audExp[k] = expf(-((float)k / 255.0f) * 4.0f);
+    }
+    #define FAST_SIN(ph) (audSin[(int)((ph) * 256.0f) & 255])
+    #define FAST_EXP(x)  ((x) >= 4.0f ? 0.018f : ((x) <= 0.0f ? 1.0f : audExp[(int)((x) * 63.75f)]))
     int cur = 0;
     unsigned int noiseSeed = 0x13579BDFu;
     float stepAcc = 0.0f, bp = 0.0f, lp1 = 0.0f, lp2 = 0.0f, lp3 = 0.0f, padP1 = 0.0f, padP2 = 0.0f, sp = 0.0f, dp = 0.0f, vibP = 0.0f;
@@ -746,15 +753,15 @@ static int audio_th(SceSize a, void *p) {
                 /* 1. Bass Track (Warm sub + octave punch) */
                 float bf = songBass[sg][st];
                 bp += bf * invSR; if (bp >= 1.0f) bp -= 1.0f;
-                float bassEnv = expf(-sub * 2.4f);
-                float bassWave = (bp < 0.5f ? 0.5f : -0.5f) * 0.35f + sinf(bp * 6.28318f) * 0.65f;
+                float bassEnv = FAST_EXP(sub * 2.4f);
+                float bassWave = (bp < 0.5f ? 0.5f : -0.5f) * 0.35f + FAST_SIN(bp) * 0.65f;
                 float bOut = bassWave * 0.14f * bassEnv;
 
                 /* 2. Stereo Harmonic Pad / Jazz 7th Chords */
                 padP1 += (bf * (sg == 6 ? 2.50f : 2.0f)) * invSR;  if (padP1 >= 1.0f) padP1 -= 1.0f;
                 padP2 += (bf * (sg == 6 ? 3.56f : 2.996f)) * invSR; if (padP2 >= 1.0f) padP2 -= 1.0f;
-                float padL = sinf(padP1 * 6.28318f) * (sg == 6 ? 0.042f : 0.032f);
-                float padR = sinf(padP2 * 6.28318f) * (sg == 6 ? 0.042f : 0.032f);
+                float padL = FAST_SIN(padP1) * (sg == 6 ? 0.042f : 0.032f);
+                float padR = FAST_SIN(padP2) * (sg == 6 ? 0.042f : 0.032f);
 
                 /* 3. Lead / Chord Instrument Track (shaped by Song & Active Musical Style) */
                 float lf = songLead[sg][st];
@@ -762,16 +769,16 @@ static int audio_th(SceSize a, void *p) {
                 lp2 += (lf * 1.498f) * invSR; if (lp2 >= 1.0f) lp2 -= 1.0f; /* Power 5th harmony */
                 lp3 += (lf * 1.004f) * invSR; if (lp3 >= 1.0f) lp3 -= 1.0f; /* Stereo detune chorus */
                 vibP += 5.09f * invSR;        if (vibP >= 1.0f) vibP -= 1.0f;
-                float leadEnv = expf(-sub * 1.8f);
+                float leadEnv = FAST_EXP(sub * 1.8f);
                 float leadL = 0.0f, leadR = 0.0f;
                 if (sg == 6) {
                     /* Warm Lounge Rhodes / Saxophone Jazz Tone */
-                    float vibrato = 1.0f + sinf(vibP * 6.28318f) * 0.003f;
+                    float vibrato = 1.0f + FAST_SIN(vibP) * 0.003f;
                     sp += (lf * vibrato) * invSR; if (sp >= 1.0f) sp -= 1.0f;
-                    float jEnv = expf(-sub * 1.3f);
-                    float rhodes = sinf(sp * 6.28318f) * 0.72f + sinf(sp * 12.56636f) * 0.22f + sinf(lp2 * 6.28318f) * 0.14f;
+                    float jEnv = FAST_EXP(sub * 1.3f);
+                    float rhodes = FAST_SIN(sp) * 0.72f + FAST_SIN(sp * 2.0f) * 0.22f + FAST_SIN(lp2) * 0.14f;
                     leadL = rhodes * 0.11f * jEnv;
-                    leadR = (sinf(lp3 * 6.28318f) * 0.72f + sinf(lp3 * 12.56636f) * 0.22f) * 0.11f * jEnv;
+                    leadR = (FAST_SIN(lp3) * 0.72f + FAST_SIN(lp3 * 2.0f) * 0.22f) * 0.11f * jEnv;
                 } else if (stStyle == 0 || sg == 2 || sg == 4) {
                     /* Distorted Epic Rock Power-Chord Guitar */
                     float rawL = (2.0f * lp1 - 1.0f) * 0.7f + (2.0f * lp2 - 1.0f) * 0.45f;
@@ -780,32 +787,33 @@ static int audio_th(SceSize a, void *p) {
                     leadR = (rawR / (1.0f + fabsf(rawR))) * 0.10f * leadEnv;
                 } else if (stStyle == 1 || sg == 3) {
                     /* Detuned Arcane Supersaw Synth */
-                    leadL = ((2.0f * lp1 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.095f * leadEnv;
-                    leadR = ((2.0f * lp3 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.095f * leadEnv;
+                    leadL = ((2.0f * lp1 - 1.0f) * 0.6f + FAST_SIN(lp2) * 0.4f) * 0.095f * leadEnv;
+                    leadR = ((2.0f * lp3 - 1.0f) * 0.6f + FAST_SIN(lp2) * 0.4f) * 0.095f * leadEnv;
                 } else {
                     /* Symphonic Lush String Ensemble */
-                    float vibrato = 1.0f + sinf(vibP * 6.28318f) * 0.004f;
+                    float vibrato = 1.0f + FAST_SIN(vibP) * 0.004f;
                     sp += (lf * vibrato) * invSR; if (sp >= 1.0f) sp -= 1.0f;
-                    leadL = (sinf(sp * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.10f * (0.4f + 0.6f * sinf(sub * 3.14159f));
-                    leadR = (sinf(lp3 * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.10f * (0.4f + 0.6f * sinf(sub * 3.14159f));
+                    float envS = 0.4f + 0.6f * FAST_SIN(sub * 0.5f);
+                    leadL = (FAST_SIN(sp) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.10f * envS;
+                    leadR = (FAST_SIN(lp3) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.10f * envS;
                 }
 
                 /* 4. Percussion Track (Jazz Brushes on sg==6, Double Kick on Bosses) */
                 float drum = 0.0f;
                 int kickHit = (sg == 6) ? ((st & 7) == 0) : (((st & 3) == 0) || (sg >= 2 && (st & 7) == 6));
                 if (kickHit && sub < 0.35f) {
-                    float kf = 115.0f * expf(-sub * 14.0f) + 42.0f;
+                    float kf = 115.0f * FAST_EXP(sub * 14.0f) + 42.0f;
                     dp += kf * invSR; if (dp >= 1.0f) dp -= 1.0f;
-                    drum += sinf(dp * 6.28318f) * (sg == 6 ? 0.07f : 0.14f) * expf(-sub * 12.0f);
+                    drum += FAST_SIN(dp) * (sg == 6 ? 0.07f : 0.14f) * FAST_EXP(sub * 12.0f);
                 }
                 noiseSeed = noiseSeed * 1664525u + 1013904223u;
                 float nz = ((float)(int)(noiseSeed >> 16) / 32768.0f);
                 if (sg == 6) {
-                    if ((st & 1) == 0 && sub < 0.14f) drum += nz * 0.032f * expf(-sub * 22.0f); /* Jazz brushed ride */
+                    if ((st & 1) == 0 && sub < 0.14f) drum += nz * 0.032f * FAST_EXP(sub * 22.0f);
                 } else if ((st & 3) == 2 && sub < 0.28f) {
-                    drum += nz * 0.085f * expf(-sub * 16.0f); /* Snare */
+                    drum += nz * 0.085f * FAST_EXP(sub * 16.0f);
                 } else if (sub < 0.09f) {
-                    drum += nz * 0.030f * expf(-sub * 32.0f); /* Hi-hat */
+                    drum += nz * 0.030f * FAST_EXP(sub * 32.0f);
                 }
 
                 /* 5. Stereo Ping-Pong Echo / Reverb on Lead */
@@ -829,7 +837,7 @@ static int audio_th(SceSize a, void *p) {
                     float env = (float)sfx_t / (float)sfx_max;
                     float noteWave = (stStyle == 0)
                         ? ((2.0f * sfx_p - 1.0f) * 0.6f + (2.0f * sfx_p2 - 1.0f) * 0.4f)
-                        : (sinf(sfx_p * 6.28318f) * 0.7f + sinf(sfx_p2 * 6.28318f) * 0.3f);
+                        : (FAST_SIN(sfx_p) * 0.7f + FAST_SIN(sfx_p2) * 0.3f);
                     float sOut = noteWave * 0.19f * env;
                     lSig += sOut; rSig += sOut;
                     sfx_t--;
@@ -2392,30 +2400,27 @@ int main(void) {
                     if (wx >= 0 && wy >= 0 && wx < MW && wy <= mapY) {
                         unsigned char wt = worldMap[wy][wx];
                         if (wt == 1) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 25, 14, 6, RGB(0, 0, 0), 115);
+                            fill_rect_alpha(fb, sx + 4, sy + 22, 22, 6, RGB(0, 0, 0), 105);
                             draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
                         } else if (wt == 10 || wt == 11) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
+                            fill_rect_alpha(fb, sx - 24, sy + 20, 78, 12, RGB(0, 0, 0), 120);
                             draw_spr_wh(fb, (wt == 10) ? spr_house_96 : spr_tavern_96, 96, 96, sx - 33, sy - 66);
                             if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
                         } else if (wt == 12) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 26, 26, 8, RGB(0, 0, 0), 125);
+                            fill_rect_alpha(fb, sx - 8, sy + 20, 46, 10, RGB(0, 0, 0), 115);
                             draw_spr_wh(fb, spr_fountain_56, 56, 56, sx - 13, sy - 26);
                             int sp1 = (animFrame / 3) % 10;
                             fill_rect_alpha(fb, sx + 15, sy - 4 - sp1, 2, 4, RGB(195, 242, 255), 210);
                             fill_rect_alpha(fb, sx + 5, sy + 2 - ((sp1 + 5) % 10), 2, 3, RGB(175, 235, 255), 195);
                             fill_rect_alpha(fb, sx + 24, sy + 2 - ((sp1 + 3) % 10), 2, 3, RGB(175, 235, 255), 195);
                         } else if (wt == 13) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 26, 22, 7, RGB(0, 0, 0), 120);
+                            fill_rect_alpha(fb, sx - 5, sy + 21, 40, 8, RGB(0, 0, 0), 115);
                             draw_spr_wh(fb, spr_market_48, 48, 48, sx - 9, sy - 20);
                         } else if (wt == 14) {
-                            int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
-                            fill_ellipse_alpha(fb, sx + 10, sy + 26, 10, 4, RGB(0, 0, 0), 115);
-                            fill_ellipse_alpha(fb, sx + 19, sy - 2, 28, 20, RGB(255, 175, 55), lGlow / 2);
-                            fill_ellipse_alpha(fb, sx + 19, sy - 2, 14, 11, RGB(255, 215, 95), lGlow);
+                            fill_rect_alpha(fb, sx + 2, sy + 23, 16, 5, RGB(0, 0, 0), 110);
                             draw_spr_wh(fb, spr_lamp_32x52, 32, 52, sx - 1, sy - 24);
                         } else if (wt == 15) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 26, 19, 6, RGB(0, 0, 0), 120);
+                            fill_rect_alpha(fb, sx - 2, sy + 21, 34, 8, RGB(0, 0, 0), 115);
                             draw_spr_wh(fb, spr_well_42, 42, 42, sx - 6, sy - 14);
                         }
                     }
@@ -2494,30 +2499,27 @@ int main(void) {
                     if (wx >= 0 && wy > mapY && wx < MW && wy < MH) {
                         unsigned char wt = worldMap[wy][wx];
                         if (wt == 1) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 25, 14, 6, RGB(0, 0, 0), 115);
+                            fill_rect_alpha(fb, sx + 4, sy + 22, 22, 6, RGB(0, 0, 0), 105);
                             draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
                         } else if (wt == 10 || wt == 11) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
+                            fill_rect_alpha(fb, sx - 24, sy + 20, 78, 12, RGB(0, 0, 0), 120);
                             draw_spr_wh(fb, (wt == 10) ? spr_house_96 : spr_tavern_96, 96, 96, sx - 33, sy - 66);
                             if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
                         } else if (wt == 12) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 26, 26, 8, RGB(0, 0, 0), 125);
+                            fill_rect_alpha(fb, sx - 8, sy + 20, 46, 10, RGB(0, 0, 0), 115);
                             draw_spr_wh(fb, spr_fountain_56, 56, 56, sx - 13, sy - 26);
                             int sp1 = (animFrame / 3) % 10;
                             fill_rect_alpha(fb, sx + 15, sy - 4 - sp1, 2, 4, RGB(195, 242, 255), 210);
                             fill_rect_alpha(fb, sx + 5, sy + 2 - ((sp1 + 5) % 10), 2, 3, RGB(175, 235, 255), 195);
                             fill_rect_alpha(fb, sx + 24, sy + 2 - ((sp1 + 3) % 10), 2, 3, RGB(175, 235, 255), 195);
                         } else if (wt == 13) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 26, 22, 7, RGB(0, 0, 0), 120);
+                            fill_rect_alpha(fb, sx - 5, sy + 21, 40, 8, RGB(0, 0, 0), 115);
                             draw_spr_wh(fb, spr_market_48, 48, 48, sx - 9, sy - 20);
                         } else if (wt == 14) {
-                            int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
-                            fill_ellipse_alpha(fb, sx + 10, sy + 26, 10, 4, RGB(0, 0, 0), 115);
-                            fill_ellipse_alpha(fb, sx + 19, sy - 2, 28, 20, RGB(255, 175, 55), lGlow / 2);
-                            fill_ellipse_alpha(fb, sx + 19, sy - 2, 14, 11, RGB(255, 215, 95), lGlow);
+                            fill_rect_alpha(fb, sx + 2, sy + 23, 16, 5, RGB(0, 0, 0), 110);
                             draw_spr_wh(fb, spr_lamp_32x52, 32, 52, sx - 1, sy - 24);
                         } else if (wt == 15) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 26, 19, 6, RGB(0, 0, 0), 120);
+                            fill_rect_alpha(fb, sx - 2, sy + 21, 34, 8, RGB(0, 0, 0), 115);
                             draw_spr_wh(fb, spr_well_42, 42, 42, sx - 6, sy - 14);
                         }
                     }
@@ -2546,7 +2548,9 @@ int main(void) {
                 LightSrc rtxL[12];
                 int nL = 0;
                 int flicker = (int)(sinf((float)animFrame * 0.17f) * 14.0f);
-                rtxL[nL++] = (LightSrc){ 255, 130, 110 + flicker / 2, 95 + flicker / 2, 65, 92 };
+                if (weatherMode >= 1 || mapX >= 165) {
+                    rtxL[nL++] = (LightSrc){ 255, 130, 110 + flicker / 2, 95 + flicker / 2, 65, 92 };
+                }
                 for (int ty = 0; ty < 10 && nL < 12; ty++) {
                     for (int tx = 0; tx < 16 && nL < 12; tx++) {
                         int wx = ox + tx, wy = oy + ty;
