@@ -4,6 +4,7 @@
 #include <pspgu.h>
 #include <pspge.h>
 #include <pspaudio.h>
+#include <psppower.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,16 +84,16 @@ static void fill_rect_alpha(unsigned int *fb, int x, int y, int w, int h, unsign
 }
 
 static void fill_ellipse_alpha(unsigned int *fb, int cx, int cy, int rx, int ry, unsigned int col, int a) {
-    if (rx <= 0 || ry <= 0) return;
-    int rx2 = rx * rx, ry2 = ry * ry;
+    if (rx <= 0 || ry <= 0 || a <= 0) return;
+    if (cx + rx < 0 || cx - rx >= SCR_W || cy + ry < 0 || cy - ry >= SCR_H) return;
+    float invRy2 = 1.0f / (float)(ry * ry);
     for (int dy = -ry; dy <= ry; dy++) {
         int py = cy + dy;
         if ((unsigned)py >= SCR_H) continue;
-        for (int dx = -rx; dx <= rx; dx++) {
-            if (dx * dx * ry2 + dy * dy * rx2 <= rx2 * ry2) {
-                blend_px(fb, cx + dx, py, col, a);
-            }
-        }
+        float t = 1.0f - (float)(dy * dy) * invRy2;
+        if (t <= 0.0f) continue;
+        int hw = (int)((float)rx * sqrtf(t));
+        fill_rect_alpha(fb, cx - hw, py, hw * 2 + 1, 1, col, a);
     }
 }
 
@@ -1101,45 +1102,38 @@ static void update_draw_weather_and_lighting(unsigned int *fb, int mapXPos, int 
             }
         }
     } else if (weatherMode == 0) {
-        /* Golden Sunlight Shafts (God Rays) */
-        for (int g = 0; g < 3; g++) {
-            int gx = ((g * 165 + (animFrame / 3)) % (SCR_W + 120)) - 60;
-            for (int strip = 0; strip < 10; strip++) {
-                int sx = gx + strip * 6;
-                int sy = 25 + strip * 22;
-                if (sy < SCR_H) fill_rect_alpha(fb, sx, sy, 36, 24, RGB(255, 240, 175), 14);
+        /* Golden Sunlight Shafts (Lightweight God Rays) */
+        for (int g = 0; g < 2; g++) {
+            int gx = ((g * 220 + (animFrame / 3)) % (SCR_W + 100)) - 50;
+            for (int strip = 0; strip < 6; strip++) {
+                int sx = gx + strip * 10;
+                int sy = 25 + strip * 38;
+                if (sy < SCR_H) fill_rect_alpha(fb, sx, sy, 22, 16, RGB(255, 240, 175), 16);
             }
         }
     }
 
-    /* Drifting Parallax Mist / Fog Layers (stronger in Fog/Storm or Arcane Forest) */
-    int fogAlpha = (weatherMode == 1) ? 32 : (weatherMode == 3 ? 24 : (inArcane ? 20 : 10));
-    for (int f = 0; f < 5; f++) {
-        int fx = ((f * 130 + animFrame * ((f & 1) ? 1 : 2) / 2) % (SCR_W + 180)) - 90;
-        int fy = 52 + f * 44;
-        fill_ellipse_alpha(fb, fx, fy, 88, 16, inArcane ? RGB(175, 235, 215) : RGB(215, 228, 245), fogAlpha);
+    /* Lightweight Drifting Parallax Mist Bands */
+    int fogAlpha = (weatherMode == 1) ? 30 : (weatherMode == 3 ? 22 : (inArcane ? 18 : 0));
+    if (fogAlpha > 0) {
+        for (int f = 0; f < 4; f++) {
+            int fx = ((f * 145 + animFrame * ((f & 1) ? 1 : 2) / 2) % (SCR_W + 160)) - 80;
+            int fy = 56 + f * 52;
+            fill_rect_alpha(fb, fx - 55, fy, 110, 10, inArcane ? RGB(175, 235, 215) : RGB(215, 228, 245), fogAlpha);
+        }
     }
-
-    /* Soft Radial Hero Light Aura + Screen-Edge Atmospheric Vignette */
-    fill_ellipse_alpha(fb, 255, 130, 52, 40, RGB(255, 235, 175), (weatherMode >= 2) ? 26 : 14);
-    fill_rect_alpha(fb, 0, 24, 12, SCR_H - 24, RGB(6, 8, 18), 32);
-    fill_rect_alpha(fb, SCR_W - 12, 24, 12, SCR_H - 24, RGB(6, 8, 18), 32);
-    fill_rect_alpha(fb, 0, SCR_H - 10, SCR_W, 10, RGB(6, 8, 18), 38);
 }
 
 static void draw_chimney_smoke(unsigned int *fb, int cx, int cy, int wx, int wy) {
-    for (int k = 0; k < 4; k++) {
-        int phase = (animFrame + k * 28 + wx * 17 + wy * 31) % 112;
-        float t = (float)phase / 112.0f;
-        int py = cy - (int)(t * 32.0f);
-        int px = cx + (int)(t * 12.0f + sinf(t * 6.28318f + (float)wx) * 3.0f);
-        int rx = 3 + (int)(t * 7.0f);
-        int ry = 2 + (int)(t * 5.0f);
-        int a = (int)((1.0f - t) * (1.0f - t * 0.4f) * 85.0f);
-        if (a > 6) {
-            fill_ellipse_alpha(fb, px, py, rx, ry, RGB(185, 192, 205), a);
-            if (rx > 4) fill_ellipse_alpha(fb, px - 1, py - 1, rx - 2, ry - 1, RGB(230, 234, 242), a / 2);
-        }
+    for (int k = 0; k < 3; k++) {
+        int phase = (animFrame + k * 36 + wx * 17 + wy * 31) % 108;
+        float t = (float)phase / 108.0f;
+        int py = cy - (int)(t * 30.0f);
+        int px = cx + (int)(t * 11.0f + sinf(t * 6.28318f + (float)wx) * 2.5f);
+        int rx = 3 + (int)(t * 6.0f);
+        int ry = 2 + (int)(t * 4.0f);
+        int a = (int)((1.0f - t) * 78.0f);
+        if (a > 8) fill_ellipse_alpha(fb, px, py, rx, ry, RGB(205, 212, 224), a);
     }
 }
 
@@ -1193,9 +1187,13 @@ static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int 
         }
         unsigned int *dst = &fb[y * BUF_W];
         for (int bx = 0; bx < 60; bx++) {
-            int lr = rowR[bx] << 3, dlr = rowR[bx + 1] - rowR[bx];
-            int lg = rowG[bx] << 3, dlg = rowG[bx + 1] - rowG[bx];
-            int lb = rowB[bx] << 3, dlb = rowB[bx + 1] - rowB[bx];
+            int r0 = rowR[bx], r1 = rowR[bx + 1];
+            int g0 = rowG[bx], g1 = rowG[bx + 1];
+            int b0 = rowB[bx], b1 = rowB[bx + 1];
+            if (r0 == 256 && r1 == 256 && g0 == 256 && g1 == 256 && b0 == 256 && b1 == 256) continue;
+            int lr = r0 << 3, dlr = r1 - r0;
+            int lg = g0 << 3, dlg = g1 - g0;
+            int lb = b0 << 3, dlb = b1 - b0;
             int baseX = bx << 3;
             for (int i = 0; i < 8; i++) {
                 unsigned int c = dst[baseX + i];
@@ -1205,7 +1203,7 @@ static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int 
                 if (r > 255u) r = 255u;
                 if (g > 255u) g = 255u;
                 if (b > 255u) b = 255u;
-                dst[baseX + i] = (b << 16) | (g << 8) | r;
+                dst[baseX + i] = 0xFF000000u | (b << 16) | (g << 8) | r;
                 lr += dlr; lg += dlg; lb += dlb;
             }
         }
@@ -1654,6 +1652,7 @@ static void start_game(void) {
 }
 
 int main(void) {
+    scePowerSetClockFrequency(333, 333, 166);
     int th = sceKernelCreateThread("cb", cb_th, 0x11, 0xFA0, 0, NULL);
     if (th >= 0) sceKernelStartThread(th, 0, NULL);
     sceCtrlSetSamplingCycle(0);
@@ -2582,10 +2581,9 @@ int main(void) {
                     }
                 }
                 int inVolc = (mapX >= 165 && mapY < 85);
-                int inTown = (curRegId <= 2);
-                int ambR = inVolc ? 235 : (weatherMode >= 2 ? 155 : (weatherMode == 1 ? 195 : (inTown ? 245 : 250)));
-                int ambG = inVolc ? 185 : (weatherMode >= 2 ? 170 : (weatherMode == 1 ? 205 : (inTown ? 235 : 245)));
-                int ambB = inVolc ? 165 : (weatherMode >= 2 ? 210 : (weatherMode == 1 ? 225 : (inTown ? 220 : 230)));
+                int ambR = inVolc ? 235 : (weatherMode >= 2 ? 155 : (weatherMode == 1 ? 195 : 256));
+                int ambG = inVolc ? 185 : (weatherMode >= 2 ? 170 : (weatherMode == 1 ? 205 : 256));
+                int ambB = inVolc ? 165 : (weatherMode >= 2 ? 210 : (weatherMode == 1 ? 225 : 256));
                 apply_rtx_shader_lighting(fb, ambR, ambG, ambB, rtxL, nL);
             }
 
@@ -3200,9 +3198,11 @@ int main(void) {
             draw_text(fb, fx + 6, fy + 3, buf, (curFps >= 55) ? RGB(110, 255, 140) : (curFps >= 35 ? RGB(255, 225, 85) : RGB(255, 90, 95)));
         }
 
-        /* Sequential write-only transfer from cached sys_fb to VRAM */
+        /* Fast 64-bit sequential write-only transfer from cached sys_fb to VRAM */
         for (int y = 0; y < SCR_H; y++) {
-            memcpy(&vram_bufs[cur_fb][y * BUF_W], &sys_fb[y * BUF_W], SCR_W * sizeof(unsigned int));
+            const unsigned long long *src64 = (const unsigned long long *)&sys_fb[y * BUF_W];
+            unsigned long long *dst64 = (unsigned long long *)&vram_bufs[cur_fb][y * BUF_W];
+            for (int x = 0; x < SCR_W / 2; x++) dst64[x] = src64[x];
         }
 
         sceDisplayWaitVblankStart();
