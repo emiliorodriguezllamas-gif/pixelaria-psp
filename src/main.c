@@ -197,6 +197,22 @@ static void draw_spr32(unsigned int *fb, const unsigned int *spr, int dx, int dy
     }
 }
 
+static void draw_spr32_x2(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int j = 0; j < 64; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &spr[(j >> 1) * 32];
+        for (int i = 0; i < 64; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i >> 1];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
 static void draw_spr64_as24(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
     for (int j = 0; j < 24; j++) {
         int py = dy + j;
@@ -1482,10 +1498,10 @@ int main(void) {
                     }
                 }
             }
-            /* 2.5D Overhanging Trees (spr_tree32) & Town Buildings (spr_house/spr_tavern) with soft shadows */
-            for (int ty = 0; ty < 12; ty++) {
+            /* 2.5D Overhanging Trees (spr_tree32) & Large 64x64 Town Buildings (spr_house/spr_tavern) with soft shadows */
+            for (int ty = 0; ty < 14; ty++) {
                 int sy = ty * 24 - 8;
-                for (int tx = 0; tx < 20; tx++) {
+                for (int tx = -1; tx < 21; tx++) {
                     int sx = tx * 24;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
@@ -1494,8 +1510,8 @@ int main(void) {
                             fill_ellipse_alpha(fb, sx + 12, sy + 20, 11, 5, RGB(0, 0, 0), 115);
                             draw_spr32(fb, spr_tree32, sx - 4, sy - 7);
                         } else if (wt == 10 || wt == 11) {
-                            fill_ellipse_alpha(fb, sx + 12, sy + 21, 14, 5, RGB(0, 0, 0), 125);
-                            draw_spr32(fb, (wt == 10) ? spr_house : spr_tavern, sx - 4, sy - 8);
+                            fill_ellipse_alpha(fb, sx + 12, sy + 20, 30, 8, RGB(0, 0, 0), 130);
+                            draw_spr32_x2(fb, (wt == 10) ? spr_house : spr_tavern, sx - 20, sy - 40);
                         }
                     }
                 }
