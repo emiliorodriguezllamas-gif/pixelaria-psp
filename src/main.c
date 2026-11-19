@@ -825,10 +825,7 @@ int main(void) {
                     prevX2 = prevX1; prevY2 = prevY1;
                     prevX1 = mapX;   prevY1 = mapY;
                     mapX = nx;       mapY = ny;
-                    for (int i = 0; i < MAX_ROAM; i++) if (roam[i].alive) {
-                fill_rect(fb, 408 + roam[i].x / 4, 32 + roam[i].y / 4, 2, 2, RGB(255, 65, 75));
-            }
-            for (int i = 0; i < 3; i++) {
+                    for (int i = 0; i < 3; i++) {
                         if (!bossDefeated[i] && mapX == dngX[i] && mapY == dngY[i]) {
                             start_chapter(i);
                             break;
