@@ -1134,12 +1134,19 @@ static int dlgTimer = 0;
 typedef struct { int x, y, type, alive, flip, respawn; } RoamMob;
 static RoamMob roam[MAX_ROAM];
 
+#define MAX_TOWN_NPC 10
+typedef struct { int x, y, homeX, homeY, flip, kind; } TownNPC;
+static TownNPC townNpcs[MAX_TOWN_NPC];
+
 static int is_tile_blocked(int x, int y) {
     if (x < 0 || x >= MW || y < 0 || y >= MH) return 1;
     unsigned char t = worldMap[y][x];
     if (t == 1 || t == 2 || t == 3 || t == 8 || t >= 10) return 1;
     for (int i = 0; i < 8; i++) {
         if (x == npcX[i] && y == npcY[i]) return 1;
+    }
+    for (int i = 0; i < MAX_TOWN_NPC; i++) {
+        if (x == townNpcs[i].x && y == townNpcs[i].y) return 1;
     }
     return 0;
 }
@@ -1229,21 +1236,38 @@ static void init_world(void) {
 
     /* Decoracion de Solaria: Casas (10), Taberna (11), Fuente (12), Mercado (13), Farolas (14), Pozo (15) */
     worldMap[77][21] = 10; worldMap[77][25] = 10; worldMap[77][31] = 11; worldMap[77][35] = 10;
-    worldMap[90][21] = 10; worldMap[90][35] = 10;
+    worldMap[90][21] = 10; worldMap[90][26] = 10; worldMap[90][30] = 10; worldMap[90][35] = 10;
+    worldMap[82][20] = 10; worldMap[82][36] = 10; worldMap[87][20] = 11; worldMap[87][36] = 10;
     worldMap[84][28] = 12; /* Fuente central de la plaza de Solaria */
-    worldMap[80][24] = 13; worldMap[80][32] = 13; /* Puestos de mercado */
-    worldMap[88][24] = 15; /* Pozo de piedra */
-    worldMap[82][22] = 14; worldMap[82][34] = 14; worldMap[86][22] = 14; worldMap[86][34] = 14; /* Farolas */
+    worldMap[80][24] = 13; worldMap[80][28] = 13; worldMap[80][32] = 13; /* Puestos de mercado */
+    worldMap[84][24] = 13; worldMap[84][32] = 13;
+    worldMap[88][24] = 15; worldMap[88][32] = 15; /* Pozos de piedra */
+    worldMap[78][28] = 14; worldMap[82][22] = 14; worldMap[82][34] = 14;
+    worldMap[86][22] = 14; worldMap[86][34] = 14; worldMap[89][28] = 14; /* Farolas */
+    worldMap[79][20] = 1;  worldMap[79][36] = 1;  /* Arboles ornamentales */
 
     /* Decoracion de Aldea de Bruma */
     worldMap[58][78] = 10; worldMap[58][83] = 10;
-    worldMap[61][78] = 13; worldMap[62][83] = 15;
-    worldMap[60][77] = 14; worldMap[60][84] = 14;
+    worldMap[61][78] = 13; worldMap[61][83] = 13; worldMap[62][80] = 15;
+    worldMap[59][81] = 12; /* Fuente de Bruma */
+    worldMap[60][77] = 14; worldMap[60][84] = 14; worldMap[57][81] = 14;
 
     /* Decoracion de Taberna del Trovador */
     worldMap[110][153] = 11; worldMap[110][157] = 10;
-    worldMap[113][157] = 13; worldMap[114][152] = 12;
-    worldMap[112][151] = 14; worldMap[112][159] = 14;
+    worldMap[113][157] = 13; worldMap[113][153] = 13; worldMap[114][152] = 12;
+    worldMap[112][151] = 14; worldMap[112][159] = 14; worldMap[114][158] = 15;
+
+    /* Ciudadanos ambulantes en las 3 ciudades */
+    static const int tnCoords[MAX_TOWN_NPC][2] = {
+        {26, 83}, {30, 83}, {25, 86}, {31, 86}, {28, 80}, {28, 88},
+        {79, 60}, {82, 60}, {154, 112}, {156, 113}
+    };
+    for (int i = 0; i < MAX_TOWN_NPC; i++) {
+        townNpcs[i].x = townNpcs[i].homeX = tnCoords[i][0];
+        townNpcs[i].y = townNpcs[i].homeY = tnCoords[i][1];
+        townNpcs[i].flip = (i & 1);
+        townNpcs[i].kind = (i % 3);
+    }
 
     /* Red de carreteras reales conectando Solaria -> Aldeas -> 3 Puentes -> 3 Dungeons */
     carve_road(38, 84, 81, 64);   /* Solaria -> Aldea de Bruma */
@@ -1448,17 +1472,17 @@ static void start_chapter(int ch) {
 static int lastRegionId = -1, regionBannerTimer = 0;
 static const char * const regionNames[7] = {
     "CIUDAD DE SOLARIA",
-    "VILLA DEL PUENTE",
-    "ALDEA DE SILVALUZ",
+    "ALDEA DE BRUMA",
+    "TABERNA DEL TROVADOR",
     "VALLE ESMERALDA",
     "BOSQUE ARCANO",
     "CORDILLERA CENIZA",
     "COSTA SOMBRIA"
 };
 static const char * const regionSubs[7] = {
-    "Plaza de los Bardos y Taberna",
-    "Cruce del Rio y Mercaderes",
-    "Refugio del Bosque Antiguo",
+    "Plaza Real, Mercado y Jazz",
+    "Posada del Camino del Norte",
+    "Refugio Musical del Bosque",
     "Caminos y Praderas de Aethel",
     "Niebla Mistica y Luciernagas",
     "Tierras del Dragon Sombrio",
@@ -1594,7 +1618,21 @@ int main(void) {
                     }
                 }
             }
-            /* Patrol visible roaming enemies every 45 frames */
+            /* Patrol visible roaming enemies every 45 frames & stroll town villagers every 36 frames */
+            if (inOverworld && (animFrame % 36) == 0) {
+                static const int tdx[4] = { 1, -1, 0, 0 };
+                static const int tdy[4] = { 0, 0, 1, -1 };
+                for (int i = 0; i < MAX_TOWN_NPC; i++) {
+                    int dir = xr() & 3;
+                    int nx = townNpcs[i].x + tdx[dir], ny = townNpcs[i].y + tdy[dir];
+                    if (abs(nx - townNpcs[i].homeX) <= 4 && abs(ny - townNpcs[i].homeY) <= 4 &&
+                        (nx != mapX || ny != mapY) && worldMap[ny][nx] == 4 && !is_tile_blocked(nx, ny)) {
+                        if (tdx[dir] < 0) townNpcs[i].flip = 1;
+                        else if (tdx[dir] > 0) townNpcs[i].flip = 0;
+                        townNpcs[i].x = nx; townNpcs[i].y = ny;
+                    }
+                }
+            }
             if (inOverworld && (animFrame % 45) == 0) {
                 static const int rdx[4] = { 1, -1, 0, 0 };
                 static const int rdy[4] = { 0, 0, 1, -1 };
@@ -2084,7 +2122,31 @@ int main(void) {
                             draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 1);
                         } else if (t == 4 || t >= 10) {
                             draw_tile24_30(fb, tile_castle, sx, sy);
-                            if (t == 12) draw_spr24_30(fb, spr_fountain, sx, sy);
+                            /* Rich Town Floor Details: Golden Plaza Carpets, Flowerbeds & Festive Banners */
+                            if (t == 4) {
+                                unsigned int th = ((unsigned int)wx * 2654435761u) ^ ((unsigned int)wy * 2246822519u);
+                                if (wx == 28 || wy == 84 || wx == 81 || wy == 60 || wx == 155 || wy == 112) {
+                                    fill_rect_alpha(fb, sx + 2, sy + 2, 26, 26, RGB(195, 145, 55), 55);
+                                    draw_border(fb, sx + 3, sy + 3, 24, 24, RGB(230, 190, 95));
+                                } else if ((th % 9u) == 0u) {
+                                    /* Town Flowerbed Planter */
+                                    fill_rect(fb, sx + 5, sy + 17, 20, 8, RGB(120, 75, 42));
+                                    fill_rect(fb, sx + 7, sy + 14, 16, 5, RGB(34, 130, 48));
+                                    fill_rect(fb, sx + 9, sy + 14, 3, 3, RGB(255, 110, 145));
+                                    fill_rect(fb, sx + 18, sy + 14, 3, 3, RGB(255, 225, 70));
+                                } else if ((th % 13u) == 0u) {
+                                    /* Wooden Crate / Barrel Prop */
+                                    fill_rect(fb, sx + 8, sy + 12, 12, 12, RGB(145, 92, 46));
+                                    draw_border(fb, sx + 8, sy + 12, 12, 12, RGB(78, 45, 22));
+                                    fill_rect(fb, sx + 8, sy + 16, 12, 2, RGB(95, 95, 110));
+                                }
+                            }
+                            if (t == 12) {
+                                draw_spr24_30(fb, spr_fountain, sx, sy);
+                                int sp1 = (animFrame / 3) % 8;
+                                fill_rect_alpha(fb, sx + 12, sy + 7 - sp1, 2, 3, RGB(165, 235, 255), 210);
+                                fill_rect_alpha(fb, sx + 16, sy + 9 - ((sp1 + 4) % 8), 2, 3, RGB(165, 235, 255), 210);
+                            }
                             else if (t == 13) draw_spr24_30(fb, spr_market, sx, sy);
                             else if (t == 14) {
                                 int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
@@ -2149,6 +2211,19 @@ int main(void) {
                     fill_ellipse_alpha(fb, sx + 15, sy + 26, 11, 5, RGB(190, 30, 45), 115);
                     const unsigned int *mspr = (roam[i].type == 0) ? mob_slime : (roam[i].type == 1 ? mob_goblin : mob_wraith);
                     draw_spr64_to_30(fb, mspr, sx, sy - mBob, roam[i].flip);
+                }
+            }
+            /* Wandering Town Villagers bringing cities to life */
+            for (int i = 0; i < MAX_TOWN_NPC; i++) {
+                int sx = (townNpcs[i].x - ox) * 30, sy = (townNpcs[i].y - oy) * 30 - 4;
+                if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
+                    int bob = ((animFrame / 16 + i) & 1);
+                    fill_ellipse_alpha(fb, sx + 15, sy + 26, 10, 4, RGB(0, 0, 0), 115);
+                    const unsigned int *tspr = (townNpcs[i].kind == 0) ? spr_troubadour : (townNpcs[i].kind == 1 ? spr_elder : spr_band1);
+                    draw_spr24_30_dir(fb, tspr, sx, sy - bob, townNpcs[i].flip);
+                    if (((animFrame / 90 + i) % 5) == 0) {
+                        draw_text(fb, sx + 11, sy - 9 - bob, "*", RGB(255, 230, 120));
+                    }
                 }
             }
             /* 8 NPCs across the 6 regions dynamically turning to look towards your Bard */
