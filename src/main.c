@@ -1608,6 +1608,7 @@ static void start_chapter(int ch) {
 }
 
 static int lastRegionId = -1, regionBannerTimer = 0;
+static SceInt64 regionBannerStartT = 0;
 static const char * const regionNames[7] = {
     "CIUDAD DE SOLARIA",
     "ALDEA DE BRUMA",
@@ -1709,10 +1710,15 @@ int main(void) {
             if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) start_game();
         } else if (inOverworld) {
             if (dlgTimer > 0) dlgTimer--;
-            if (regionBannerTimer > 0) regionBannerTimer--;
             if (curRegId != lastRegionId) {
                 lastRegionId = curRegId;
-                regionBannerTimer = 165;
+                regionBannerStartT = sceKernelGetSystemTimeWide();
+                regionBannerTimer = 180;
+            }
+            if (regionBannerTimer > 0) {
+                SceInt64 el = sceKernelGetSystemTimeWide() - regionBannerStartT;
+                if (el >= 3000000LL) regionBannerTimer = 0;
+                else regionBannerTimer = (int)((3000000LL - el) / 16667LL) + 1;
             }
             if (walkTimer > 0) walkTimer--;
 
@@ -2593,7 +2599,7 @@ int main(void) {
 
             /* Ornamental RPG Zone Arrival Banner */
             if (regionBannerTimer > 0) {
-                int slide = (regionBannerTimer > 153) ? (regionBannerTimer - 153) * 3 : (regionBannerTimer < 12 ? (12 - regionBannerTimer) * 3 : 0);
+                int slide = (regionBannerTimer > 168) ? (regionBannerTimer - 168) * 3 : (regionBannerTimer < 12 ? (12 - regionBannerTimer) * 3 : 0);
                 int by = 32 - slide;
                 int bAlpha = (regionBannerTimer < 12) ? (regionBannerTimer * 18) : 215;
                 fill_rect_alpha(fb, 110, by, 260, 38, RGB(12, 16, 44), bAlpha);
