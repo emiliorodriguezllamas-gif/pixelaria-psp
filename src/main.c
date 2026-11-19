@@ -1369,7 +1369,7 @@ static void enter_dungeon(int dId) {
 }
 
 static void init_battle_enemies(int isMob, int ch) {
-    static const int mobHpTbl[3]  = { 75, 130, 200 };
+    static const int mobHpTbl[3]  = { 55, 95, 150 };
     static const int bossHpTbl[3] = { 260, 420, 660 };
     if (isMob) {
         numEnemies = 2 + (xr() & 1); /* 2 or 3 enemies from the very beginning! */
@@ -1791,11 +1791,12 @@ int main(void) {
             phaseTimer++;
             int livingE = 0;
             for (int i = 0; i < numEnemies; i++) if (eHp[i] > 0) livingE++;
-            int pRate = isMobBattle ? (24 - chapter * 3) : (18 - chapter * 3);
-            pRate -= (livingE > 1 ? (livingE - 1) * 3 : 0);
-            if (pRate < 9) pRate = 9;
+            int pRate = isMobBattle ? (32 - chapter * 3) : (18 - chapter * 3);
+            pRate -= (livingE > 1 ? (livingE - 1) * (isMobBattle ? 2 : 3) : 0);
+            int minRate = isMobBattle ? 14 : 9;
+            if (pRate < minRate) pRate = minRate;
             if ((phaseTimer % pRate) == 0) {
-                int burst = (!isMobBattle || (phaseTimer % (pRate * 3) == 0)) ? 2 : 1;
+                int burst = (!isMobBattle || (phaseTimer % (pRate * 4) == 0)) ? 2 : 1;
                 for (int b = 0; b < burst; b++) {
                     for (int p = 0; p < 16; p++) if (!projAlive[p]) {
                         projAlive[p] = 1;
@@ -1811,7 +1812,7 @@ int main(void) {
                         float dx = tx - sx, dy = ty - sy;
                         float len = sqrtf(dx * dx + dy * dy);
                         if (len < 1.0f) len = 1.0f;
-                        float pSpd = isMobBattle ? (2.25f + chapter * 0.35f) : (2.65f + chapter * 0.40f);
+                        float pSpd = isMobBattle ? (1.85f + chapter * 0.25f) : (2.65f + chapter * 0.40f);
                         projVx[p] = (dx / len) * pSpd;
                         projVy[p] = (dy / len) * pSpd;
                         break;
@@ -1823,7 +1824,7 @@ int main(void) {
                 if (projX[p] < 134 || projX[p] > 346 || projY[p] < 126 || projY[p] > 264) { projAlive[p] = 0; continue; }
                 if (fabsf(projX[p] - bardX) < 11 && fabsf(projY[p] - bardY) < 11) {
                     projAlive[p] = 0;
-                    static const int mobEdmg[3]  = { 26, 38, 52 };
+                    static const int mobEdmg[3]  = { 18, 26, 36 };
                     static const int bossEdmg[3] = { 40, 56, 75 };
                     int baseEdmg = isMobBattle ? mobEdmg[chapter] : bossEdmg[chapter];
                     int edmg = relicShield ? ((baseEdmg * 6) / 10) : baseEdmg;
@@ -1974,9 +1975,9 @@ int main(void) {
             }
 
             for (int i = 0; i < 24; i++) if (notes[i].active) {
-                /* Phase-locked to audio clock: lands on HIT_Y (238) exactly 7 beats after spawnStep */
+                /* Phase-locked to audio clock: lands on HIT_Y (238) exactly 9 beats after spawnStep */
                 float elapsedBeats = (float)(curBeat - notes[i].spawnStep) + curSub;
-                notes[i].y = 104.0f + elapsedBeats * (134.0f / 7.0f);
+                notes[i].y = 104.0f + elapsedBeats * (134.0f / 9.0f);
                 if (notes[i].y > SCR_H - 10) {
                     int ml = notes[i].lane;
                     notes[i].active = 0; combo = 0;
