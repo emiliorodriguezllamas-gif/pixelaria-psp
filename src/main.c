@@ -214,6 +214,34 @@ static void draw_spr_wh(unsigned int *fb, const unsigned int *spr, int w, int h,
     }
 }
 
+static void draw_tile_30(unsigned int *fb, const unsigned int *tile, int dx, int dy) {
+    int j0 = (dy < 0) ? -dy : 0;
+    int j1 = (dy + 30 > SCR_H) ? (SCR_H - dy) : 30;
+    int i0 = (dx < 0) ? -dx : 0;
+    int i1 = (dx + 30 > SCR_W) ? (SCR_W - dx) : 30;
+    if (j0 >= j1 || i0 >= i1) return;
+    int cnt = i1 - i0;
+    for (int j = j0; j < j1; j++) {
+        memcpy(&fb[(dy + j) * BUF_W + dx + i0], &tile[j * 30 + i0], cnt * 4);
+    }
+}
+
+static void draw_tile_30_scroll(unsigned int *fb, const unsigned int *tile, int dx, int dy, int xOff) {
+    int j0 = (dy < 0) ? -dy : 0;
+    int j1 = (dy + 30 > SCR_H) ? (SCR_H - dy) : 30;
+    int i0 = (dx < 0) ? -dx : 0;
+    int i1 = (dx + 30 > SCR_W) ? (SCR_W - dx) : 30;
+    if (j0 >= j1 || i0 >= i1) return;
+    for (int j = j0; j < j1; j++) {
+        unsigned int *dst = &fb[(dy + j) * BUF_W + dx];
+        const unsigned int *src = &tile[j * 30];
+        for (int i = i0; i < i1; i++) {
+            int sx = (i + xOff) % 30;
+            dst[i] = src[sx];
+        }
+    }
+}
+
 static inline unsigned int blend_rgb_4(unsigned int c00, unsigned int c10, unsigned int c01, unsigned int c11, int fx, int fy) {
     int ifx = 256 - fx, ify = 256 - fy;
     int w00 = (ifx * ify) >> 8, w10 = (fx * ify) >> 8, w01 = (ifx * fy) >> 8, w11 = (fx * fy) >> 8;
@@ -2330,19 +2358,19 @@ int main(void) {
             int ox = mapX - 8, oy = mapY - 4;
             int camOffX = (walkTimer > 0) ? (walkDx * walkTimer * 30) / walkMax : 0;
             int camOffY = (walkTimer > 0) ? (walkDy * walkTimer * 30) / walkMax : 0;
-            int waterOff = (animFrame / 8) % 24;
+            int waterOff = (animFrame / 6) % 30;
             for (int ty = -1; ty < 11; ty++) {
                 int sy = ty * 30 - 4 + camOffY;
                 for (int tx = -1; tx < 17; tx++) {
                     int sx = tx * 30 + camOffX;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx < 0 || wy < 0 || wx >= MW || wy >= MH) {
-                        draw_tile24_30(fb, tile_grass, sx, sy);
+                        draw_tile_30(fb, tile_grass_30, sx, sy);
                         draw_spr24_30(fb, spr_mountain, sx, sy);
                     } else {
                         unsigned char t = worldMap[wy][wx];
                         if (t == 3) {
-                            draw_tile24_30_scroll(fb, tile_water, sx, sy, waterOff);
+                            draw_tile_30_scroll(fb, tile_water_30, sx, sy, waterOff);
                             /* RTX Specular Water Shimmer & Sky Reflections */
                             int wShimmer = (animFrame / 6 + wx * 3 + wy * 5) & 7;
                             if (wShimmer < 2) {
@@ -2354,28 +2382,40 @@ int main(void) {
                                 fill_rect_alpha(fb, sx + 26, sy, 4, 30, RGB(205, 185, 130), 175);
                             draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 1);
                         } else if (t == 4 || t >= 10) {
-                            draw_tile24_30(fb, tile_castle, sx, sy);
+                            draw_tile_30(fb, tile_castle_30, sx, sy);
                             if (t == 16) draw_spr24_30(fb, spr_flowerbed, sx, sy);
                             else if (t == 17) draw_spr24_30(fb, spr_bench, sx, sy);
                             else if (t == 18) draw_spr24_30(fb, spr_crates, sx, sy);
                             else if (t == 19) draw_spr24_30(fb, spr_barrels, sx, sy);
                             else if (t == 20) draw_spr24_30(fb, spr_signpost, sx, sy);
                         } else if (t == 6) {
-                            draw_tile24_30(fb, tile_bridge, sx, sy);
+                            int bU = (wy > 0 && worldMap[wy - 1][wx] != 3);
+                            int bD = (wy < MH - 1 && worldMap[wy + 1][wx] != 3);
+                            int bL = (wx > 0 && worldMap[wy][wx - 1] != 3);
+                            int bR = (wx < MW - 1 && worldMap[wy][wx + 1] != 3);
+                            int bVert = (bU || bD) && !(bL && bR);
+                            draw_tile_30(fb, bVert ? tile_bridge_v_30 : tile_bridge_h_30, sx, sy);
                         } else if (t == 7) {
-                            draw_tile24_30(fb, tile_path, sx, sy);
+                            int pL = (wx > 0 && (worldMap[wy][wx - 1] == 7 || worldMap[wy][wx - 1] == 6 || worldMap[wy][wx - 1] == 4 || worldMap[wy][wx - 1] >= 10));
+                            int pR = (wx < MW - 1 && (worldMap[wy][wx + 1] == 7 || worldMap[wy][wx + 1] == 6 || worldMap[wy][wx + 1] == 4 || worldMap[wy][wx + 1] >= 10));
+                            int pU = (wy > 0 && (worldMap[wy - 1][wx] == 7 || worldMap[wy - 1][wx] == 6 || worldMap[wy - 1][wx] == 4 || worldMap[wy - 1][wx] >= 10));
+                            int pD = (wy < MH - 1 && (worldMap[wy + 1][wx] == 7 || worldMap[wy + 1][wx] == 6 || worldMap[wy + 1][wx] == 4 || worldMap[wy + 1][wx] >= 10));
+                            int hasH = pL || pR, hasV = pU || pD;
+                            if (hasH && !hasV) draw_tile_30(fb, tile_path_h_30, sx, sy);
+                            else if (hasV && !hasH) draw_tile_30(fb, tile_path_v_30, sx, sy);
+                            else draw_tile_30(fb, tile_path_c_30, sx, sy);
                         } else if (t == 8) {
                             int wL = (wx > 0 && worldMap[wy][wx - 1] == 8);
                             int wR = (wx < MW - 1 && worldMap[wy][wx + 1] == 8);
                             int wU = (wy > 0 && worldMap[wy - 1][wx] == 8);
                             int wD = (wy < MH - 1 && worldMap[wy + 1][wx] == 8);
                             int hasH = wL || wR, hasV = wU || wD;
-                            draw_tile24_30(fb, tile_grass, sx, sy);
+                            draw_tile_30(fb, tile_grass_30, sx, sy);
                             if (hasH && !hasV) draw_spr_wh(fb, spr_wall_h, 30, 30, sx, sy);
                             else if (hasV && !hasH) draw_spr_wh(fb, spr_wall_v, 30, 30, sx, sy);
                             else draw_spr_wh(fb, spr_wall_corner, 30, 30, sx, sy);
                         } else {
-                            draw_tile24_30(fb, tile_grass, sx, sy);
+                            draw_tile_30(fb, tile_grass_30, sx, sy);
                             if (t == 0) draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 0);
                             if (t == 2) draw_spr24_30(fb, spr_mountain, sx, sy);
                             else if (t == 5) {
