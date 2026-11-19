@@ -804,7 +804,7 @@ static void enter_dungeon(int dId) {
 static void start_mob_battle_type(int mtype) {
     isMobBattle = 1;
     chapter = mtype;
-    static const int mobHpTbl[3] = { 55, 115, 190 };
+    static const int mobHpTbl[3] = { 95, 165, 250 };
     bHp = bMaxHp = mobHpTbl[chapter];
     combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
     bardX = 240.0f; bardY = 195.0f;
@@ -822,7 +822,7 @@ static void start_mob_battle(void) {
 static void start_chapter(int ch) {
     isMobBattle = 0;
     chapter = ch;
-    static const int bossHpTbl[3] = { 240, 420, 680 };
+    static const int bossHpTbl[3] = { 290, 480, 760 };
     bHp = bMaxHp = bossHpTbl[ch];
     combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
     bardX = 240.0f; bardY = 195.0f;
@@ -1202,8 +1202,8 @@ int main(void) {
             if (missFlash > 0) missFlash--;
             for (int l = 0; l < 4; l++) if (laneFlash[l] > 0) laneFlash[l]--;
 
-            static const float mobNoteSpd[3]  = { 0.95f, 1.20f, 1.45f };
-            static const float bossNoteSpd[3] = { 1.25f, 1.52f, 1.80f };
+            static const float mobNoteSpd[3]  = { 1.38f, 1.62f, 1.88f };
+            static const float bossNoteSpd[3] = { 1.65f, 1.90f, 2.15f };
             float spd = isMobBattle ? mobNoteSpd[chapter] : bossNoteSpd[chapter];
             fretScroll += spd;
             if (fretScroll >= 28.0f) fretScroll -= 28.0f;
@@ -1217,7 +1217,7 @@ int main(void) {
             }
 
             static int lastBeatStep = -1;
-            int stepMod = isMobBattle ? 4 : (3 - (chapter > 0 ? 1 : 0)); /* Mobs every 4 beats, Boss 1 every 3, Boss 2-3 every 2 */
+            int stepMod = isMobBattle ? 2 : ((chapter == 0) ? 2 : 1); /* Mobs & Boss 1 every 2 beats, Boss 2-3 every beat! */
             if (bgm_step != lastBeatStep && (bgm_step % stepMod) == 0 && phaseTimer < 330) {
                 lastBeatStep = bgm_step;
                 for (int i = 0; i < 24; i++) if (!notes[i].active) {
