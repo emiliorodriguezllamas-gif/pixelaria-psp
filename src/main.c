@@ -1103,6 +1103,75 @@ static void update_draw_weather_and_lighting(unsigned int *fb, int mapXPos, int 
     fill_rect_alpha(fb, 0, SCR_H - 10, SCR_W, 10, RGB(6, 8, 18), 38);
 }
 
+/* ================= RTX-STYLE BILINEAR RADIANCE & HDR BLOOM SHADER ================= */
+typedef struct { int x, y, r, g, b, rad; } LightSrc;
+
+static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int ambB, const LightSrc *ls, int nLights) {
+    static short gR[35][61], gG[35][61], gB[35][61];
+    for (int gy = 0; gy < 35; gy++) {
+        for (int gx = 0; gx < 61; gx++) {
+            gR[gy][gx] = (short)ambR;
+            gG[gy][gx] = (short)ambG;
+            gB[gy][gx] = (short)ambB;
+        }
+    }
+    for (int k = 0; k < nLights; k++) {
+        int rad = ls[k].rad;
+        if (rad <= 0) continue;
+        int rad2 = rad * rad;
+        int bx0 = (ls[k].x - rad) >> 3; if (bx0 < 0) bx0 = 0;
+        int bx1 = ((ls[k].x + rad) >> 3) + 1; if (bx1 > 60) bx1 = 60;
+        int by0 = (ls[k].y - rad) >> 3; if (by0 < 3) by0 = 3;
+        int by1 = ((ls[k].y + rad) >> 3) + 1; if (by1 > 34) by1 = 34;
+        for (int gy = by0; gy <= by1; gy++) {
+            int dy = (gy << 3) - ls[k].y;
+            int dy2 = dy * dy;
+            for (int gx = bx0; gx <= bx1; gx++) {
+                int dx = (gx << 3) - ls[k].x;
+                int d2 = dx * dx + dy2;
+                if (d2 < rad2) {
+                    int w = rad2 - d2;
+                    int att = (w * 256) / rad2;
+                    att = (att * att) >> 8; /* Smooth quadratic RTX falloff */
+                    int nr = gR[gy][gx] + ((ls[k].r * att) >> 8);
+                    int ng = gG[gy][gx] + ((ls[k].g * att) >> 8);
+                    int nb = gB[gy][gx] + ((ls[k].b * att) >> 8);
+                    gR[gy][gx] = (short)(nr > 360 ? 360 : nr);
+                    gG[gy][gx] = (short)(ng > 360 ? 360 : ng);
+                    gB[gy][gx] = (short)(nb > 360 ? 360 : nb);
+                }
+            }
+        }
+    }
+    short rowR[61], rowG[61], rowB[61];
+    for (int y = 24; y < SCR_H; y++) {
+        int gy = y >> 3, fy = y & 7, ify = 8 - fy;
+        for (int gx = 0; gx < 61; gx++) {
+            rowR[gx] = (short)((gR[gy][gx] * ify + gR[gy + 1][gx] * fy) >> 3);
+            rowG[gx] = (short)((gG[gy][gx] * ify + gG[gy + 1][gx] * fy) >> 3);
+            rowB[gx] = (short)((gB[gy][gx] * ify + gB[gy + 1][gx] * fy) >> 3);
+        }
+        unsigned int *dst = &fb[y * BUF_W];
+        for (int bx = 0; bx < 60; bx++) {
+            int lr = rowR[bx] << 3, dlr = rowR[bx + 1] - rowR[bx];
+            int lg = rowG[bx] << 3, dlg = rowG[bx + 1] - rowG[bx];
+            int lb = rowB[bx] << 3, dlb = rowB[bx + 1] - rowB[bx];
+            int baseX = bx << 3;
+            for (int i = 0; i < 8; i++) {
+                unsigned int c = dst[baseX + i];
+                unsigned int r = ((c & 0xFFu) * (unsigned int)(lr >> 3)) >> 8;
+                unsigned int g = (((c >> 8) & 0xFFu) * (unsigned int)(lg >> 3)) >> 8;
+                unsigned int b = (((c >> 16) & 0xFFu) * (unsigned int)(lb >> 3)) >> 8;
+                if (r > 255u) r = 255u;
+                if (g > 255u) g = 255u;
+                if (b > 255u) b = 255u;
+                dst[baseX + i] = (b << 16) | (g << 8) | r;
+                lr += dlr; lg += dlg; lb += dlb;
+            }
+        }
+    }
+}
+
 /* PARTE 1: Super-Mapa Continental estilo Skyrim (256x192 tiles = 49,152 casillas) */
 #define MW 256
 #define MH 192
@@ -2115,6 +2184,11 @@ int main(void) {
                         unsigned char t = worldMap[wy][wx];
                         if (t == 3) {
                             draw_tile24_30_scroll(fb, tile_water, sx, sy, waterOff);
+                            /* RTX Specular Water Shimmer & Sky Reflections */
+                            int wShimmer = (animFrame / 6 + wx * 3 + wy * 5) & 7;
+                            if (wShimmer < 2) {
+                                fill_rect_alpha(fb, sx + 5 + ((wx * 7) & 7), sy + 8 + ((wy * 5) & 11), 9, 2, RGB(215, 245, 255), 115);
+                            }
                             if (wx > 0 && worldMap[wy][wx - 1] != 3 && worldMap[wy][wx - 1] != 6)
                                 fill_rect_alpha(fb, sx, sy, 4, 30, RGB(205, 185, 130), 175);
                             if (wx < MW - 1 && worldMap[wy][wx + 1] != 3 && worldMap[wy][wx + 1] != 6)
@@ -2250,6 +2324,32 @@ int main(void) {
             update_draw_bugs(fb, (mapX >= 118 && mapX < 165), (weatherMode >= 2));
             update_draw_weather_and_lighting(fb, mapX, mapY);
 
+            /* RTX Real-Time Shader Lighting Pass (Dynamic Point Lights, HDR Bloom & Ambient Mood) */
+            {
+                LightSrc rtxL[20];
+                int nL = 0;
+                int flicker = (int)(sinf((float)animFrame * 0.17f) * 14.0f);
+                rtxL[nL++] = (LightSrc){ 255, 130, 110 + flicker / 2, 95 + flicker / 2, 65, 92 };
+                for (int ty = 0; ty < 10 && nL < 20; ty++) {
+                    for (int tx = 0; tx < 16 && nL < 20; tx++) {
+                        int wx = ox + tx, wy = oy + ty;
+                        if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
+                            unsigned char t = worldMap[wy][wx];
+                            int lx = tx * 30 + 15, ly = ty * 30 + 11;
+                            if (t == 14) rtxL[nL++] = (LightSrc){ lx, ly, 210 + flicker, 155 + flicker, 70, 110 };
+                            else if (t == 9) rtxL[nL++] = (LightSrc){ lx, ly, 70, 185, 230, 95 };
+                            else if (t == 5) rtxL[nL++] = (LightSrc){ lx, ly, 185, 75, 235, 100 };
+                        }
+                    }
+                }
+                int inVolc = (mapX >= 165 && mapY < 85);
+                int inTown = (curRegId <= 2);
+                int ambR = inVolc ? 235 : (weatherMode >= 2 ? 155 : (weatherMode == 1 ? 195 : (inTown ? 245 : 250)));
+                int ambG = inVolc ? 185 : (weatherMode >= 2 ? 170 : (weatherMode == 1 ? 205 : (inTown ? 235 : 245)));
+                int ambB = inVolc ? 165 : (weatherMode >= 2 ? 210 : (weatherMode == 1 ? 225 : (inTown ? 220 : 230)));
+                apply_rtx_shader_lighting(fb, ambR, ambG, ambB, rtxL, nL);
+            }
+
             /* Top Adventure HUD Window with Level, XP, HP & MP bars + Region Name */
             draw_ff_window(fb, 4, 3, 472, 22);
             sprintf(buf, "NV.%d", pLevel);
@@ -2379,6 +2479,25 @@ int main(void) {
             draw_spr24_30_dir(fb, spr_band2, (dngP2x - ox) * 30, (dngP2y - oy) * 30 - 4 - dBob, band2Flip);
             draw_spr24_30_dir(fb, spr_band1, (dngP1x - ox) * 30, (dngP1y - oy) * 30 - 4 - (dBob ^ 1), band1Flip);
             draw_spr24_30_dir(fb, spr_bard,  8 * 30, 4 * 30 - 4 - dBob, bardFlip);
+
+            /* RTX Real-Time Dungeon Torch & Altar Radiance Shader */
+            {
+                LightSrc rtxL[16];
+                int nL = 0;
+                int flicker = (int)(sinf((float)animFrame * 0.21f) * 18.0f);
+                rtxL[nL++] = (LightSrc){ 255, 130, 225 + flicker, 165 + flicker, 95, 138 };
+                for (int ty = 0; ty < 10 && nL < 16; ty++) {
+                    for (int tx = 0; tx < 16 && nL < 16; tx++) {
+                        int wx = ox + tx, wy = oy + ty;
+                        if (wx >= 0 && wy >= 0 && wx < DW && wy < DH && dngSeen[wy][wx]) {
+                            unsigned char dt = dngMap[wy][wx];
+                            if (dt == 2) rtxL[nL++] = (LightSrc){ tx * 30 + 15, ty * 30 + 11, 160, 110, 240, 105 };
+                            else if (dt == 3) rtxL[nL++] = (LightSrc){ tx * 30 + 15, ty * 30 + 11, 220, 185, 75, 75 };
+                        }
+                    }
+                }
+                apply_rtx_shader_lighting(fb, 92, 86, 118, rtxL, nL);
+            }
 
             /* Top Dungeon HUD */
             draw_ff_window(fb, 4, 3, 472, 22);
