@@ -478,8 +478,8 @@ static int relicDmg = 0, relicVamp = 0, relicShield = 0;
 static int inTitle = 1, inOverworld = 0, inDungeon = 0, wasInDungeon = 0, inStory = 0, inFFMenu = 0, inDefense = 0, inAttackResolve = 0, inRelic = 0, gameOver = 0, victory = 0;
 static int ffCursor = 0, pendingDmg = 0;
 static float bardX = 240.0f, bardY = 195.0f;
-static float projX[6], projY[6], projVx[6], projVy[6];
-static int projAlive[6];
+static float projX[16], projY[16], projVx[16], projVy[16];
+static int projAlive[16];
 static char judge[32] = "";
 static int judgeT = 0;
 static int laneFlash[4] = { 0, 0, 0, 0 };
@@ -1221,24 +1221,42 @@ int main(void) {
 
             if (judgeT > 0) judgeT--;
             phaseTimer++;
-            int pRate = isMobBattle ? 52 : (42 - chapter * 7);
+            int livingE = 0;
+            for (int i = 0; i < numEnemies; i++) if (eHp[i] > 0) livingE++;
+            int pRate = isMobBattle ? (24 - chapter * 3) : (18 - chapter * 3);
+            pRate -= (livingE > 1 ? (livingE - 1) * 3 : 0);
+            if (pRate < 9) pRate = 9;
             if ((phaseTimer % pRate) == 0) {
-                for (int p = 0; p < 6; p++) if (!projAlive[p]) {
-                    projAlive[p] = 1;
-                    projX[p] = (float)(145 + (xr() % 190));
-                    projY[p] = 132.0f;
-                    projVx[p] = (bardX - projX[p]) * 0.011f;
-                    projVy[p] = isMobBattle ? 1.35f : (1.65f + chapter * 0.30f);
-                    break;
+                int burst = (!isMobBattle || (phaseTimer % (pRate * 3) == 0)) ? 2 : 1;
+                for (int b = 0; b < burst; b++) {
+                    for (int p = 0; p < 16; p++) if (!projAlive[p]) {
+                        projAlive[p] = 1;
+                        int side = xr() & 3;
+                        float sx = 240.0f, sy = 132.0f;
+                        if (side == 0)      { sx = (float)(142 + (xr() % 196)); sy = 132.0f; }
+                        else if (side == 1) { sx = (float)(142 + (xr() % 196)); sy = 258.0f; }
+                        else if (side == 2) { sx = 140.0f; sy = (float)(134 + (xr() % 122)); }
+                        else                { sx = 340.0f; sy = (float)(134 + (xr() % 122)); }
+                        projX[p] = sx; projY[p] = sy;
+                        float tx = bardX + (float)((int)(xr() % 33) - 16);
+                        float ty = bardY + (float)((int)(xr() % 33) - 16);
+                        float dx = tx - sx, dy = ty - sy;
+                        float len = sqrtf(dx * dx + dy * dy);
+                        if (len < 1.0f) len = 1.0f;
+                        float pSpd = isMobBattle ? (2.25f + chapter * 0.35f) : (2.65f + chapter * 0.40f);
+                        projVx[p] = (dx / len) * pSpd;
+                        projVy[p] = (dy / len) * pSpd;
+                        break;
+                    }
                 }
             }
-            for (int p = 0; p < 6; p++) if (projAlive[p]) {
+            for (int p = 0; p < 16; p++) if (projAlive[p]) {
                 projX[p] += projVx[p]; projY[p] += projVy[p];
-                if (projY[p] > 256) { projAlive[p] = 0; continue; }
+                if (projX[p] < 134 || projX[p] > 346 || projY[p] < 126 || projY[p] > 264) { projAlive[p] = 0; continue; }
                 if (fabsf(projX[p] - bardX) < 11 && fabsf(projY[p] - bardY) < 11) {
                     projAlive[p] = 0;
-                    static const int mobEdmg[3]  = { 16, 24, 32 };
-                    static const int bossEdmg[3] = { 28, 36, 46 };
+                    static const int mobEdmg[3]  = { 26, 38, 52 };
+                    static const int bossEdmg[3] = { 40, 56, 75 };
                     int baseEdmg = isMobBattle ? mobEdmg[chapter] : bossEdmg[chapter];
                     int edmg = relicShield ? ((baseEdmg * 6) / 10) : baseEdmg;
                     if (guardActive) edmg = (edmg + 1) / 2;
@@ -1315,8 +1333,8 @@ int main(void) {
             if (missFlash > 0) missFlash--;
             for (int l = 0; l < 4; l++) if (laneFlash[l] > 0) laneFlash[l]--;
 
-            static const float mobNoteSpd[3]  = { 1.38f, 1.62f, 1.88f };
-            static const float bossNoteSpd[3] = { 1.65f, 1.90f, 2.15f };
+            static const float mobNoteSpd[3]  = { 1.85f, 2.15f, 2.45f };
+            static const float bossNoteSpd[3] = { 2.20f, 2.50f, 2.85f };
             float spd = isMobBattle ? mobNoteSpd[chapter] : bossNoteSpd[chapter];
             fretScroll += spd;
             if (fretScroll >= 28.0f) fretScroll -= 28.0f;
@@ -1919,7 +1937,7 @@ int main(void) {
                     if (judgeT > 0) draw_text(fb, (int)bardX - 18, (int)bardY - 24 - (26 - judgeT) / 2, judge, RGB(255, 90, 90));
 
                     /* 32-Bit Layered Fiery Shadow-Flame Orbs with Comet Trails */
-                    for (int p = 0; p < 6; p++) if (projAlive[p]) {
+                    for (int p = 0; p < 16; p++) if (projAlive[p]) {
                         int ox = (int)projX[p], oy = (int)projY[p];
                         fill_rect(fb, ox - (int)(projVx[p]*3) - 3, oy - (int)(projVy[p]*3) - 3, 6, 6, RGB(160, 35, 190));
                         fill_rect(fb, ox - (int)(projVx[p]*1.5f) - 4, oy - (int)(projVy[p]*1.5f) - 4, 8, 8, RGB(230, 50, 95));
