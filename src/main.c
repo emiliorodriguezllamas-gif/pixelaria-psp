@@ -2546,8 +2546,21 @@ int main(void) {
                 }
             }
 
-            /* Living Insects (Fireflies/Butterflies/Dragonflies) + Dynamic Weather (Rain/Fog/God-Rays) & Lighting */
-            update_draw_bugs(fb, (mapX >= 118 && mapX < 165), (weatherMode >= 2));
+            /* Living Insects (Fireflies/Butterflies/Dragonflies) only in Forests (never in cities) */
+            {
+                int treeCount = 0;
+                if (curRegId > 2) {
+                    for (int ty = 0; ty < 10 && treeCount < 6; ty++) {
+                        for (int tx = 0; tx < 16 && treeCount < 6; tx++) {
+                            int wx = ox + tx, wy = oy + ty;
+                            if (wx >= 0 && wy >= 0 && wx < MW && wy < MH && worldMap[wy][wx] == 1) treeCount++;
+                        }
+                    }
+                }
+                if (curRegId > 2 && (curRegId == 4 || treeCount >= 6)) {
+                    update_draw_bugs(fb, (curRegId == 4), (weatherMode >= 2));
+                }
+            }
             update_draw_weather_and_lighting(fb, mapX, mapY);
 
             /* RTX Real-Time Shader Lighting Pass (Dynamic Point Lights, HDR Bloom & Ambient Mood) */
