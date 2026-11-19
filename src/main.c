@@ -1635,6 +1635,8 @@ int main(void) {
     SceCtrlData pad; unsigned int prev = 0;
     const unsigned int laneBtns[4] = { PSP_CTRL_SQUARE, PSP_CTRL_TRIANGLE, PSP_CTRL_CIRCLE, PSP_CTRL_CROSS };
     int moveCd = 0;
+    SceInt64 fpsLastT = sceKernelGetSystemTimeWide();
+    int fpsFrames = 0, curFps = 60;
 
     while (running) {
         sceCtrlReadBufferPositive(&pad, 1);
@@ -2927,6 +2929,24 @@ int main(void) {
                     update_draw_sparks(fb);
                 }
             }
+        }
+
+        /* Real-time Hardware FPS Counter */
+        fpsFrames++;
+        SceInt64 fpsNow = sceKernelGetSystemTimeWide();
+        if (fpsNow - fpsLastT >= 500000) {
+            curFps = (int)((fpsFrames * 1000000LL) / (fpsNow - fpsLastT));
+            fpsFrames = 0;
+            fpsLastT = fpsNow;
+        }
+        {
+            int inBattleScreen = (!inTitle && !inOverworld && !inDungeon && !inStory && !inRelic && !gameOver && !victory);
+            int fx = inBattleScreen ? 216 : 6;
+            int fy = inBattleScreen ? 8 : 28;
+            fill_rect_alpha(fb, fx, fy, 48, 13, RGB(10, 14, 34), 195);
+            draw_border(fb, fx, fy, 48, 13, RGB(110, 150, 225));
+            sprintf(buf, "FPS:%2d", curFps);
+            draw_text(fb, fx + 6, fy + 3, buf, (curFps >= 55) ? RGB(110, 255, 140) : (curFps >= 35 ? RGB(255, 225, 85) : RGB(255, 90, 95)));
         }
 
         /* Sequential write-only transfer from cached sys_fb to VRAM */
