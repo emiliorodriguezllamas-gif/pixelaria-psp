@@ -1111,6 +1111,22 @@ static void update_draw_weather_and_lighting(unsigned int *fb, int mapXPos, int 
     fill_rect_alpha(fb, 0, SCR_H - 10, SCR_W, 10, RGB(6, 8, 18), 38);
 }
 
+static void draw_chimney_smoke(unsigned int *fb, int cx, int cy, int wx, int wy) {
+    for (int k = 0; k < 4; k++) {
+        int phase = (animFrame + k * 28 + wx * 17 + wy * 31) % 112;
+        float t = (float)phase / 112.0f;
+        int py = cy - (int)(t * 32.0f);
+        int px = cx + (int)(t * 12.0f + sinf(t * 6.28318f + (float)wx) * 3.0f);
+        int rx = 3 + (int)(t * 7.0f);
+        int ry = 2 + (int)(t * 5.0f);
+        int a = (int)((1.0f - t) * (1.0f - t * 0.4f) * 85.0f);
+        if (a > 6) {
+            fill_ellipse_alpha(fb, px, py, rx, ry, RGB(185, 192, 205), a);
+            if (rx > 4) fill_ellipse_alpha(fb, px - 1, py - 1, rx - 2, ry - 1, RGB(230, 234, 242), a / 2);
+        }
+    }
+}
+
 /* ================= RTX-STYLE BILINEAR RADIANCE & HDR BLOOM SHADER ================= */
 typedef struct { int x, y, r, g, b, rad; } LightSrc;
 
@@ -2410,6 +2426,7 @@ int main(void) {
                         } else if (wt == 10 || wt == 11) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
                             draw_spr32_96_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 33, sy - 66);
+                            if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
                         }
                     }
                 }
@@ -2494,6 +2511,7 @@ int main(void) {
                         } else if (wt == 10 || wt == 11) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
                             draw_spr32_96_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 33, sy - 66);
+                            if (wt == 10) draw_chimney_smoke(fb, sx + 40, sy - 51, wx, wy);
                         }
                     }
                 }
