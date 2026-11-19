@@ -1207,10 +1207,32 @@ static RoamMob roam[MAX_ROAM];
 typedef struct { int x, y, homeX, homeY, flip, kind; } TownNPC;
 static TownNPC townNpcs[MAX_TOWN_NPC];
 
+static int is_town_crate(int x, int y) {
+    if (x < 0 || x >= MW || y < 0 || y >= MH || worldMap[y][x] != 4) return 0;
+    if (x == 28 || y == 84 || x == 81 || y == 60 || x == 155 || y == 112) return 0;
+    if (abs(x - 28) <= 1 && (y <= 76 || y >= 92)) return 0;
+    if (abs(y - 84) <= 1 && (x <= 20 || x >= 36)) return 0;
+    for (int i = 0; i < 8; i++) if (x == npcX[i] && y == npcY[i]) return 0;
+    for (int i = 0; i < MAX_TOWN_NPC; i++) if (x == townNpcs[i].homeX && y == townNpcs[i].homeY) return 0;
+    unsigned int th = ((unsigned int)x * 2654435761u) ^ ((unsigned int)y * 2246822519u);
+    return ((th % 13u) == 0u);
+}
+
 static int is_tile_blocked(int x, int y) {
     if (x < 0 || x >= MW || y < 0 || y >= MH) return 1;
     unsigned char t = worldMap[y][x];
     if (t == 1 || t == 2 || t == 3 || t == 8 || t >= 10) return 1;
+    /* Full 3x2 solid collision footprint for 96x96 houses & taverns */
+    for (int dy = 0; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            int cx = x + dx, cy = y + dy;
+            if (cx >= 0 && cx < MW && cy >= 0 && cy < MH) {
+                unsigned char ht = worldMap[cy][cx];
+                if (ht == 10 || ht == 11) return 1;
+            }
+        }
+    }
+    if (is_town_crate(x, y)) return 1;
     for (int i = 0; i < 8; i++) {
         if (x == npcX[i] && y == npcY[i]) return 1;
     }
@@ -2208,8 +2230,8 @@ int main(void) {
                                     fill_rect(fb, sx + 7, sy + 14, 16, 5, RGB(34, 130, 48));
                                     fill_rect(fb, sx + 9, sy + 14, 3, 3, RGB(255, 110, 145));
                                     fill_rect(fb, sx + 18, sy + 14, 3, 3, RGB(255, 225, 70));
-                                } else if ((th % 13u) == 0u) {
-                                    /* Wooden Crate / Barrel Prop */
+                                } else if (is_town_crate(wx, wy)) {
+                                    /* Solid Wooden Crate / Barrel Prop */
                                     fill_rect(fb, sx + 8, sy + 12, 12, 12, RGB(145, 92, 46));
                                     draw_border(fb, sx + 8, sy + 12, 12, 12, RGB(78, 45, 22));
                                     fill_rect(fb, sx + 8, sy + 16, 12, 2, RGB(95, 95, 110));
@@ -2259,13 +2281,13 @@ int main(void) {
                     }
                 }
             }
-            /* 2.5D Scale2x Overhanging Trees (40x40) & Large 96x96 Town Buildings with soft shadows */
+            /* 2.5D Y-Sorted Trees & 96x96 Buildings: Pass 1 (wy <= mapY, behind player) */
             for (int ty = 0; ty < 13; ty++) {
                 int sy = ty * 30 - 4;
                 for (int tx = -2; tx < 18; tx++) {
                     int sx = tx * 30;
                     int wx = ox + tx, wy = oy + ty;
-                    if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
+                    if (wx >= 0 && wy >= 0 && wx < MW && wy <= mapY) {
                         unsigned char wt = worldMap[wy][wx];
                         if (wt == 1) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 25, 14, 6, RGB(0, 0, 0), 115);
@@ -2319,6 +2341,25 @@ int main(void) {
             draw_spr24_30_dir(fb, spr_band2, (prevX2 - ox) * 30, (prevY2 - oy) * 30 - 4 - bBob, band2Flip);
             draw_spr24_30_dir(fb, spr_band1, (prevX1 - ox) * 30, (prevY1 - oy) * 30 - 4 - (bBob ^ 1), band1Flip);
             draw_spr24_30_dir(fb, spr_bard,  8 * 30, 4 * 30 - 4 - bBob, bardFlip);
+
+            /* 2.5D Y-Sorted Trees & 96x96 Buildings: Pass 2 (wy > mapY, roofs in front of player) */
+            for (int ty = 0; ty < 13; ty++) {
+                int sy = ty * 30 - 4;
+                for (int tx = -2; tx < 18; tx++) {
+                    int sx = tx * 30;
+                    int wx = ox + tx, wy = oy + ty;
+                    if (wx >= 0 && wy > mapY && wx < MW && wy < MH) {
+                        unsigned char wt = worldMap[wy][wx];
+                        if (wt == 1) {
+                            fill_ellipse_alpha(fb, sx + 15, sy + 25, 14, 6, RGB(0, 0, 0), 115);
+                            draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
+                        } else if (wt == 10 || wt == 11) {
+                            fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
+                            draw_spr32_96_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 33, sy - 66);
+                        }
+                    }
+                }
+            }
 
             /* Living Insects (Fireflies/Butterflies/Dragonflies) + Dynamic Weather (Rain/Fog/God-Rays) & Lighting */
             update_draw_bugs(fb, (mapX >= 118 && mapX < 165), (weatherMode >= 2));
