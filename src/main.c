@@ -878,6 +878,13 @@ static int pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 1
 static int numEnemies = 1, targetEnemy = 0, turnMember = 0, dodgeMember = 0, guardActive = 0, attackMode = 0;
 static int eHp[3] = { 100, 0, 0 }, eMaxHp[3] = { 100, 0, 0 }, eType[3] = { 0, 0, 0 }, eIsBoss[3] = { 0, 0, 0 };
 static int pLevel = 1, pXp = 0, pNextXp = 60, pBaseAtk = 5;
+static int pGold = 60, ingHerb = 2, ingCrystal = 1, ingEmber = 0, ingLotus = 0;
+static int potHp = 2, potMp = 1, potElixir = 0;
+static int inShop = 0, inCraft = 0, inPotionMenu = 0, potionReturnMode = 0, shopCursor = 0;
+static const int shopMerchX[3] = { 23, 79, 154 };
+static const int shopMerchY[3] = { 81, 61, 113 };
+static const int shopAlchX[3]  = { 33, 82, 156 };
+static const int shopAlchY[3]  = { 81, 61, 113 };
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
 static int relicDmg = 0, relicVamp = 0, relicShield = 0;
 static int inTitle = 1, inOverworld = 0, inDungeon = 0, wasInDungeon = 0, inStory = 0, inFFMenu = 0, inDefense = 0, inAttackResolve = 0, inRelic = 0, gameOver = 0, victory = 0;
@@ -1214,6 +1221,9 @@ static int is_town_crate(int x, int y) {
     if (abs(x - 28) <= 1 && (y <= 76 || y >= 92)) return 0;
     if (abs(y - 84) <= 1 && (x <= 20 || x >= 36)) return 0;
     for (int i = 0; i < 8; i++) if (x == npcX[i] && y == npcY[i]) return 0;
+    for (int i = 0; i < 3; i++) {
+        if ((x == shopMerchX[i] && y == shopMerchY[i]) || (x == shopAlchX[i] && y == shopAlchY[i])) return 0;
+    }
     for (int i = 0; i < MAX_TOWN_NPC; i++) if (x == townNpcs[i].homeX && y == townNpcs[i].homeY) return 0;
     unsigned int th = ((unsigned int)x * 2654435761u) ^ ((unsigned int)y * 2246822519u);
     return ((th % 13u) == 0u);
@@ -1236,6 +1246,9 @@ static int is_tile_blocked(int x, int y) {
     if (is_town_crate(x, y)) return 1;
     for (int i = 0; i < 8; i++) {
         if (x == npcX[i] && y == npcY[i]) return 1;
+    }
+    for (int i = 0; i < 3; i++) {
+        if ((x == shopMerchX[i] && y == shopMerchY[i]) || (x == shopAlchX[i] && y == shopAlchY[i])) return 1;
     }
     for (int i = 0; i < MAX_TOWN_NPC; i++) {
         if (x == townNpcs[i].x && y == townNpcs[i].y) return 1;
@@ -1593,6 +1606,9 @@ static int get_region_id(int x, int y) {
 static void start_game(void) {
     pLevel = 1; pXp = 0; pNextXp = 60; pBaseAtk = 5;
     pHp = pMaxHp = 100; pMp = pMaxMp = 50; score = 0;
+    pGold = 60; ingHerb = 2; ingCrystal = 1; ingEmber = 0; ingLotus = 0;
+    potHp = 2; potMp = 1; potElixir = 0;
+    inShop = 0; inCraft = 0; inPotionMenu = 0; shopCursor = 0;
     relicDmg = 0; relicVamp = 0; relicShield = 0;
     lastRegionId = -1; regionBannerTimer = 0;
     init_world();
@@ -1649,7 +1665,7 @@ int main(void) {
         /* Select Song dynamically: 0=Aventura (Caminos/Bosques), 6=Jazz (Ciudades), 1-5=Combate/Dungeons */
         int curRegId = get_region_id(mapX, mapY);
         if (inTitle) curSong = 0;
-        else if (inOverworld) curSong = (curRegId <= 2 || worldMap[mapY][mapX] == 4 || worldMap[mapY][mapX] >= 10) ? 6 : 0;
+        else if (inOverworld || inShop || inCraft) curSong = (curRegId <= 2 || worldMap[mapY][mapX] == 4 || worldMap[mapY][mapX] >= 10) ? 6 : 0;
         else if (inDungeon) curSong = (curDngId == 0) ? 1 : (curDngId == 1 ? 3 : 4);
         else if (isMobBattle) curSong = (chapter == 0) ? 1 : (chapter == 1 ? 3 : 4);
         else curSong = (chapter == 0) ? 2 : (chapter == 1 ? 3 : 5);
@@ -1752,8 +1768,22 @@ int main(void) {
                     }
                 }
             }
+            if (pressed & PSP_CTRL_TRIANGLE) {
+                potionReturnMode = 0; inOverworld = 0; inPotionMenu = 1; shopCursor = 0;
+                play_sfx(640.0f, 600);
+            }
             if (pressed & PSP_CTRL_CROSS) {
-                for (int i = 0; i < 8; i++) {
+                for (int i = 0; i < 3; i++) {
+                    if (abs(mapX - shopMerchX[i]) + abs(mapY - shopMerchY[i]) <= 1) {
+                        inOverworld = 0; inShop = 1; shopCursor = 0;
+                        play_sfx(740.0f, 800); break;
+                    }
+                    if (abs(mapX - shopAlchX[i]) + abs(mapY - shopAlchY[i]) <= 1) {
+                        inOverworld = 0; inCraft = 1; shopCursor = 0;
+                        play_sfx(820.0f, 800); break;
+                    }
+                }
+                if (inOverworld) for (int i = 0; i < 8; i++) {
                     if (abs(mapX - npcX[i]) + abs(mapY - npcY[i]) <= 1) {
                         pHp = pMaxHp; pMp = pMaxMp;
                         snprintf(dlgText, sizeof(dlgText), "%s", npcMsg[i]);
@@ -1791,8 +1821,9 @@ int main(void) {
                         dngMap[dngPy][dngPx] = 1;
                         pHp = (pHp + 35 > pMaxHp) ? pMaxHp : pHp + 35;
                         pMp = (pMp + 20 > pMaxMp) ? pMaxMp : pMp + 20;
-                        pBaseAtk += 1;
-                        snprintf(dlgText, sizeof(dlgText), "COFRE DE MAZMORRA! +35HP +20MP +1ATQ!");
+                        pBaseAtk += 1; pGold += 35;
+                        if (xr() & 1) ingEmber++; else ingLotus++;
+                        snprintf(dlgText, sizeof(dlgText), "COFRE! +35HP +20MP +35 ORO +1 Ingrediente!");
                         dlgTimer = 180;
                         play_sfx(880.0f, 1200);
                     } else if (dt == 4) {
@@ -1837,6 +1868,64 @@ int main(void) {
                     }
                 }
             }
+        } else if (inShop) {
+            if (pressed & PSP_CTRL_UP)   { shopCursor = (shopCursor + 3) % 4; play_sfx(540.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { shopCursor = (shopCursor + 1) % 4; play_sfx(540.0f, 400); }
+            if (pressed & PSP_CTRL_CROSS) {
+                static const int prices[4] = { 10, 15, 20, 30 };
+                if (pGold >= prices[shopCursor]) {
+                    pGold -= prices[shopCursor];
+                    if (shopCursor == 0) ingHerb++;
+                    else if (shopCursor == 1) ingCrystal++;
+                    else if (shopCursor == 2) ingEmber++;
+                    else ingLotus++;
+                    play_sfx(880.0f, 700);
+                } else play_sfx(180.0f, 500);
+            }
+            if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { inShop = 0; inOverworld = 1; play_sfx(420.0f, 500); }
+        } else if (inCraft) {
+            if (pressed & PSP_CTRL_UP)   { shopCursor = (shopCursor + 2) % 3; play_sfx(540.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { shopCursor = (shopCursor + 1) % 3; play_sfx(540.0f, 400); }
+            if (pressed & PSP_CTRL_CROSS) {
+                if (shopCursor == 0 && ingHerb >= 2) {
+                    ingHerb -= 2; potHp++; play_sfx(920.0f, 900);
+                } else if (shopCursor == 1 && ingHerb >= 1 && ingCrystal >= 1) {
+                    ingHerb -= 1; ingCrystal -= 1; potMp++; play_sfx(920.0f, 900);
+                } else if (shopCursor == 2 && ingLotus >= 1 && ingEmber >= 1 && ingCrystal >= 1) {
+                    ingLotus -= 1; ingEmber -= 1; ingCrystal -= 1; potElixir++; play_sfx(1040.0f, 1100);
+                } else play_sfx(180.0f, 500);
+            }
+            if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { inCraft = 0; inOverworld = 1; play_sfx(420.0f, 500); }
+        } else if (inPotionMenu) {
+            if (pressed & PSP_CTRL_UP)   { shopCursor = (shopCursor + 2) % 3; play_sfx(540.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { shopCursor = (shopCursor + 1) % 3; play_sfx(540.0f, 400); }
+            if (pressed & PSP_CTRL_CROSS) {
+                int used = 0;
+                if (shopCursor == 0 && potHp > 0) {
+                    potHp--; pHp = (pHp + 60 > pMaxHp) ? pMaxHp : pHp + 60; used = 1;
+                    snprintf(judge, sizeof(judge), "POCION +60 HP!"); judgeT = 50;
+                } else if (shopCursor == 1 && potMp > 0) {
+                    potMp--; pMp = (pMp + 35 > pMaxMp) ? pMaxMp : pMp + 35; used = 1;
+                    snprintf(judge, sizeof(judge), "ETER +35 MP!"); judgeT = 50;
+                } else if (shopCursor == 2 && potElixir > 0) {
+                    potElixir--; pHp = (pHp + 120 > pMaxHp) ? pMaxHp : pHp + 120; pMp = (pMp + 60 > pMaxMp) ? pMaxMp : pMp + 60; used = 1;
+                    snprintf(judge, sizeof(judge), "ELIXIR SUPREMO!"); judgeT = 50;
+                }
+                if (used) {
+                    play_sfx(940.0f, 1000);
+                    inPotionMenu = 0;
+                    if (potionReturnMode == 0) inOverworld = 1;
+                    else if (potionReturnMode == 1) inDungeon = 1;
+                    else inFFMenu = 1;
+                } else play_sfx(180.0f, 500);
+            }
+            if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_TRIANGLE)) {
+                inPotionMenu = 0;
+                if (potionReturnMode == 0) inOverworld = 1;
+                else if (potionReturnMode == 1) inDungeon = 1;
+                else inFFMenu = 1;
+                play_sfx(420.0f, 500);
+            }
         } else if (inStory) {
             if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) {
                 inStory = 0; inFFMenu = 1; ffCursor = 0;
@@ -1877,6 +1966,10 @@ int main(void) {
             }
             if (pressed & (PSP_CTRL_LTRIGGER | PSP_CTRL_RTRIGGER)) {
                 curStyle = (curStyle + 1) % 3; play_sfx(520.0f, 600);
+            }
+            if (pressed & PSP_CTRL_TRIANGLE) {
+                potionReturnMode = 2; inFFMenu = 0; inPotionMenu = 1; shopCursor = 0;
+                play_sfx(640.0f, 600);
             }
             if (pressed & PSP_CTRL_CROSS) {
                 int advanceTurn = 0;
@@ -2066,11 +2159,14 @@ int main(void) {
                     if (isMobBattle) {
                         static const int mobXpTbl[3] = { 25, 55, 110 };
                         int xpGain = mobXpTbl[chapter] * numEnemies;
+                        int goldGain = (14 + chapter * 10) * numEnemies;
+                        pGold += goldGain;
                         score += (150 + chapter * 100) * numEnemies;
                         if (wasInDungeon) inDungeon = 1; else inOverworld = 1;
-                        snprintf(dlgText, sizeof(dlgText), "Grupo vencido! +%d XP", xpGain);
+                        snprintf(dlgText, sizeof(dlgText), "Victoria! +%d XP  +%d ORO", xpGain, goldGain);
                         dlgTimer = 140; gain_xp(xpGain);
                     } else {
+                        pGold += 55 + chapter * 40;
                         inRelic = 1;
                     }
                 } else {
@@ -2325,6 +2421,25 @@ int main(void) {
                     }
                 }
             }
+            /* 6 City Shop NPCs: Ingredient Merchants ($) & Potion Alchemists (A) */
+            for (int i = 0; i < 3; i++) {
+                int mx = (shopMerchX[i] - ox) * 30, my = (shopMerchY[i] - oy) * 30 - 4;
+                if (mx >= -30 && mx < SCR_W && my >= -30 && my < SCR_H) {
+                    int mFlip = (mapX < shopMerchX[i]) ? 1 : 0;
+                    int bob = ((animFrame / 20 + i) & 1);
+                    fill_ellipse_alpha(fb, mx + 15, my + 26, 10, 4, RGB(0, 0, 0), 120);
+                    draw_spr24_30_dir(fb, spr_elder, mx, my - bob, mFlip);
+                    draw_text(fb, mx + 8, my - 9 - bob, "$", RGB(110, 255, 140));
+                }
+                int ax = (shopAlchX[i] - ox) * 30, ay = (shopAlchY[i] - oy) * 30 - 4;
+                if (ax >= -30 && ax < SCR_W && ay >= -30 && ay < SCR_H) {
+                    int aFlip = (mapX < shopAlchX[i]) ? 1 : 0;
+                    int bob = ((animFrame / 20 + i + 1) & 1);
+                    fill_ellipse_alpha(fb, ax + 15, ay + 26, 10, 4, RGB(0, 0, 0), 120);
+                    draw_spr24_30_dir(fb, spr_troubadour, ax, ay - bob, aFlip);
+                    draw_text(fb, ax + 8, ay - 9 - bob, "A", RGB(110, 225, 255));
+                }
+            }
             /* 8 NPCs across the 6 regions dynamically turning to look towards your Bard */
             for (int i = 0; i < 8; i++) {
                 int sx = (npcX[i] - ox) * 30, sy = (npcY[i] - oy) * 30 - 4;
@@ -2470,6 +2585,56 @@ int main(void) {
                 draw_text(fb, 48, 236, "CRONISTA DEL REINO:", RGB(255, 225, 90));
                 draw_text(fb, 48, 250, dlgText, RGB(255, 255, 255));
             }
+        } else if (inShop || inCraft || inPotionMenu) {
+            /* City Ingredient Shop, Alchemy Potion Crafting & Potion Pouch UI */
+            fill_rect(fb, 0, 0, SCR_W, SCR_H, RGB(12, 16, 38));
+            draw_ff_window(fb, 24, 16, 432, 240);
+            fill_rect(fb, 30, 22, 420, 18, RGB(38, 52, 128));
+            if (inShop) {
+                draw_text(fb, 38, 27, "TIENDA DE INGREDIENTES (MERCADER)", RGB(110, 255, 145));
+            } else if (inCraft) {
+                draw_text(fb, 38, 27, "TALLER DE ALQUIMIA (CRAFTEAR POCIONES)", RGB(110, 230, 255));
+            } else {
+                draw_text(fb, 38, 27, "BOLSA DE POCIONES", RGB(255, 225, 95));
+            }
+            sprintf(buf, "ORO: %d", pGold);
+            draw_text(fb, 372, 27, buf, RGB(255, 225, 85));
+
+            sprintf(buf, "INVENTARIO -> HIERBA:%d  CRISTAL:%d  BRASA:%d  LOTO:%d", ingHerb, ingCrystal, ingEmber, ingLotus);
+            draw_text(fb, 38, 48, buf, RGB(210, 230, 255));
+            sprintf(buf, "POCIONES   -> CURATIVA:%d   ETER:%d   ELIXIR:%d", potHp, potMp, potElixir);
+            draw_text(fb, 38, 62, buf, RGB(140, 255, 180));
+
+            int maxRows = inShop ? 4 : 3;
+            for (int r = 0; r < maxRows; r++) {
+                int ry = 84 + r * 32;
+                fill_rect(fb, 36, ry, 408, 26, (shopCursor == r) ? RGB(52, 72, 155) : RGB(22, 28, 66));
+                draw_border(fb, 36, ry, 408, 26, (shopCursor == r) ? RGB(255, 215, 85) : RGB(90, 115, 185));
+                if (inShop) {
+                    static const char * const sNames[4] = { "HIERBA VITAL", "CRISTAL DE MANA", "POLVO DE BRASA", "LOTO ARCANO" };
+                    static const int sPrices[4] = { 10, 15, 20, 30 };
+                    sprintf(buf, "%s  -  %d ORO", sNames[r], sPrices[r]);
+                    draw_text(fb, 48, ry + 9, buf, (pGold >= sPrices[r]) ? RGB(255, 255, 255) : RGB(160, 130, 140));
+                } else if (inCraft) {
+                    static const char * const cNames[3] = {
+                        "POCION CURATIVA (+60 HP)  [2 Hierbas]",
+                        "ETER ARMONICO (+35 MP)    [1 Hierba + 1 Cristal]",
+                        "ELIXIR SUPREMO (+120/+60) [1 Loto + 1 Brasa + 1 Cristal]"
+                    };
+                    int can = (r == 0 && ingHerb >= 2) || (r == 1 && ingHerb >= 1 && ingCrystal >= 1) || (r == 2 && ingLotus >= 1 && ingEmber >= 1 && ingCrystal >= 1);
+                    draw_text(fb, 48, ry + 9, cNames[r], can ? RGB(140, 255, 170) : RGB(170, 150, 160));
+                } else {
+                    static const char * const pNames[3] = {
+                        "BEBER POCION CURATIVA (+60 HP)",
+                        "BEBER ETER ARMONICO (+35 MP)",
+                        "BEBER ELIXIR SUPREMO (+120 HP / +60 MP)"
+                    };
+                    int cnt = (r == 0) ? potHp : (r == 1 ? potMp : potElixir);
+                    sprintf(buf, "%s  (x%d)", pNames[r], cnt);
+                    draw_text(fb, 48, ry + 9, buf, (cnt > 0) ? RGB(255, 250, 200) : RGB(150, 150, 170));
+                }
+            }
+            draw_text(fb, 44, 226, inShop ? "[X] COMPRAR   [O] SALIR" : (inCraft ? "[X] CRAFTEAR   [O] SALIR" : "[X] USAR POCION   [O] VOLVER"), RGB(255, 225, 95));
         } else if (inDungeon) {
             /* Diablo-Style Procedural Dungeon Rendering (Native 30x30 smooth-filtered tiles) */
             int ox = dngPx - 8, oy = dngPy - 4;
