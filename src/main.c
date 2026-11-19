@@ -24,6 +24,7 @@ PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
 static unsigned int __attribute__((aligned(16))) gulist[262144];
 static unsigned int *vram_bufs[2];
+static unsigned int sys_fb[SCR_H * BUF_W] __attribute__((aligned(64)));
 static int cur_fb = 0;
 
 static int running = 1;
@@ -2186,8 +2187,8 @@ int main(void) {
             }
         }
 
-        /* ================= RENDER ================= */
-        unsigned int *fb = vram_bufs[cur_fb];
+        /* ================= RENDER (in L1-cached sys_fb for 60 FPS!) ================= */
+        unsigned int *fb = sys_fb;
         char buf[64];
 
         if (inOverworld) {
@@ -2367,12 +2368,12 @@ int main(void) {
 
             /* RTX Real-Time Shader Lighting Pass (Dynamic Point Lights, HDR Bloom & Ambient Mood) */
             {
-                LightSrc rtxL[20];
+                LightSrc rtxL[12];
                 int nL = 0;
                 int flicker = (int)(sinf((float)animFrame * 0.17f) * 14.0f);
                 rtxL[nL++] = (LightSrc){ 255, 130, 110 + flicker / 2, 95 + flicker / 2, 65, 92 };
-                for (int ty = 0; ty < 10 && nL < 20; ty++) {
-                    for (int tx = 0; tx < 16 && nL < 20; tx++) {
+                for (int ty = 0; ty < 10 && nL < 12; ty++) {
+                    for (int tx = 0; tx < 16 && nL < 12; tx++) {
                         int wx = ox + tx, wy = oy + ty;
                         if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
                             unsigned char t = worldMap[wy][wx];
@@ -2926,6 +2927,11 @@ int main(void) {
                     update_draw_sparks(fb);
                 }
             }
+        }
+
+        /* Sequential write-only transfer from cached sys_fb to VRAM */
+        for (int y = 0; y < SCR_H; y++) {
+            memcpy(&vram_bufs[cur_fb][y * BUF_W], &sys_fb[y * BUF_W], SCR_W * sizeof(unsigned int));
         }
 
         sceDisplayWaitVblankStart();
