@@ -1242,7 +1242,7 @@ static int dlgTimer = 0;
 typedef struct { int x, y, type, alive, flip, respawn; } RoamMob;
 static RoamMob roam[MAX_ROAM];
 
-#define MAX_TOWN_NPC 10
+#define MAX_TOWN_NPC 5
 typedef struct { int x, y, homeX, homeY, flip, kind; } TownNPC;
 static TownNPC townNpcs[MAX_TOWN_NPC];
 
@@ -1396,16 +1396,16 @@ static void init_world(void) {
     worldMap[111][152] = 19; worldMap[111][154] = 20; /* Barriles y cartel de laud frente a la taberna */
     worldMap[113][158] = 18; worldMap[114][153] = 17; /* Cajas junto al mercado y banco junto a la fuente */
 
-    /* Ciudadanos ambulantes en las 3 ciudades */
+    /* 5 Ciudadanos ambulantes (3 en Solaria, 1 en Bruma, 1 en Taberna) */
     static const int tnCoords[MAX_TOWN_NPC][2] = {
-        {26, 83}, {30, 83}, {25, 86}, {31, 86}, {28, 80}, {28, 88},
-        {79, 60}, {82, 60}, {154, 112}, {156, 113}
+        {26, 83}, {31, 86}, {27, 87},
+        {80, 60}, {154, 112}
     };
     for (int i = 0; i < MAX_TOWN_NPC; i++) {
         townNpcs[i].x = townNpcs[i].homeX = tnCoords[i][0];
         townNpcs[i].y = townNpcs[i].homeY = tnCoords[i][1];
         townNpcs[i].flip = (i & 1);
-        townNpcs[i].kind = (i % 3);
+        townNpcs[i].kind = (i & 1);
     }
 
     /* Red de carreteras reales conectando Solaria -> Aldeas -> 3 Puentes -> 3 Dungeons */
@@ -2462,36 +2462,33 @@ int main(void) {
                     draw_spr64_to_30(fb, mspr, sx, sy - mBob, roam[i].flip);
                 }
             }
-            /* Wandering Town Villagers bringing cities to life */
+            /* Wandering Town Villagers (distinct Villager & Guard sprites) */
             for (int i = 0; i < MAX_TOWN_NPC; i++) {
                 int sx = (townNpcs[i].x - ox) * 30 + camOffX, sy = (townNpcs[i].y - oy) * 30 - 4 + camOffY;
                 if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                     int bob = ((animFrame / 16 + i) & 1);
                     fill_ellipse_alpha(fb, sx + 15, sy + 26, 10, 4, RGB(0, 0, 0), 115);
-                    const unsigned int *tspr = (townNpcs[i].kind == 0) ? spr_troubadour : (townNpcs[i].kind == 1 ? spr_elder : spr_band1);
+                    const unsigned int *tspr = (townNpcs[i].kind == 0) ? spr_npc_villager : spr_npc_guard;
                     draw_spr24_30_dir(fb, tspr, sx, sy - bob, townNpcs[i].flip);
-                    if (((animFrame / 90 + i) % 5) == 0) {
-                        draw_text(fb, sx + 11, sy - 9 - bob, "*", RGB(255, 230, 120));
-                    }
                 }
             }
-            /* 6 City Shop NPCs: Ingredient Merchants ($) & Potion Alchemists (A) */
+            /* 6 City Shop NPCs: Distinct Ingredient Merchants ($) & Potion Alchemists (A) */
             for (int i = 0; i < 3; i++) {
                 int mx = (shopMerchX[i] - ox) * 30 + camOffX, my = (shopMerchY[i] - oy) * 30 - 4 + camOffY;
                 if (mx >= -30 && mx < SCR_W && my >= -30 && my < SCR_H) {
                     int mFlip = (mapX < shopMerchX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i) & 1);
                     fill_ellipse_alpha(fb, mx + 15, my + 26, 10, 4, RGB(0, 0, 0), 120);
-                    draw_spr24_30_dir(fb, spr_elder, mx, my - bob, mFlip);
-                    draw_text(fb, mx + 8, my - 9 - bob, "$", RGB(110, 255, 140));
+                    draw_spr24_30_dir(fb, spr_npc_merchant, mx, my - bob, mFlip);
+                    draw_text(fb, mx + 12, my - 9 - bob, "$", RGB(110, 255, 140));
                 }
                 int ax = (shopAlchX[i] - ox) * 30 + camOffX, ay = (shopAlchY[i] - oy) * 30 - 4 + camOffY;
                 if (ax >= -30 && ax < SCR_W && ay >= -30 && ay < SCR_H) {
                     int aFlip = (mapX < shopAlchX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i + 1) & 1);
                     fill_ellipse_alpha(fb, ax + 15, ay + 26, 10, 4, RGB(0, 0, 0), 120);
-                    draw_spr24_30_dir(fb, spr_troubadour, ax, ay - bob, aFlip);
-                    draw_text(fb, ax + 8, ay - 9 - bob, "A", RGB(110, 225, 255));
+                    draw_spr24_30_dir(fb, spr_npc_alchemist, ax, ay - bob, aFlip);
+                    draw_text(fb, ax + 12, ay - 9 - bob, "A", RGB(110, 225, 255));
                 }
             }
             /* 8 NPCs across the 6 regions dynamically turning to look towards your Bard */
@@ -2501,7 +2498,8 @@ int main(void) {
                     int npcFlip = (mapX < npcX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i) & 1);
                     fill_ellipse_alpha(fb, sx + 15, sy + 26, 10, 4, RGB(0, 0, 0), 120);
-                    draw_spr24_30_dir(fb, (i & 1) ? spr_troubadour : spr_elder, sx, sy - bob, npcFlip);
+                    const unsigned int *nspr = (i == 2 || i == 6) ? spr_npc_guard : ((i == 0 || i == 4) ? spr_npc_villager : spr_elder);
+                    draw_spr24_30_dir(fb, nspr, sx, sy - bob, npcFlip);
                     draw_text(fb, sx + 12, sy - 9 - bob, "!", RGB(255, 235, 60));
                 }
             }
