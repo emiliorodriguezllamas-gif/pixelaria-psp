@@ -2161,9 +2161,24 @@ int main(void) {
                         int xpGain = mobXpTbl[chapter] * numEnemies;
                         int goldGain = (14 + chapter * 10) * numEnemies;
                         pGold += goldGain;
+                        int dropQty = 1 + (numEnemies >= 3 ? 1 : 0);
+                        int rDrop = xr() % 3;
+                        const char *dropName = "Hierba";
+                        if (chapter == 0) {
+                            if (rDrop < 2) { ingHerb += dropQty; dropName = "Hierba"; }
+                            else           { ingCrystal += 1; dropQty = 1; dropName = "Cristal"; }
+                        } else if (chapter == 1) {
+                            if (rDrop == 0)      { ingHerb += dropQty; dropName = "Hierba"; }
+                            else if (rDrop == 1) { ingCrystal += dropQty; dropName = "Cristal"; }
+                            else                 { ingEmber += 1; dropQty = 1; dropName = "Brasa"; }
+                        } else {
+                            if (rDrop == 0)      { ingCrystal += dropQty; dropName = "Cristal"; }
+                            else if (rDrop == 1) { ingEmber += dropQty; dropName = "Brasa"; }
+                            else                 { ingLotus += 1; dropQty = 1; dropName = "Loto"; }
+                        }
                         score += (150 + chapter * 100) * numEnemies;
                         if (wasInDungeon) inDungeon = 1; else inOverworld = 1;
-                        snprintf(dlgText, sizeof(dlgText), "Victoria! +%d XP  +%d ORO", xpGain, goldGain);
+                        snprintf(dlgText, sizeof(dlgText), "Victoria! +%dXP +%dORO +%d %s", xpGain, goldGain, dropQty, dropName);
                         dlgTimer = 140; gain_xp(xpGain);
                     } else {
                         pGold += 55 + chapter * 40;
