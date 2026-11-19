@@ -345,54 +345,122 @@ static void draw_boss64(unsigned int *fb, const unsigned int *spr, int dx, int d
     draw_boss64_dir(fb, spr, dx, dy, flash, 0);
 }
 
-/* Epic 44.1kHz Multi-Track PSP Synthesizer: 5 Distinct Songs (Overworld, Mobs, Boss 1 Rock, Boss 2 Synth, Boss 3 Symphonic) */
+/* Epic 44.1kHz Multi-Track Stereo PSP Synthesizer: 6 Elaborate 64-Step Songs + Stereo Ping-Pong Delay */
 static int ach = -1, ath = -1;
 static volatile int arun = 0, sfx_t = 0, sfx_max = 3000, sfx_on = 1, curStyle = 0, curSong = 0;
 static volatile int bgm_step = 0;
+static volatile float bgm_sub = 0.0f;
 static float sfx_f = 440.0f, sfx_p = 0.0f, sfx_p2 = 0.0f;
 static short abuf[2][1024 * 2];
+static float echoL[4096], echoR[4096];
+static int echoIdx = 0;
 
 static void play_sfx(float f, int dur) {
     if (sfx_on) { sfx_f = f; sfx_t = dur; sfx_max = dur > 0 ? dur : 1; sfx_p = 0.0f; sfx_p2 = 0.0f; }
 }
 
-/* Harmonic 4-lane scale frequencies (Root, b3/4, 5th, Octave) per song so Guitar Hero notes are 100% in tune! */
-static const float songScale[5][4] = {
-    { 293.66f, 349.23f, 440.00f, 587.33f }, /* 0: D Minor (Overworld / Title) */
-    { 329.63f, 392.00f, 493.88f, 659.25f }, /* 1: E Minor (Forest Mobs) */
-    { 164.81f, 220.00f, 246.94f, 329.63f }, /* 2: E Minor Heavy Rock (Boss 1: Golem) */
-    { 261.63f, 311.13f, 392.00f, 523.25f }, /* 3: C Minor Synth (Boss 2: Automata) */
-    { 293.66f, 349.23f, 440.00f, 587.33f }  /* 4: D Minor Symphonic (Boss 3: Dragon) */
+/* Harmonic 4-lane scale frequencies per song */
+static const float songScale[6][4] = {
+    { 293.66f, 349.23f, 440.00f, 587.33f }, /* 0: Obertura Solaria (D-min) */
+    { 329.63f, 392.00f, 493.88f, 659.25f }, /* 1: Bosque de los Ecos (E-min) */
+    { 164.81f, 220.00f, 246.94f, 329.63f }, /* 2: Coloso de Hierro (E-min Heavy Rock) */
+    { 261.63f, 311.13f, 392.00f, 523.25f }, /* 3: Ciudadela Arcana (C-min Synth) */
+    { 220.00f, 261.63f, 329.63f, 440.00f }, /* 4: Abismo Volcanico (A-min Shred) */
+    { 293.66f, 349.23f, 440.00f, 587.33f }  /* 5: Dragon Sombrio (D-min Symphonic) */
 };
+
+/* 64-Step (4-Bar) Basslines & Lead Melodies for 6 Distinct Songs */
+static const float songBass[6][64] = {
+    { /* 0: Obertura Solaria (D-min Folk-Rock) */
+      146.83f,146.83f,174.61f,146.83f, 130.81f,130.81f,164.81f,130.81f, 116.54f,116.54f,146.83f,116.54f, 130.81f,146.83f,164.81f,110.00f,
+      146.83f,220.00f,174.61f,146.83f, 130.81f,196.00f,164.81f,130.81f, 116.54f,174.61f,146.83f,116.54f, 110.00f,130.81f,146.83f,164.81f,
+       98.00f, 98.00f,146.83f, 98.00f, 116.54f,116.54f,174.61f,116.54f, 130.81f,130.81f,196.00f,130.81f, 110.00f,138.59f,164.81f,110.00f,
+      146.83f,146.83f,220.00f,174.61f, 130.81f,130.81f,196.00f,164.81f, 116.54f,146.83f,174.61f,146.83f, 110.00f,130.81f,146.83f,110.00f
+    },
+    { /* 1: Bosque de los Ecos (E-min Celtic Battle) */
+      164.81f,164.81f,196.00f,164.81f, 146.83f,146.83f,174.61f,146.83f, 130.81f,130.81f,164.81f,130.81f, 146.83f,164.81f,196.00f,123.47f,
+      164.81f,246.94f,196.00f,164.81f, 146.83f,220.00f,174.61f,146.83f, 130.81f,196.00f,164.81f,130.81f, 123.47f,146.83f,164.81f,196.00f,
+      110.00f,164.81f,130.81f,164.81f, 123.47f,185.00f,146.83f,185.00f, 130.81f,196.00f,164.81f,196.00f, 146.83f,220.00f,196.00f,146.83f,
+      164.81f,164.81f,246.94f,196.00f, 146.83f,146.83f,220.00f,174.61f, 130.81f,164.81f,196.00f,164.81f, 123.47f,146.83f,164.81f,123.47f
+    },
+    { /* 2: Coloso de Hierro (E-min Heavy Rock) */
+       82.41f, 82.41f, 82.41f, 98.00f,  82.41f, 82.41f,110.00f, 98.00f,  73.42f, 73.42f, 98.00f, 73.42f,  82.41f,110.00f,123.47f, 98.00f,
+       82.41f, 82.41f,123.47f, 82.41f,  98.00f, 98.00f,146.83f, 98.00f,  87.31f, 87.31f,130.81f, 87.31f,  82.41f, 98.00f,110.00f,123.47f,
+       65.41f, 65.41f,130.81f, 65.41f,  73.42f, 73.42f,146.83f, 73.42f,  82.41f, 82.41f,164.81f, 82.41f,  98.00f,110.00f,123.47f, 82.41f,
+       82.41f,164.81f, 82.41f, 98.00f, 110.00f,164.81f,123.47f,110.00f,  98.00f, 82.41f, 73.42f, 82.41f,  98.00f,110.00f,123.47f, 82.41f
+    },
+    { /* 3: Ciudadela Arcana (C-min Dark Synth) */
+      130.81f,261.63f,130.81f,196.00f, 116.54f,233.08f,116.54f,174.61f, 103.83f,207.65f,103.83f,155.56f, 116.54f,146.83f,196.00f,233.08f,
+      130.81f,261.63f,155.56f,196.00f, 116.54f,233.08f,146.83f,174.61f, 103.83f,207.65f,130.81f,155.56f,  98.00f,196.00f,146.83f,196.00f,
+       87.31f,174.61f,130.81f,174.61f,  98.00f,196.00f,146.83f,196.00f, 103.83f,207.65f,155.56f,207.65f, 116.54f,233.08f,196.00f,146.83f,
+      130.81f,261.63f,196.00f,261.63f, 116.54f,233.08f,174.61f,233.08f, 103.83f,207.65f,155.56f,207.65f,  98.00f,146.83f,196.00f,130.81f
+    },
+    { /* 4: Abismo Volcanico (A-min Neoclassical Shred) */
+      110.00f,220.00f,164.81f,220.00f,  98.00f,196.00f,146.83f,196.00f,  87.31f,174.61f,130.81f,174.61f,  82.41f,164.81f,123.47f,164.81f,
+      110.00f,220.00f,130.81f,164.81f,  98.00f,196.00f,123.47f,146.83f,  87.31f,174.61f,110.00f,130.81f,  82.41f,138.59f,164.81f,196.00f,
+       73.42f,146.83f,110.00f,146.83f,  82.41f,164.81f,123.47f,164.81f,  87.31f,174.61f,130.81f,174.61f,  98.00f,196.00f,164.81f,123.47f,
+      110.00f,110.00f,220.00f,164.81f,  98.00f, 98.00f,196.00f,146.83f,  87.31f, 87.31f,174.61f,130.81f,  82.41f,123.47f,164.81f,110.00f
+    },
+    { /* 5: Sinfonia del Dragon Sombrio (D-min Symphonic Metal) */
+       73.42f,146.83f,110.00f,146.83f,  65.41f,130.81f, 98.00f,130.81f,  58.27f,116.54f, 87.31f,116.54f,  65.41f, 73.42f,110.00f, 82.41f,
+       73.42f,146.83f,174.61f,146.83f,  65.41f,130.81f,164.81f,130.81f,  58.27f,116.54f,146.83f,116.54f,  55.00f,110.00f,138.59f,110.00f,
+       49.00f, 98.00f,146.83f, 98.00f,  58.27f,116.54f,174.61f,116.54f,  65.41f,130.81f,196.00f,130.81f,  55.00f, 82.41f,110.00f,138.59f,
+       73.42f, 73.42f,220.00f,146.83f,  65.41f, 65.41f,196.00f,130.81f,  58.27f, 87.31f,174.61f,116.54f,  55.00f, 73.42f,110.00f, 73.42f
+    }
+};
+
+static const float songLead[6][64] = {
+    { /* 0: Obertura Solaria */
+      293.66f,349.23f,440.00f,392.00f, 349.23f,329.63f,293.66f,261.63f, 233.08f,293.66f,349.23f,329.63f, 293.66f,329.63f,440.00f,587.33f,
+      587.33f,523.25f,440.00f,392.00f, 440.00f,392.00f,349.23f,329.63f, 349.23f,392.00f,440.00f,523.25f, 440.00f,392.00f,349.23f,329.63f,
+      392.00f,440.00f,493.88f,587.33f, 523.25f,440.00f,392.00f,349.23f, 329.63f,392.00f,440.00f,523.25f, 440.00f,415.30f,440.00f,554.37f,
+      587.33f,440.00f,349.23f,440.00f, 523.25f,392.00f,329.63f,392.00f, 466.16f,349.23f,293.66f,349.23f, 440.00f,523.25f,587.33f,440.00f
+    },
+    { /* 1: Bosque de los Ecos */
+      329.63f,392.00f,493.88f,392.00f, 440.00f,392.00f,329.63f,293.66f, 261.63f,329.63f,392.00f,329.63f, 349.23f,392.00f,493.88f,659.25f,
+      659.25f,587.33f,493.88f,440.00f, 493.88f,440.00f,392.00f,329.63f, 392.00f,440.00f,493.88f,587.33f, 493.88f,440.00f,392.00f,349.23f,
+      440.00f,523.25f,659.25f,523.25f, 493.88f,587.33f,659.25f,587.33f, 523.25f,659.25f,783.99f,659.25f, 587.33f,659.25f,739.99f,587.33f,
+      659.25f,493.88f,392.00f,493.88f, 587.33f,440.00f,349.23f,440.00f, 523.25f,392.00f,329.63f,392.00f, 493.88f,587.33f,659.25f,493.88f
+    },
+    { /* 2: Coloso de Hierro */
+      329.63f,329.63f,392.00f,440.00f, 493.88f,440.00f,392.00f,329.63f, 293.66f,329.63f,392.00f,493.88f, 587.33f,493.88f,440.00f,392.00f,
+      329.63f,392.00f,493.88f,659.25f, 587.33f,493.88f,440.00f,392.00f, 349.23f,440.00f,523.25f,659.25f, 587.33f,523.25f,493.88f,440.00f,
+      261.63f,329.63f,392.00f,523.25f, 293.66f,392.00f,440.00f,587.33f, 329.63f,440.00f,493.88f,659.25f, 783.99f,659.25f,587.33f,493.88f,
+      659.25f,493.88f,392.00f,329.63f, 587.33f,440.00f,392.00f,293.66f, 523.25f,392.00f,329.63f,261.63f, 493.88f,587.33f,659.25f,493.88f
+    },
+    { /* 3: Ciudadela Arcana */
+      523.25f,392.00f,311.13f,392.00f, 466.16f,349.23f,293.66f,349.23f, 415.30f,311.13f,261.63f,311.13f, 466.16f,523.25f,622.25f,783.99f,
+      523.25f,622.25f,783.99f,622.25f, 466.16f,587.33f,698.46f,587.33f, 415.30f,523.25f,622.25f,523.25f, 392.00f,493.88f,587.33f,783.99f,
+      698.46f,523.25f,415.30f,523.25f, 783.99f,587.33f,493.88f,587.33f, 830.61f,622.25f,523.25f,622.25f, 932.33f,783.99f,622.25f,523.25f,
+      1046.5f,783.99f,622.25f,523.25f, 932.33f,698.46f,587.33f,466.16f, 830.61f,622.25f,523.25f,415.30f, 783.99f,698.46f,622.25f,523.25f
+    },
+    { /* 4: Abismo Volcanico */
+      440.00f,523.25f,659.25f,523.25f, 392.00f,493.88f,587.33f,493.88f, 349.23f,440.00f,523.25f,440.00f, 329.63f,415.30f,493.88f,659.25f,
+      440.00f,659.25f,523.25f,440.00f, 392.00f,587.33f,493.88f,392.00f, 349.23f,523.25f,440.00f,349.23f, 329.63f,493.88f,659.25f,830.61f,
+      587.33f,698.46f,880.00f,698.46f, 659.25f,783.99f,987.77f,783.99f, 698.46f,880.00f,1046.5f,880.00f, 783.99f,659.25f,587.33f,493.88f,
+      880.00f,659.25f,523.25f,440.00f, 783.99f,587.33f,493.88f,392.00f, 698.46f,523.25f,440.00f,349.23f, 659.25f,783.99f,880.00f,659.25f
+    },
+    { /* 5: Sinfonia del Dragon Sombrio */
+      587.33f,523.25f,440.00f,349.23f, 523.25f,440.00f,392.00f,329.63f, 466.16f,440.00f,349.23f,293.66f, 440.00f,523.25f,587.33f,880.00f,
+      880.00f,698.46f,587.33f,440.00f, 783.99f,659.25f,523.25f,392.00f, 698.46f,587.33f,466.16f,349.23f, 659.25f,554.37f,440.00f,329.63f,
+      392.00f,466.16f,587.33f,783.99f, 466.16f,587.33f,698.46f,932.33f, 523.25f,659.25f,783.99f,1046.5f, 880.00f,659.25f,554.37f,440.00f,
+      1174.6f,880.00f,698.46f,587.33f, 1046.5f,783.99f,659.25f,523.25f, 932.33f,698.46f,587.33f,466.16f, 880.00f,1046.5f,1174.6f,880.00f
+    }
+};
+static const float songTempo[6] = { 3.8f, 4.4f, 4.8f, 5.0f, 5.2f, 5.5f };
 
 static int audio_th(SceSize a, void *p) {
     (void)a; (void)p;
     int cur = 0;
-    /* 16-step Basslines & Epic Lead Melodies for each of the 5 songs */
-    static const float bass[5][16] = {
-        { 146.83f,146.83f,174.61f,146.83f, 130.81f,130.81f,164.81f,130.81f, 116.54f,116.54f,146.83f,116.54f, 130.81f,146.83f,164.81f,110.00f }, /* 0: Adventure D-min */
-        { 164.81f,164.81f,196.00f,164.81f, 146.83f,146.83f,174.61f,146.83f, 130.81f,130.81f,164.81f,130.81f, 146.83f,164.81f,196.00f,123.47f }, /* 1: Forest Mobs E-min */
-        {  82.41f, 82.41f, 82.41f, 98.00f,  82.41f, 82.41f,110.00f, 98.00f,  73.42f, 73.42f, 98.00f, 73.42f,  82.41f,110.00f,123.47f, 98.00f }, /* 2: Boss 1 Heavy Rock E-min */
-        { 130.81f,261.63f,130.81f,196.00f, 116.54f,233.08f,116.54f,174.61f, 103.83f,207.65f,103.83f,155.56f, 116.54f,146.83f,196.00f,233.08f }, /* 3: Boss 2 Dark Synth C-min */
-        {  73.42f,146.83f,110.00f,146.83f,  65.41f,130.81f, 98.00f,130.81f,  58.27f,116.54f, 87.31f,116.54f,  65.41f, 73.42f,110.00f, 82.41f }  /* 4: Boss 3 Epic Symphonic D-min */
-    };
-    static const float lead[5][16] = {
-        { 293.66f,349.23f,440.00f,392.00f, 349.23f,329.63f,293.66f,261.63f, 233.08f,293.66f,349.23f,329.63f, 293.66f,329.63f,440.00f,587.33f }, /* 0: Adventure */
-        { 329.63f,392.00f,493.88f,392.00f, 440.00f,392.00f,329.63f,293.66f, 261.63f,329.63f,392.00f,329.63f, 349.23f,392.00f,493.88f,659.25f }, /* 1: Forest Mobs */
-        { 329.63f,329.63f,392.00f,440.00f, 493.88f,440.00f,392.00f,329.63f, 293.66f,329.63f,392.00f,493.88f, 587.33f,493.88f,440.00f,392.00f }, /* 2: Boss 1 Rock */
-        { 523.25f,392.00f,311.13f,392.00f, 466.16f,349.23f,293.66f,349.23f, 415.30f,311.13f,261.63f,311.13f, 466.16f,523.25f,622.25f,783.99f }, /* 3: Boss 2 Synth */
-        { 587.33f,523.25f,440.00f,349.23f, 523.25f,440.00f,392.00f,329.63f, 466.16f,440.00f,349.23f,293.66f, 440.00f,523.25f,587.33f,880.00f }  /* 4: Boss 3 Symphonic */
-    };
-    static const float tempo[5] = { 3.7f, 4.1f, 4.4f, 4.6f, 4.8f };
     unsigned int noiseSeed = 0x13579BDFu;
-    float stepAcc = 0.0f, bp = 0.0f, lp1 = 0.0f, lp2 = 0.0f, lp3 = 0.0f, sp = 0.0f, dp = 0.0f, vibP = 0.0f;
+    float stepAcc = 0.0f, bp = 0.0f, lp1 = 0.0f, lp2 = 0.0f, lp3 = 0.0f, padP1 = 0.0f, padP2 = 0.0f, sp = 0.0f, dp = 0.0f, vibP = 0.0f;
     const float invSR = 1.0f / 44100.0f;
 
     while (arun) {
         short *o = abuf[cur];
-        int sg = curSong; if (sg < 0 || sg > 4) sg = 0;
+        int sg = curSong; if (sg < 0 || sg > 5) sg = 0;
         int stStyle = curStyle; if (stStyle < 0 || stStyle > 2) stStyle = 0;
-        float spd = tempo[sg];
+        float spd = songTempo[sg];
 
         for (int i = 0; i < 1024; i++) {
             float lSig = 0.0f, rSig = 0.0f;
@@ -403,48 +471,56 @@ static int audio_th(SceSize a, void *p) {
                     bgm_step++;
                     dp = 0.0f;
                 }
-                int st = bgm_step & 15;
+                bgm_sub = stepAcc;
+                int st = bgm_step & 63;
                 float sub = stepAcc;
 
-                /* 1. Bass Track (Warm sub + 5th harmonic) */
-                float bf = bass[sg][st];
+                /* 1. Bass Track (Warm sub + octave punch) */
+                float bf = songBass[sg][st];
                 bp += bf * invSR; if (bp >= 1.0f) bp -= 1.0f;
                 float bassEnv = expf(-sub * 2.4f);
                 float bassWave = (bp < 0.5f ? 0.5f : -0.5f) * 0.35f + sinf(bp * 6.28318f) * 0.65f;
                 float bOut = bassWave * 0.14f * bassEnv;
 
-                /* 2. Lead / Chord Instrument Track (shaped by Song & Active Musical Style) */
-                float lf = lead[sg][st];
-                lp1 += lf * invSR;           if (lp1 >= 1.0f) lp1 -= 1.0f;
+                /* 2. Stereo Harmonic Pad / Arpeggio Chords */
+                padP1 += (bf * 2.0f) * invSR; if (padP1 >= 1.0f) padP1 -= 1.0f;
+                padP2 += (bf * 2.996f) * invSR; if (padP2 >= 1.0f) padP2 -= 1.0f;
+                float padL = sinf(padP1 * 6.28318f) * 0.032f;
+                float padR = sinf(padP2 * 6.28318f) * 0.032f;
+
+                /* 3. Lead / Chord Instrument Track (shaped by Song & Active Musical Style) */
+                float lf = songLead[sg][st];
+                lp1 += lf * invSR;            if (lp1 >= 1.0f) lp1 -= 1.0f;
                 lp2 += (lf * 1.498f) * invSR; if (lp2 >= 1.0f) lp2 -= 1.0f; /* Power 5th harmony */
                 lp3 += (lf * 1.004f) * invSR; if (lp3 >= 1.0f) lp3 -= 1.0f; /* Stereo detune chorus */
                 vibP += 5.09f * invSR;        if (vibP >= 1.0f) vibP -= 1.0f;
                 float leadEnv = expf(-sub * 1.8f);
                 float leadL = 0.0f, leadR = 0.0f;
-                if (stStyle == 0 || sg == 2) {
+                if (stStyle == 0 || sg == 2 || sg == 4) {
                     /* Distorted Epic Rock Power-Chord Guitar */
                     float rawL = (2.0f * lp1 - 1.0f) * 0.7f + (2.0f * lp2 - 1.0f) * 0.45f;
                     float rawR = (2.0f * lp3 - 1.0f) * 0.7f + (2.0f * lp2 - 1.0f) * 0.45f;
-                    leadL = (rawL / (1.0f + fabsf(rawL))) * 0.11f * leadEnv;
-                    leadR = (rawR / (1.0f + fabsf(rawR))) * 0.11f * leadEnv;
+                    leadL = (rawL / (1.0f + fabsf(rawL))) * 0.10f * leadEnv;
+                    leadR = (rawR / (1.0f + fabsf(rawR))) * 0.10f * leadEnv;
                 } else if (stStyle == 1 || sg == 3) {
                     /* Detuned Arcane Supersaw Synth */
-                    leadL = ((2.0f * lp1 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.10f * leadEnv;
-                    leadR = ((2.0f * lp3 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.10f * leadEnv;
+                    leadL = ((2.0f * lp1 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.095f * leadEnv;
+                    leadR = ((2.0f * lp3 - 1.0f) * 0.6f + sinf(lp2 * 6.28318f) * 0.4f) * 0.095f * leadEnv;
                 } else {
                     /* Symphonic Lush String Ensemble */
                     float vibrato = 1.0f + sinf(vibP * 6.28318f) * 0.004f;
                     sp += (lf * vibrato) * invSR; if (sp >= 1.0f) sp -= 1.0f;
-                    leadL = (sinf(sp * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.11f * (0.4f + 0.6f * sinf(sub * 3.14159f));
-                    leadR = (sinf(lp3 * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.11f * (0.4f + 0.6f * sinf(sub * 3.14159f));
+                    leadL = (sinf(sp * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.10f * (0.4f + 0.6f * sinf(sub * 3.14159f));
+                    leadR = (sinf(lp3 * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.10f * (0.4f + 0.6f * sinf(sub * 3.14159f));
                 }
 
-                /* 3. Percussion Track (Kick on 0,4,8,12 | Snare on 2,6,10,14 | Hi-Hat on every step) */
+                /* 4. Percussion Track (Double Kick on Bosses + Snare + Crisp Hi-Hat) */
                 float drum = 0.0f;
-                if ((st & 3) == 0 && sub < 0.35f) {
+                int kickHit = ((st & 3) == 0) || (sg >= 2 && (st & 7) == 6);
+                if (kickHit && sub < 0.35f) {
                     float kf = 115.0f * expf(-sub * 14.0f) + 42.0f;
                     dp += kf * invSR; if (dp >= 1.0f) dp -= 1.0f;
-                    drum += sinf(dp * 6.28318f) * 0.15f * expf(-sub * 12.0f);
+                    drum += sinf(dp * 6.28318f) * 0.14f * expf(-sub * 12.0f);
                 }
                 noiseSeed = noiseSeed * 1664525u + 1013904223u;
                 float nz = ((float)(int)(noiseSeed >> 16) / 32768.0f);
@@ -454,10 +530,19 @@ static int audio_th(SceSize a, void *p) {
                     drum += nz * 0.030f * expf(-sub * 32.0f); /* Hi-hat */
                 }
 
-                lSig = bOut + leadL + drum;
-                rSig = bOut + leadR + drum;
+                /* 5. Stereo Ping-Pong Echo / Reverb on Lead */
+                int tapR = (echoIdx - 2800) & 4095;
+                int tapL = (echoIdx - 4095) & 4095;
+                float wetL = echoR[tapL] * 0.28f;
+                float wetR = echoL[tapR] * 0.28f;
+                echoL[echoIdx] = leadL + wetL * 0.35f;
+                echoR[echoIdx] = leadR + wetR * 0.35f;
+                echoIdx = (echoIdx + 1) & 4095;
 
-                /* 4. In-Key Guitar Hero Note Pluck / SFX Overlay */
+                lSig = bOut + padL + leadL + wetL + drum;
+                rSig = bOut + padR + leadR + wetR + drum;
+
+                /* 6. In-Key Guitar Hero Note Pluck / SFX Overlay */
                 if (sfx_t > 0) {
                     sfx_p  += sfx_f * invSR;
                     sfx_p2 += (sfx_f * 1.5f) * invSR;
@@ -467,7 +552,7 @@ static int audio_th(SceSize a, void *p) {
                     float noteWave = (stStyle == 0)
                         ? ((2.0f * sfx_p - 1.0f) * 0.6f + (2.0f * sfx_p2 - 1.0f) * 0.4f)
                         : (sinf(sfx_p * 6.28318f) * 0.7f + sinf(sfx_p2 * 6.28318f) * 0.3f);
-                    float sOut = noteWave * 0.20f * env;
+                    float sOut = noteWave * 0.19f * env;
                     lSig += sOut; rSig += sOut;
                     sfx_t--;
                 }
@@ -484,7 +569,7 @@ static int audio_th(SceSize a, void *p) {
     return 0;
 }
 
-typedef struct { int lane; float y; int active; } Note;
+typedef struct { int lane; float y; int active; int spawnStep; float freq; } Note;
 static Note notes[24];
 static const char *bossNames[3] = { "GOLEM DE HIERRO", "AUTOMATA ARCANO", "DRAGON SOMBRIO" };
 static const char *mobNames[3]  = { "SLIME DEL BOSQUE", "TRASGO ERRANTE", "ESPECTRO MENOR" };
@@ -1117,11 +1202,11 @@ int main(void) {
         if (bossHitFlash > 0) bossHitFlash--;
         animFrame++;
 
-        /* Select Song dynamically: 0=Overworld/Title, 1=Forest Mobs/Dungeon, 2=Boss1 Rock, 3=Boss2 Synth, 4=Boss3 Symphonic */
+        /* Select Song dynamically: 0=Overworld, 1=Forest/Ch1, 2=Boss1 Rock, 3=Arcane Synth, 4=Volcanic Shred, 5=Boss3 Symphonic */
         if (inTitle || inOverworld) curSong = 0;
         else if (inDungeon) curSong = (curDngId == 0) ? 1 : (curDngId == 1 ? 3 : 4);
-        else if (isMobBattle) curSong = 1;
-        else curSong = 2 + chapter;
+        else if (isMobBattle) curSong = (chapter == 0) ? 1 : (chapter == 1 ? 3 : 4);
+        else curSong = (chapter == 0) ? 2 : (chapter == 1 ? 3 : 5);
 
         /* ================= LOGIC ================= */
         if (inTitle || gameOver || victory) {
@@ -1533,18 +1618,14 @@ int main(void) {
                 }
             }
         } else {
-            /* Guitar Hero Rhythm Attack Phase (Progressive & Readable) */
+            /* Guitar Hero Rhythm Attack Phase: 100% Beat-Synced to Active Song! */
             if (pressed & PSP_CTRL_LTRIGGER) { curStyle = (curStyle + 2) % 3; play_sfx(440.0f, 600); }
             if (pressed & PSP_CTRL_RTRIGGER) { curStyle = (curStyle + 1) % 3; play_sfx(440.0f, 600); }
             if (judgeT > 0) judgeT--;
             if (missFlash > 0) missFlash--;
             for (int l = 0; l < 4; l++) if (laneFlash[l] > 0) laneFlash[l]--;
 
-            static const float mobNoteSpd[3]  = { 1.85f, 2.15f, 2.45f };
-            static const float bossNoteSpd[3] = { 2.20f, 2.50f, 2.85f };
-            float spd = isMobBattle ? mobNoteSpd[chapter] : bossNoteSpd[chapter];
-            fretScroll += spd;
-            if (fretScroll >= 28.0f) fretScroll -= 28.0f;
+            fretScroll = bgm_sub * 28.0f;
 
             if (judgeT > 0) judgeT--;
             phaseTimer++;
@@ -1555,15 +1636,25 @@ int main(void) {
             }
 
             static int lastBeatStep = -1;
-            int stepMod = isMobBattle ? 2 : ((chapter == 0) ? 2 : 1);
-            if (bgm_step != lastBeatStep && (bgm_step % stepMod) == 0 && phaseTimer < 330) {
+            int curBeat = bgm_step;
+            float curSub = bgm_sub;
+            int stepMod = (isMobBattle && chapter == 0) ? 2 : 1;
+            if (curBeat != lastBeatStep && (curBeat % stepMod) == 0 && phaseTimer < 330) {
                 /* Enforce minimum 38px vertical spacing so 2 buttons NEVER overlap/coincide! */
                 int tooClose = 0;
                 for (int i = 0; i < 24; i++) if (notes[i].active && notes[i].y < 142.0f) { tooClose = 1; break; }
                 if (!tooClose) {
-                    lastBeatStep = bgm_step;
+                    lastBeatStep = curBeat;
+                    int sIdx = curBeat & 63;
+                    float f = songLead[curSong][sIdx];
+                    int mLane = (f < 360.0f) ? 0 : (f < 470.0f ? 1 : (f < 600.0f ? 2 : 3));
                     for (int i = 0; i < 24; i++) if (!notes[i].active) {
-                        notes[i].active = 1; notes[i].lane = (bgm_step + (xr() & 1)) & 3; notes[i].y = 104.0f; break;
+                        notes[i].active = 1;
+                        notes[i].lane = mLane;
+                        notes[i].spawnStep = curBeat;
+                        notes[i].freq = f;
+                        notes[i].y = 104.0f;
+                        break;
                     }
                 }
             }
@@ -1589,7 +1680,7 @@ int main(void) {
                     judgeT = 30;
                     unsigned int scols[4] = { RGB(255,90,190), RGB(90,255,140), RGB(255,80,80), RGB(80,225,255) };
                     spawn_sparks((float)(164 + l * 50), (float)HIT_Y, isPerf ? RGB(255, 240, 90) : scols[l], isPerf ? 10 : 6);
-                    play_sfx(songScale[curSong][l], 2600);
+                    play_sfx(notes[hit].freq > 50.0f ? notes[hit].freq : songScale[curSong][l], 2600);
                 } else {
                     /* Penalty for pressing wrong button / mashing */
                     combo = 0;
@@ -1606,7 +1697,9 @@ int main(void) {
             }
 
             for (int i = 0; i < 24; i++) if (notes[i].active) {
-                notes[i].y += spd;
+                /* Phase-locked to audio clock: lands on HIT_Y (238) exactly 4 beats after spawnStep */
+                float elapsedBeats = (float)(curBeat - notes[i].spawnStep) + curSub;
+                notes[i].y = 104.0f + elapsedBeats * (134.0f / 4.0f);
                 if (notes[i].y > SCR_H - 10) {
                     int ml = notes[i].lane;
                     notes[i].active = 0; combo = 0;
