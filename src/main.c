@@ -298,6 +298,54 @@ static void draw_spr32_scale2x(unsigned int *fb, const unsigned int *spr, int dx
     }
 }
 
+static void draw_spr32_96_scale2x(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    static const unsigned int *ptrs[4] = {0};
+    static unsigned int data[4][96 * 96];
+    static int count = 0;
+    const unsigned int *cached = NULL;
+    for (int k = 0; k < count; k++) if (ptrs[k] == spr) { cached = data[k]; break; }
+    if (!cached) {
+        int slot = (count < 4) ? count++ : 3;
+        ptrs[slot] = spr;
+        static unsigned int tmp64[64 * 64];
+        for (int y = 0; y < 32; y++) {
+            int ym = (y > 0) ? y - 1 : 0, yp = (y < 31) ? y + 1 : 31;
+            for (int x = 0; x < 32; x++) {
+                unsigned int P = spr[y * 32 + x];
+                int xm = (x > 0) ? x - 1 : 0, xp = (x < 31) ? x + 1 : 31;
+                unsigned int A = spr[ym * 32 + x], B = spr[y * 32 + xp];
+                unsigned int C = spr[y * 32 + xm], D = spr[yp * 32 + x];
+                unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
+                if (C == A && C != D && A != B) e0 = A;
+                if (A == B && A != C && B != D) e1 = B;
+                if (D == C && D != B && C != A) e2 = C;
+                if (B == D && B != A && D != C) e3 = D;
+                int idx = (y * 2) * 64 + (x * 2);
+                tmp64[idx] = e0; tmp64[idx + 1] = e1;
+                tmp64[idx + 64] = e2; tmp64[idx + 65] = e3;
+            }
+        }
+        for (int j = 0; j < 96; j++) {
+            int sj = (j * 64) / 96;
+            for (int i = 0; i < 96; i++) data[slot][j * 96 + i] = tmp64[sj * 64 + (i * 64) / 96];
+        }
+        cached = data[slot];
+    }
+    for (int j = 0; j < 96; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        const unsigned int *src = &cached[j * 96];
+        for (int i = 0; i < 96; i++) {
+            int px = dx + i;
+            if ((unsigned)px < SCR_W) {
+                unsigned int c = src[i];
+                if (c) dst[px] = c;
+            }
+        }
+    }
+}
+
 static void draw_spr32_40_scale2x(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
     static const unsigned int *cPtr = NULL;
     static unsigned int data[40 * 40];
@@ -2014,10 +2062,10 @@ int main(void) {
                     }
                 }
             }
-            /* 2.5D Scale2x Overhanging Trees (40x40) & Crisp 64x64 Town Buildings with soft shadows */
-            for (int ty = 0; ty < 12; ty++) {
+            /* 2.5D Scale2x Overhanging Trees (40x40) & Large 96x96 Town Buildings with soft shadows */
+            for (int ty = 0; ty < 13; ty++) {
                 int sy = ty * 30 - 4;
-                for (int tx = -1; tx < 17; tx++) {
+                for (int tx = -2; tx < 18; tx++) {
                     int sx = tx * 30;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
@@ -2026,8 +2074,8 @@ int main(void) {
                             fill_ellipse_alpha(fb, sx + 15, sy + 25, 14, 6, RGB(0, 0, 0), 115);
                             draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
                         } else if (wt == 10 || wt == 11) {
-                            fill_ellipse_alpha(fb, sx + 15, sy + 26, 30, 8, RGB(0, 0, 0), 130);
-                            draw_spr32_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 17, sy - 34);
+                            fill_ellipse_alpha(fb, sx + 15, sy + 27, 46, 11, RGB(0, 0, 0), 135);
+                            draw_spr32_96_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 33, sy - 66);
                         }
                     }
                 }
