@@ -68,17 +68,15 @@ static void fill_rect_alpha(unsigned int *fb, int x, int y, int w, int h, unsign
     if (y + h > SCR_H) h = SCR_H - y;
     if (w <= 0 || h <= 0) return;
     int ia = 255 - a;
-    unsigned int sr = (col & 0xFFu) * a;
-    unsigned int sg = ((col >> 8) & 0xFFu) * a;
-    unsigned int sb = ((col >> 16) & 0xFFu) * a;
+    unsigned int c_rb = (col & 0x00FF00FFu) * (unsigned int)a;
+    unsigned int c_g  = (col & 0x0000FF00u) * (unsigned int)a;
     for (int j = 0; j < h; j++) {
         unsigned int *row = &fb[(y + j) * BUF_W + x];
         for (int i = 0; i < w; i++) {
             unsigned int dst = row[i];
-            unsigned int r = ((sr + (dst & 0xFFu) * ia) >> 8) & 0xFFu;
-            unsigned int g = ((sg + ((dst >> 8) & 0xFFu) * ia) >> 8) & 0xFFu;
-            unsigned int b = ((sb + ((dst >> 16) & 0xFFu) * ia) >> 8) & 0xFFu;
-            row[i] = 0xFF000000u | (b << 16) | (g << 8) | r;
+            unsigned int rb = ((c_rb + (dst & 0x00FF00FFu) * (unsigned int)ia) >> 8) & 0x00FF00FFu;
+            unsigned int g  = ((c_g  + (dst & 0x0000FF00u) * (unsigned int)ia) >> 8) & 0x0000FF00u;
+            row[i] = 0xFF000000u | rb | g;
         }
     }
 }
@@ -106,11 +104,12 @@ static void draw_border(unsigned int *fb, int x, int y, int w, int h, unsigned i
 
 /* Classic Final Fantasy Semi-Transparent Gradient Blue Window with golden corner rivets */
 static void draw_ff_window(unsigned int *fb, int x, int y, int w, int h) {
-    for (int j = 0; j < h; j++) {
+    for (int j = 0; j < h; j += 2) {
         int r = 24 - (j * 14) / (h > 0 ? h : 1);
         int g = 34 - (j * 20) / (h > 0 ? h : 1);
         int b = 102 - (j * 54) / (h > 0 ? h : 1);
-        fill_rect_alpha(fb, x + 2, y + j, w - 4, 1, RGB(r, g, b), 222);
+        int bh = (j + 2 <= h) ? 2 : 1;
+        fill_rect(fb, x + 2, y + j, w - 4, bh, RGB(r, g, b));
     }
     draw_border(fb, x, y, w, h, RGB(230, 236, 255));
     draw_border(fb, x + 1, y + 1, w - 2, h - 2, RGB(65, 82, 145));
@@ -200,17 +199,17 @@ static void draw_spr32(unsigned int *fb, const unsigned int *spr, int dx, int dy
 }
 
 static void draw_spr_wh(unsigned int *fb, const unsigned int *spr, int w, int h, int dx, int dy) {
-    for (int j = 0; j < h; j++) {
-        int py = dy + j;
-        if ((unsigned)py >= SCR_H) continue;
-        unsigned int *dst = &fb[py * BUF_W];
+    int j0 = (dy < 0) ? -dy : 0;
+    int j1 = (dy + h > SCR_H) ? (SCR_H - dy) : h;
+    int i0 = (dx < 0) ? -dx : 0;
+    int i1 = (dx + w > SCR_W) ? (SCR_W - dx) : w;
+    if (j0 >= j1 || i0 >= i1) return;
+    for (int j = j0; j < j1; j++) {
+        unsigned int *dst = &fb[(dy + j) * BUF_W + dx];
         const unsigned int *src = &spr[j * w];
-        for (int i = 0; i < w; i++) {
-            int px = dx + i;
-            if ((unsigned)px < SCR_W) {
-                unsigned int c = src[i];
-                if (c) dst[px] = c;
-            }
+        for (int i = i0; i < i1; i++) {
+            unsigned int c = src[i];
+            if (c) dst[i] = c;
         }
     }
 }
@@ -985,7 +984,8 @@ static void draw_tile_vegetation(unsigned int *fb, int wx, int wy, int sx, int s
         return;
     }
     unsigned int kind = h % 29u;
-    int sway = (int)(sinf((float)animFrame * 0.07f + (float)(wx + wy) * 0.7f) * 1.4f);
+    static const signed char swayLUT[16] = { 0, 1, 1, 1, 1, 1, 0, 0, 0, -1, -1, -1, -1, -1, 0, 0 };
+    int sway = swayLUT[((animFrame >> 3) + wx + wy) & 15];
     if (kind < 6u) {
         /* Swaying tall grass blades */
         int gx = sx + 4 + (int)((h >> 3) % 13u);
@@ -1141,9 +1141,12 @@ static void draw_chimney_smoke(unsigned int *fb, int cx, int cy, int wx, int wy)
 typedef struct { int x, y, r, g, b, rad; } LightSrc;
 
 static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int ambB, const LightSrc *ls, int nLights) {
-    static short gR[35][61], gG[35][61], gB[35][61];
-    for (int gy = 0; gy < 35; gy++) {
-        for (int gx = 0; gx < 61; gx++) {
+    static short gR[18][31], gG[18][31], gB[18][31];
+    unsigned char rowDirty[18];
+    int allNeutral = (ambR == 256 && ambG == 256 && ambB == 256);
+    for (int gy = 0; gy < 18; gy++) {
+        rowDirty[gy] = allNeutral ? 0 : 1;
+        for (int gx = 0; gx < 31; gx++) {
             gR[gy][gx] = (short)ambR;
             gG[gy][gx] = (short)ambG;
             gB[gy][gx] = (short)ambB;
@@ -1153,20 +1156,22 @@ static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int 
         int rad = ls[k].rad;
         if (rad <= 0) continue;
         int rad2 = rad * rad;
-        int bx0 = (ls[k].x - rad) >> 3; if (bx0 < 0) bx0 = 0;
-        int bx1 = ((ls[k].x + rad) >> 3) + 1; if (bx1 > 60) bx1 = 60;
-        int by0 = (ls[k].y - rad) >> 3; if (by0 < 3) by0 = 3;
-        int by1 = ((ls[k].y + rad) >> 3) + 1; if (by1 > 34) by1 = 34;
+        int bx0 = (ls[k].x - rad) >> 4; if (bx0 < 0) bx0 = 0;
+        int bx1 = ((ls[k].x + rad) >> 4) + 1; if (bx1 > 30) bx1 = 30;
+        int by0 = (ls[k].y - rad) >> 4; if (by0 < 1) by0 = 1;
+        int by1 = ((ls[k].y + rad) >> 4) + 1; if (by1 > 17) by1 = 17;
         for (int gy = by0; gy <= by1; gy++) {
-            int dy = (gy << 3) - ls[k].y;
+            rowDirty[gy] = 1;
+            if (gy > 0) rowDirty[gy - 1] = 1;
+            int dy = (gy << 4) - ls[k].y;
             int dy2 = dy * dy;
             for (int gx = bx0; gx <= bx1; gx++) {
-                int dx = (gx << 3) - ls[k].x;
+                int dx = (gx << 4) - ls[k].x;
                 int d2 = dx * dx + dy2;
                 if (d2 < rad2) {
                     int w = rad2 - d2;
                     int att = (w * 256) / rad2;
-                    att = (att * att) >> 8; /* Smooth quadratic RTX falloff */
+                    att = (att * att) >> 8;
                     int nr = gR[gy][gx] + ((ls[k].r * att) >> 8);
                     int ng = gG[gy][gx] + ((ls[k].g * att) >> 8);
                     int nb = gB[gy][gx] + ((ls[k].b * att) >> 8);
@@ -1177,32 +1182,34 @@ static void apply_rtx_shader_lighting(unsigned int *fb, int ambR, int ambG, int 
             }
         }
     }
-    short rowR[61], rowG[61], rowB[61];
+    short rowR[31], rowG[31], rowB[31];
     for (int y = 24; y < SCR_H; y++) {
-        int gy = y >> 3, fy = y & 7, ify = 8 - fy;
-        for (int gx = 0; gx < 61; gx++) {
-            rowR[gx] = (short)((gR[gy][gx] * ify + gR[gy + 1][gx] * fy) >> 3);
-            rowG[gx] = (short)((gG[gy][gx] * ify + gG[gy + 1][gx] * fy) >> 3);
-            rowB[gx] = (short)((gB[gy][gx] * ify + gB[gy + 1][gx] * fy) >> 3);
+        int gy = y >> 4;
+        if (!rowDirty[gy]) continue;
+        int fy = y & 15, ify = 16 - fy;
+        for (int gx = 0; gx < 31; gx++) {
+            rowR[gx] = (short)((gR[gy][gx] * ify + gR[gy + 1][gx] * fy) >> 4);
+            rowG[gx] = (short)((gG[gy][gx] * ify + gG[gy + 1][gx] * fy) >> 4);
+            rowB[gx] = (short)((gB[gy][gx] * ify + gB[gy + 1][gx] * fy) >> 4);
         }
         unsigned int *dst = &fb[y * BUF_W];
-        for (int bx = 0; bx < 60; bx++) {
+        for (int bx = 0; bx < 30; bx++) {
             int r0 = rowR[bx], r1 = rowR[bx + 1];
             int g0 = rowG[bx], g1 = rowG[bx + 1];
             int b0 = rowB[bx], b1 = rowB[bx + 1];
             if (r0 == 256 && r1 == 256 && g0 == 256 && g1 == 256 && b0 == 256 && b1 == 256) continue;
-            int lr = r0 << 3, dlr = r1 - r0;
-            int lg = g0 << 3, dlg = g1 - g0;
-            int lb = b0 << 3, dlb = b1 - b0;
-            int baseX = bx << 3;
-            for (int i = 0; i < 8; i++) {
+            int lr = r0 << 4, dlr = r1 - r0;
+            int lg = g0 << 4, dlg = g1 - g0;
+            int lb = b0 << 4, dlb = b1 - b0;
+            int baseX = bx << 4;
+            for (int i = 0; i < 16; i++) {
                 unsigned int c = dst[baseX + i];
-                unsigned int r = ((c & 0xFFu) * (unsigned int)(lr >> 3)) >> 8;
-                unsigned int g = (((c >> 8) & 0xFFu) * (unsigned int)(lg >> 3)) >> 8;
-                unsigned int b = (((c >> 16) & 0xFFu) * (unsigned int)(lb >> 3)) >> 8;
-                if (r > 255u) r = 255u;
-                if (g > 255u) g = 255u;
-                if (b > 255u) b = 255u;
+                unsigned int r = ((c & 0xFFu) * (unsigned int)(lr >> 4)) >> 8;
+                unsigned int g = (((c >> 8) & 0xFFu) * (unsigned int)(lg >> 4)) >> 8;
+                unsigned int b = (((c >> 16) & 0xFFu) * (unsigned int)(lb >> 4)) >> 8;
+                r = (r > 255u) ? 255u : r;
+                g = (g > 255u) ? 255u : g;
+                b = (b > 255u) ? 255u : b;
                 dst[baseX + i] = 0xFF000000u | (b << 16) | (g << 8) | r;
                 lr += dlr; lg += dlg; lb += dlb;
             }
@@ -2636,19 +2643,29 @@ int main(void) {
                 draw_text(fb, 240 - sLen / 2, by + 26, regionSubs[curRegId], RGB(130, 225, 255));
             }
 
-            /* Top-Right Continental Mini-Map (64x48 = 4x4 downsampled Skyrim-scale 256x192 world) */
+            /* Top-Right Continental Mini-Map (Cached 64x48 = 4x4 downsampled Skyrim-scale 256x192 world) */
             draw_ff_window(fb, 404, 28, 72, 56);
-            for (int my = 0; my < 48; my++) {
-                for (int mx = 0; mx < 64; mx++) {
-                    unsigned char mt = worldMap[my * 4 + 1][mx * 4 + 1];
-                    unsigned int mc = RGB(48, 128, 56);
-                    if (mt == 1) mc = RGB(24, 82, 34);
-                    else if (mt == 2) mc = RGB(115, 115, 125);
-                    else if (mt == 3) mc = RGB(36, 98, 205);
-                    else if (mt == 4 || mt == 8) mc = RGB(215, 185, 85);
-                    else if (mt == 6) mc = RGB(180, 115, 55);
-                    else if (mt == 7) mc = RGB(165, 130, 85);
-                    put_px(fb, 408 + mx, 32 + my, mc);
+            {
+                static unsigned int miniCache[48][64];
+                static int miniInit = 0;
+                if (!miniInit) {
+                    miniInit = 1;
+                    for (int my = 0; my < 48; my++) {
+                        for (int mx = 0; mx < 64; mx++) {
+                            unsigned char mt = worldMap[my * 4 + 1][mx * 4 + 1];
+                            unsigned int mc = RGB(48, 128, 56);
+                            if (mt == 1) mc = RGB(24, 82, 34);
+                            else if (mt == 2) mc = RGB(115, 115, 125);
+                            else if (mt == 3) mc = RGB(36, 98, 205);
+                            else if (mt == 4 || mt == 8 || mt >= 10) mc = RGB(215, 185, 85);
+                            else if (mt == 6) mc = RGB(180, 115, 55);
+                            else if (mt == 7) mc = RGB(165, 130, 85);
+                            miniCache[my][mx] = mc;
+                        }
+                    }
+                }
+                for (int my = 0; my < 48; my++) {
+                    memcpy(&fb[(32 + my) * BUF_W + 408], miniCache[my], 64 * sizeof(unsigned int));
                 }
             }
             for (int i = 0; i < MAX_ROAM; i++) if (roam[i].alive) {
