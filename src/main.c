@@ -1174,7 +1174,7 @@ int main(void) {
                         memset(notes, 0, sizeof(notes)); play_sfx(540.0f, 800);
                     } else if (ffCursor == 1) {
                         guardActive = 1;
-                        snprintf(judge, sizeof(judge), "THORIN CUBRE (-50%)!"); judgeT = 50;
+                        snprintf(judge, sizeof(judge), "THORIN CUBRE (-50%%)!"); judgeT = 50;
                         play_sfx(480.0f, 800); advanceTurn = 1;
                     } else if (ffCursor == 2) {
                         int bdmg = 14 + pLevel * 2;
@@ -1806,7 +1806,7 @@ int main(void) {
                 draw_spr48(fb, spr_band2_48, 18, 100 + bIdle2);
                 draw_spr48(fb, spr_bard_48,  98, 104 + bIdle0);
                 draw_spr48(fb, spr_band1_48, 58, 114 + bIdle1);
-                if (inFFMenu || inGuitar) {
+                if (inFFMenu || (!inDefense && !inAttackResolve)) {
                     int px[3] = { 119, 79, 39 };
                     int py[3] = { 92 + bIdle0, 102 + bIdle1, 88 + bIdle2 };
                     draw_text(fb, px[turnMember], py[turnMember] + ((animFrame & 8) ? 2 : 0), "v", RGB(255, 235, 80));
