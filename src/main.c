@@ -1339,7 +1339,7 @@ int main(void) {
                                     int pulse = 60 + (int)(sinf((float)animFrame * 0.12f) * 35.0f);
                                     fill_ellipse_alpha(fb, sx + 12, sy + 12, 12, 10, RGB(70, 225, 255), pulse);
                                 }
-                                draw_spr24(fb, spr_chest, sx, sy);
+                                draw_spr24(fb, spr_shrine, sx, sy);
                             }
                         }
                     }
@@ -1472,9 +1472,9 @@ int main(void) {
                             if (dt == 2) {
                                 int pulse = 65 + (int)(sinf((float)animFrame * 0.12f) * 35.0f);
                                 fill_ellipse_alpha(fb, sx + 12, sy + 12, 13, 11, (dngFloor < dngMaxFloors) ? RGB(60, 225, 255) : RGB(215, 50, 255), pulse);
-                                draw_spr24(fb, spr_dungeon, sx, sy);
+                                draw_spr24(fb, (dngFloor < dngMaxFloors) ? spr_stair_down : spr_boss_altar, sx, sy);
                             } else if (dt == 3) {
-                                draw_spr24(fb, spr_chest, sx, sy);
+                                draw_spr24(fb, spr_chest_32bit, sx, sy);
                             } else if (dt == 4) {
                                 fill_ellipse_alpha(fb, sx + 12, sy + 12, 11, 9, RGB(80, 235, 130), 75);
                                 draw_text(fb, sx + 9, sy + 8, "^", RGB(140, 255, 170));
