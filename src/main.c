@@ -633,17 +633,18 @@ static void play_sfx(float f, int dur) {
 }
 
 /* Harmonic 4-lane scale frequencies per song */
-static const float songScale[6][4] = {
-    { 293.66f, 349.23f, 440.00f, 587.33f }, /* 0: Obertura Solaria (D-min) */
+static const float songScale[7][4] = {
+    { 293.66f, 349.23f, 440.00f, 587.33f }, /* 0: Obertura Solaria (D-min Aventura) */
     { 329.63f, 392.00f, 493.88f, 659.25f }, /* 1: Bosque de los Ecos (E-min) */
     { 164.81f, 220.00f, 246.94f, 329.63f }, /* 2: Coloso de Hierro (E-min Heavy Rock) */
     { 261.63f, 311.13f, 392.00f, 523.25f }, /* 3: Ciudadela Arcana (C-min Synth) */
     { 220.00f, 261.63f, 329.63f, 440.00f }, /* 4: Abismo Volcanico (A-min Shred) */
-    { 293.66f, 349.23f, 440.00f, 587.33f }  /* 5: Dragon Sombrio (D-min Symphonic) */
+    { 293.66f, 349.23f, 440.00f, 587.33f }, /* 5: Dragon Sombrio (D-min Symphonic) */
+    { 349.23f, 440.00f, 523.25f, 659.25f }  /* 6: Jazz de Ciudad (Fmaj7 Swing) */
 };
 
-/* 64-Step (4-Bar) Basslines & Lead Melodies for 6 Distinct Songs */
-static const float songBass[6][64] = {
+/* 64-Step (4-Bar) Basslines & Lead Melodies for 7 Distinct Songs */
+static const float songBass[7][64] = {
     { /* 0: Obertura Solaria (D-min Folk-Rock) */
       146.83f,146.83f,174.61f,146.83f, 130.81f,130.81f,164.81f,130.81f, 116.54f,116.54f,146.83f,116.54f, 130.81f,146.83f,164.81f,110.00f,
       146.83f,220.00f,174.61f,146.83f, 130.81f,196.00f,164.81f,130.81f, 116.54f,174.61f,146.83f,116.54f, 110.00f,130.81f,146.83f,164.81f,
@@ -679,10 +680,16 @@ static const float songBass[6][64] = {
        73.42f,146.83f,174.61f,146.83f,  65.41f,130.81f,164.81f,130.81f,  58.27f,116.54f,146.83f,116.54f,  55.00f,110.00f,138.59f,110.00f,
        49.00f, 98.00f,146.83f, 98.00f,  58.27f,116.54f,174.61f,116.54f,  65.41f,130.81f,196.00f,130.81f,  55.00f, 82.41f,110.00f,138.59f,
        73.42f, 73.42f,220.00f,146.83f,  65.41f, 65.41f,196.00f,130.81f,  58.27f, 87.31f,174.61f,116.54f,  55.00f, 73.42f,110.00f, 73.42f
+    },
+    { /* 6: Jazz de Ciudad (Walking Bass: Fmaj7 - Dm7 - Gm7 - C7) */
+       87.31f,110.00f,130.81f,138.59f, 146.83f,130.81f,110.00f, 98.00f,  98.00f,116.54f,146.83f,130.81f, 130.81f,110.00f, 98.00f, 92.50f,
+       87.31f,110.00f,130.81f,164.81f, 146.83f,164.81f,174.61f,138.59f,  98.00f,116.54f,146.83f,174.61f, 130.81f,146.83f,164.81f,123.47f,
+      116.54f,146.83f,174.61f,164.81f, 110.00f,130.81f,164.81f,146.83f,  98.00f,116.54f,146.83f,130.81f, 130.81f,146.83f,164.81f,138.59f,
+       87.31f,130.81f,110.00f, 98.00f, 146.83f,130.81f,110.00f,103.83f,  98.00f,116.54f,146.83f,138.59f, 130.81f,164.81f,130.81f, 98.00f
     }
 };
 
-static const float songLead[6][64] = {
+static const float songLead[7][64] = {
     { /* 0: Obertura Solaria */
       293.66f,349.23f,440.00f,392.00f, 349.23f,329.63f,293.66f,261.63f, 233.08f,293.66f,349.23f,329.63f, 293.66f,329.63f,440.00f,587.33f,
       587.33f,523.25f,440.00f,392.00f, 440.00f,392.00f,349.23f,329.63f, 349.23f,392.00f,440.00f,523.25f, 440.00f,392.00f,349.23f,329.63f,
@@ -718,9 +725,15 @@ static const float songLead[6][64] = {
       880.00f,698.46f,587.33f,440.00f, 783.99f,659.25f,523.25f,392.00f, 698.46f,587.33f,466.16f,349.23f, 659.25f,554.37f,440.00f,329.63f,
       392.00f,466.16f,587.33f,783.99f, 466.16f,587.33f,698.46f,932.33f, 523.25f,659.25f,783.99f,1046.5f, 880.00f,659.25f,554.37f,440.00f,
       1174.6f,880.00f,698.46f,587.33f, 1046.5f,783.99f,659.25f,523.25f, 932.33f,698.46f,587.33f,466.16f, 880.00f,1046.5f,1174.6f,880.00f
+    },
+    { /* 6: Jazz de Ciudad (Lounge Sax / Rhodes Swing) */
+      523.25f,440.00f,349.23f,440.00f, 587.33f,523.25f,440.00f,392.00f, 466.16f,392.00f,349.23f,392.00f, 440.00f,523.25f,587.33f,659.25f,
+      698.46f,659.25f,587.33f,523.25f, 587.33f,523.25f,440.00f,392.00f, 466.16f,523.25f,587.33f,659.25f, 587.33f,523.25f,466.16f,440.00f,
+      587.33f,698.46f,659.25f,587.33f, 523.25f,659.25f,587.33f,523.25f, 466.16f,587.33f,523.25f,466.16f, 440.00f,493.88f,523.25f,659.25f,
+      698.46f,587.33f,523.25f,440.00f, 523.25f,440.00f,392.00f,349.23f, 466.16f,440.00f,392.00f,349.23f, 440.00f,523.25f,659.25f,523.25f
     }
 };
-static const float songTempo[6] = { 3.8f, 4.4f, 4.8f, 5.0f, 5.2f, 5.5f };
+static const float songTempo[7] = { 3.8f, 4.4f, 4.8f, 5.0f, 5.2f, 5.5f, 3.2f };
 
 static int audio_th(SceSize a, void *p) {
     (void)a; (void)p;
@@ -731,7 +744,7 @@ static int audio_th(SceSize a, void *p) {
 
     while (arun) {
         short *o = abuf[cur];
-        int sg = curSong; if (sg < 0 || sg > 5) sg = 0;
+        int sg = curSong; if (sg < 0 || sg > 6) sg = 0;
         int stStyle = curStyle; if (stStyle < 0 || stStyle > 2) stStyle = 0;
         float spd = songTempo[sg];
 
@@ -755,11 +768,11 @@ static int audio_th(SceSize a, void *p) {
                 float bassWave = (bp < 0.5f ? 0.5f : -0.5f) * 0.35f + sinf(bp * 6.28318f) * 0.65f;
                 float bOut = bassWave * 0.14f * bassEnv;
 
-                /* 2. Stereo Harmonic Pad / Arpeggio Chords */
-                padP1 += (bf * 2.0f) * invSR; if (padP1 >= 1.0f) padP1 -= 1.0f;
-                padP2 += (bf * 2.996f) * invSR; if (padP2 >= 1.0f) padP2 -= 1.0f;
-                float padL = sinf(padP1 * 6.28318f) * 0.032f;
-                float padR = sinf(padP2 * 6.28318f) * 0.032f;
+                /* 2. Stereo Harmonic Pad / Jazz 7th Chords */
+                padP1 += (bf * (sg == 6 ? 2.50f : 2.0f)) * invSR;  if (padP1 >= 1.0f) padP1 -= 1.0f;
+                padP2 += (bf * (sg == 6 ? 3.56f : 2.996f)) * invSR; if (padP2 >= 1.0f) padP2 -= 1.0f;
+                float padL = sinf(padP1 * 6.28318f) * (sg == 6 ? 0.042f : 0.032f);
+                float padR = sinf(padP2 * 6.28318f) * (sg == 6 ? 0.042f : 0.032f);
 
                 /* 3. Lead / Chord Instrument Track (shaped by Song & Active Musical Style) */
                 float lf = songLead[sg][st];
@@ -769,7 +782,15 @@ static int audio_th(SceSize a, void *p) {
                 vibP += 5.09f * invSR;        if (vibP >= 1.0f) vibP -= 1.0f;
                 float leadEnv = expf(-sub * 1.8f);
                 float leadL = 0.0f, leadR = 0.0f;
-                if (stStyle == 0 || sg == 2 || sg == 4) {
+                if (sg == 6) {
+                    /* Warm Lounge Rhodes / Saxophone Jazz Tone */
+                    float vibrato = 1.0f + sinf(vibP * 6.28318f) * 0.003f;
+                    sp += (lf * vibrato) * invSR; if (sp >= 1.0f) sp -= 1.0f;
+                    float jEnv = expf(-sub * 1.3f);
+                    float rhodes = sinf(sp * 6.28318f) * 0.72f + sinf(sp * 12.56636f) * 0.22f + sinf(lp2 * 6.28318f) * 0.14f;
+                    leadL = rhodes * 0.11f * jEnv;
+                    leadR = (sinf(lp3 * 6.28318f) * 0.72f + sinf(lp3 * 12.56636f) * 0.22f) * 0.11f * jEnv;
+                } else if (stStyle == 0 || sg == 2 || sg == 4) {
                     /* Distorted Epic Rock Power-Chord Guitar */
                     float rawL = (2.0f * lp1 - 1.0f) * 0.7f + (2.0f * lp2 - 1.0f) * 0.45f;
                     float rawR = (2.0f * lp3 - 1.0f) * 0.7f + (2.0f * lp2 - 1.0f) * 0.45f;
@@ -787,17 +808,19 @@ static int audio_th(SceSize a, void *p) {
                     leadR = (sinf(lp3 * 6.28318f) * 0.65f + (2.0f * lp2 - 1.0f) * 0.25f) * 0.10f * (0.4f + 0.6f * sinf(sub * 3.14159f));
                 }
 
-                /* 4. Percussion Track (Double Kick on Bosses + Snare + Crisp Hi-Hat) */
+                /* 4. Percussion Track (Jazz Brushes on sg==6, Double Kick on Bosses) */
                 float drum = 0.0f;
-                int kickHit = ((st & 3) == 0) || (sg >= 2 && (st & 7) == 6);
+                int kickHit = (sg == 6) ? ((st & 7) == 0) : (((st & 3) == 0) || (sg >= 2 && (st & 7) == 6));
                 if (kickHit && sub < 0.35f) {
                     float kf = 115.0f * expf(-sub * 14.0f) + 42.0f;
                     dp += kf * invSR; if (dp >= 1.0f) dp -= 1.0f;
-                    drum += sinf(dp * 6.28318f) * 0.14f * expf(-sub * 12.0f);
+                    drum += sinf(dp * 6.28318f) * (sg == 6 ? 0.07f : 0.14f) * expf(-sub * 12.0f);
                 }
                 noiseSeed = noiseSeed * 1664525u + 1013904223u;
                 float nz = ((float)(int)(noiseSeed >> 16) / 32768.0f);
-                if ((st & 3) == 2 && sub < 0.28f) {
+                if (sg == 6) {
+                    if ((st & 1) == 0 && sub < 0.14f) drum += nz * 0.032f * expf(-sub * 22.0f); /* Jazz brushed ride */
+                } else if ((st & 3) == 2 && sub < 0.28f) {
                     drum += nz * 0.085f * expf(-sub * 16.0f); /* Snare */
                 } else if (sub < 0.09f) {
                     drum += nz * 0.030f * expf(-sub * 32.0f); /* Hi-hat */
@@ -1422,10 +1445,40 @@ static void start_chapter(int ch) {
     inOverworld = 0; inDungeon = 0; wasInDungeon = 0; inStory = 1; inFFMenu = 0; ffCursor = 0; inDefense = 0; inAttackResolve = 0; pendingDmg = 0;
 }
 
+static int lastRegionId = -1, regionBannerTimer = 0;
+static const char * const regionNames[7] = {
+    "CIUDAD DE SOLARIA",
+    "VILLA DEL PUENTE",
+    "ALDEA DE SILVALUZ",
+    "VALLE ESMERALDA",
+    "BOSQUE ARCANO",
+    "CORDILLERA CENIZA",
+    "COSTA SOMBRIA"
+};
+static const char * const regionSubs[7] = {
+    "Plaza de los Bardos y Taberna",
+    "Cruce del Rio y Mercaderes",
+    "Refugio del Bosque Antiguo",
+    "Caminos y Praderas de Aethel",
+    "Niebla Mistica y Luciernagas",
+    "Tierras del Dragon Sombrio",
+    "Acantilados del Sur"
+};
+static int get_region_id(int x, int y) {
+    if (x >= 18 && x <= 38 && y >= 74 && y <= 94) return 0; /* Solaria */
+    if (x >= 74 && x <= 86 && y >= 56 && y <= 66) return 1; /* Villa del Puente */
+    if (x >= 148 && x <= 162 && y >= 106 && y <= 116) return 2; /* Silvaluz */
+    if (x >= 165 && y < 85) return 5; /* Cordillera Ceniza */
+    if (x >= 165 && y >= 85) return 6; /* Costa Sombria */
+    if (x >= 118) return 4; /* Bosque Arcano */
+    return 3; /* Valle Esmeralda */
+}
+
 static void start_game(void) {
     pLevel = 1; pXp = 0; pNextXp = 60; pBaseAtk = 5;
     pHp = pMaxHp = 100; pMp = pMaxMp = 50; score = 0;
     relicDmg = 0; relicVamp = 0; relicShield = 0;
+    lastRegionId = -1; regionBannerTimer = 0;
     init_world();
     inTitle = 0; inOverworld = 1; inDungeon = 0; wasInDungeon = 0; inStory = 0; inFFMenu = 0; inDefense = 0; inAttackResolve = 0; inRelic = 0; gameOver = 0; victory = 0; pendingDmg = 0;
     snprintf(dlgText, sizeof(dlgText), "Explora Aethel! Sube nivel antes de retar a los Bosses.");
@@ -1475,8 +1528,10 @@ int main(void) {
         if (bossHitFlash > 0) bossHitFlash--;
         animFrame++;
 
-        /* Select Song dynamically: 0=Overworld, 1=Forest/Ch1, 2=Boss1 Rock, 3=Arcane Synth, 4=Volcanic Shred, 5=Boss3 Symphonic */
-        if (inTitle || inOverworld) curSong = 0;
+        /* Select Song dynamically: 0=Aventura (Caminos/Bosques), 6=Jazz (Ciudades), 1-5=Combate/Dungeons */
+        int curRegId = get_region_id(mapX, mapY);
+        if (inTitle) curSong = 0;
+        else if (inOverworld) curSong = (curRegId <= 2 || worldMap[mapY][mapX] == 4 || worldMap[mapY][mapX] >= 10) ? 6 : 0;
         else if (inDungeon) curSong = (curDngId == 0) ? 1 : (curDngId == 1 ? 3 : 4);
         else if (isMobBattle) curSong = (chapter == 0) ? 1 : (chapter == 1 ? 3 : 4);
         else curSong = (chapter == 0) ? 2 : (chapter == 1 ? 3 : 5);
@@ -1486,6 +1541,11 @@ int main(void) {
             if (pressed & (PSP_CTRL_START | PSP_CTRL_CROSS)) start_game();
         } else if (inOverworld) {
             if (dlgTimer > 0) dlgTimer--;
+            if (regionBannerTimer > 0) regionBannerTimer--;
+            if (curRegId != lastRegionId) {
+                lastRegionId = curRegId;
+                regionBannerTimer = 165;
+            }
             if (moveCd > 0) moveCd--;
 
             int dx = 0, dy = 0;
@@ -2132,12 +2192,30 @@ int main(void) {
             fill_rect(fb, 188, 10, (pXp * 36) / (pNextXp > 0 ? pNextXp : 1), 7, RGB(255, 205, 65));
             draw_border(fb, 188, 10, 36, 7, RGB(220, 235, 255));
 
-            const char *reg = "VALLE ESMERALDA";
-            if (mapX >= 18 && mapX <= 38 && mapY >= 74 && mapY <= 94) reg = "SOLARIA";
-            else if (mapX >= 165 && mapY < 85) reg = "CORDILLERA CENIZA";
-            else if (mapX >= 118) reg = "BOSQUE ARCANO";
+            const char *reg = regionNames[curRegId];
             sprintf(buf, "%s | BOSS:%d/3 | %d,%d", reg, bossDefeated[0]+bossDefeated[1]+bossDefeated[2], mapX, mapY);
             draw_text(fb, 232, 10, buf, RGB(255, 255, 255));
+
+            /* Ornamental RPG Zone Arrival Banner */
+            if (regionBannerTimer > 0) {
+                int slide = (regionBannerTimer > 153) ? (regionBannerTimer - 153) * 3 : (regionBannerTimer < 12 ? (12 - regionBannerTimer) * 3 : 0);
+                int by = 32 - slide;
+                int bAlpha = (regionBannerTimer < 12) ? (regionBannerTimer * 18) : 215;
+                fill_rect_alpha(fb, 110, by, 260, 38, RGB(12, 16, 44), bAlpha);
+                draw_border(fb, 110, by, 260, 38, RGB(245, 205, 85));
+                draw_border(fb, 112, by + 2, 256, 34, RGB(110, 145, 225));
+                fill_rect(fb, 114, by + 4, 4, 4, RGB(255, 225, 95));
+                fill_rect(fb, 362, by + 4, 4, 4, RGB(255, 225, 95));
+                fill_rect(fb, 114, by + 30, 4, 4, RGB(255, 225, 95));
+                fill_rect(fb, 362, by + 30, 4, 4, RGB(255, 225, 95));
+                const char *tag = (curRegId <= 2) ? "~ CIUDAD ~" : "~ TERRITORIO ~";
+                int tLen = (int)strlen(tag) * 6;
+                int nLen = (int)strlen(regionNames[curRegId]) * 6;
+                int sLen = (int)strlen(regionSubs[curRegId]) * 6;
+                draw_text(fb, 240 - tLen / 2, by + 5, tag, RGB(255, 215, 80));
+                draw_text(fb, 240 - nLen / 2, by + 15, regionNames[curRegId], RGB(255, 250, 220));
+                draw_text(fb, 240 - sLen / 2, by + 26, regionSubs[curRegId], RGB(130, 225, 255));
+            }
 
             /* Top-Right Continental Mini-Map (64x48 = 4x4 downsampled Skyrim-scale 256x192 world) */
             draw_ff_window(fb, 404, 28, 72, 56);
