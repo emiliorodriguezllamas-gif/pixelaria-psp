@@ -197,43 +197,178 @@ static void draw_spr32(unsigned int *fb, const unsigned int *spr, int dx, int dy
     }
 }
 
-static void draw_spr32_x2(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
-    for (int j = 0; j < 64; j++) {
+static inline unsigned int blend_rgb_4(unsigned int c00, unsigned int c10, unsigned int c01, unsigned int c11, int fx, int fy) {
+    int ifx = 256 - fx, ify = 256 - fy;
+    int w00 = (ifx * ify) >> 8, w10 = (fx * ify) >> 8, w01 = (ifx * fy) >> 8, w11 = (fx * fy) >> 8;
+    unsigned int r = (((c00 & 0xFF) * w00 + (c10 & 0xFF) * w10 + (c01 & 0xFF) * w01 + (c11 & 0xFF) * w11) >> 8);
+    unsigned int g = ((((c00 >> 8) & 0xFF) * w00 + ((c10 >> 8) & 0xFF) * w10 + ((c01 >> 8) & 0xFF) * w01 + ((c11 >> 8) & 0xFF) * w11) >> 8);
+    unsigned int b = ((((c00 >> 16) & 0xFF) * w00 + ((c10 >> 16) & 0xFF) * w10 + ((c01 >> 16) & 0xFF) * w01 + ((c11 >> 16) & 0xFF) * w11) >> 8);
+    return (b << 16) | (g << 8) | r;
+}
+
+static void draw_tile24_30(unsigned int *fb, const unsigned int *tile, int dx, int dy) {
+    for (int j = 0; j < 30; j++) {
         int py = dy + j;
         if ((unsigned)py >= SCR_H) continue;
         unsigned int *dst = &fb[py * BUF_W];
-        const unsigned int *src = &spr[(j >> 1) * 32];
-        for (int i = 0; i < 64; i++) {
+        int syfp = (j * 24 * 256) / 30;
+        int sy0 = syfp >> 8, sy1 = (sy0 + 1) % 24, fy = syfp & 255;
+        const unsigned int *r0 = &tile[sy0 * 24], *r1 = &tile[sy1 * 24];
+        for (int i = 0; i < 30; i++) {
             int px = dx + i;
-            if ((unsigned)px < SCR_W) {
-                unsigned int c = src[i >> 1];
-                if (c) dst[px] = c;
+            if ((unsigned)px >= SCR_W) continue;
+            int sxfp = (i * 24 * 256) / 30;
+            int sx0 = sxfp >> 8, sx1 = (sx0 + 1) % 24, fx = sxfp & 255;
+            dst[px] = blend_rgb_4(r0[sx0], r0[sx1], r1[sx0], r1[sx1], fx, fy);
+        }
+    }
+}
+
+static void draw_tile24_30_scroll(unsigned int *fb, const unsigned int *tile, int dx, int dy, int sxOff) {
+    for (int j = 0; j < 30; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        int syfp = (j * 24 * 256) / 30;
+        int sy0 = syfp >> 8, sy1 = (sy0 + 1) % 24, fy = syfp & 255;
+        const unsigned int *r0 = &tile[sy0 * 24], *r1 = &tile[sy1 * 24];
+        for (int i = 0; i < 30; i++) {
+            int px = dx + i;
+            if ((unsigned)px >= SCR_W) continue;
+            int sxfp = (i * 24 * 256) / 30;
+            int sx0 = ((sxfp >> 8) + sxOff) % 24, sx1 = (sx0 + 1) % 24, fx = sxfp & 255;
+            dst[px] = blend_rgb_4(r0[sx0], r0[sx1], r1[sx0], r1[sx1], fx, fy);
+        }
+    }
+}
+
+static void draw_spr32_scale2x(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    for (int y = 0; y < 32; y++) {
+        int ym = (y > 0) ? y - 1 : 0, yp = (y < 31) ? y + 1 : 31;
+        for (int x = 0; x < 32; x++) {
+            unsigned int P = spr[y * 32 + x];
+            if (!P) continue;
+            int xm = (x > 0) ? x - 1 : 0, xp = (x < 31) ? x + 1 : 31;
+            unsigned int A = spr[ym * 32 + x], B = spr[y * 32 + xp];
+            unsigned int C = spr[y * 32 + xm], D = spr[yp * 32 + x];
+            unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
+            if (C == A && C != D && A != B) e0 = A;
+            if (A == B && A != C && B != D) e1 = B;
+            if (D == C && D != B && C != A) e2 = C;
+            if (B == D && B != A && D != C) e3 = D;
+            int px = dx + x * 2, py = dy + y * 2;
+            if ((unsigned)py < SCR_H) {
+                if ((unsigned)px < SCR_W && e0) fb[py * BUF_W + px] = e0;
+                if ((unsigned)(px + 1) < SCR_W && e1) fb[py * BUF_W + px + 1] = e1;
+            }
+            if ((unsigned)(py + 1) < SCR_H) {
+                if ((unsigned)px < SCR_W && e2) fb[(py + 1) * BUF_W + px] = e2;
+                if ((unsigned)(px + 1) < SCR_W && e3) fb[(py + 1) * BUF_W + px + 1] = e3;
             }
         }
     }
 }
 
-static unsigned int zoomTmp[SCR_H][SCR_W];
-static void zoom_world_20pct(unsigned int *fb) {
-    static int srcX[SCR_W], init = 0;
-    if (!init) {
-        init = 1;
-        for (int x = 0; x < SCR_W; x++) {
-            int sx = 252 + ((x - 252) * 5) / 6;
-            if (sx < 0) sx = 0; else if (sx >= SCR_W) sx = SCR_W - 1;
-            srcX[x] = sx;
+static void draw_spr32_40_scale2x(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    static unsigned int tmp64[64 * 64];
+    for (int y = 0; y < 32; y++) {
+        int ym = (y > 0) ? y - 1 : 0, yp = (y < 31) ? y + 1 : 31;
+        for (int x = 0; x < 32; x++) {
+            unsigned int P = spr[y * 32 + x];
+            int xm = (x > 0) ? x - 1 : 0, xp = (x < 31) ? x + 1 : 31;
+            unsigned int A = spr[ym * 32 + x], B = spr[y * 32 + xp];
+            unsigned int C = spr[y * 32 + xm], D = spr[yp * 32 + x];
+            unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
+            if (C == A && C != D && A != B) e0 = A;
+            if (A == B && A != C && B != D) e1 = B;
+            if (D == C && D != B && C != A) e2 = C;
+            if (B == D && B != A && D != C) e3 = D;
+            int idx = (y * 2) * 64 + (x * 2);
+            tmp64[idx] = e0; tmp64[idx + 1] = e1;
+            tmp64[idx + 64] = e2; tmp64[idx + 65] = e3;
         }
     }
-    for (int y = 21; y < 248; y++) {
-        memcpy(zoomTmp[y], &fb[y * BUF_W], SCR_W * sizeof(unsigned int));
+    for (int j = 0; j < 40; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        int sj = (j * 64) / 40;
+        const unsigned int *src = &tmp64[sj * 64];
+        for (int i = 0; i < 40; i++) {
+            int px = dx + i;
+            if ((unsigned)px >= SCR_W) continue;
+            unsigned int c = src[(i * 64) / 40];
+            if (c) dst[px] = c;
+        }
     }
-    for (int y = 24; y < SCR_H; y++) {
-        int sy = 124 + ((y - 124) * 5) / 6;
-        if (sy < 21) sy = 21; else if (sy > 247) sy = 247;
-        const unsigned int *src = zoomTmp[sy];
-        unsigned int *dst = &fb[y * BUF_W];
-        for (int x = 0; x < SCR_W; x++) {
-            dst[x] = src[srcX[x]];
+}
+
+static void draw_spr24_30_dir(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
+    static unsigned int tmp48[48 * 48];
+    for (int y = 0; y < 24; y++) {
+        int ym = (y > 0) ? y - 1 : 0, yp = (y < 23) ? y + 1 : 23;
+        for (int x = 0; x < 24; x++) {
+            int sx = flipX ? (23 - x) : x;
+            int xm = flipX ? ((sx < 23) ? sx + 1 : 23) : ((sx > 0) ? sx - 1 : 0);
+            int xp = flipX ? ((sx > 0) ? sx - 1 : 0)   : ((sx < 23) ? sx + 1 : 23);
+            unsigned int P = spr[y * 24 + sx];
+            unsigned int A = spr[ym * 24 + sx], B = spr[y * 24 + xp];
+            unsigned int C = spr[y * 24 + xm], D = spr[yp * 24 + sx];
+            unsigned int e0 = P, e1 = P, e2 = P, e3 = P;
+            if (C == A && C != D && A != B) e0 = A;
+            if (A == B && A != C && B != D) e1 = B;
+            if (D == C && D != B && C != A) e2 = C;
+            if (B == D && B != A && D != C) e3 = D;
+            int idx = (y * 2) * 48 + (x * 2);
+            tmp48[idx] = e0; tmp48[idx + 1] = e1;
+            tmp48[idx + 48] = e2; tmp48[idx + 49] = e3;
+        }
+    }
+    for (int j = 0; j < 30; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        int sj = (j * 48) / 30;
+        const unsigned int *src = &tmp48[sj * 48];
+        for (int i = 0; i < 30; i++) {
+            int px = dx + i;
+            if ((unsigned)px >= SCR_W) continue;
+            unsigned int c = src[(i * 48) / 30];
+            if (c) dst[px] = c;
+        }
+    }
+}
+
+static void draw_spr24_30(unsigned int *fb, const unsigned int *spr, int dx, int dy) {
+    draw_spr24_30_dir(fb, spr, dx, dy, 0);
+}
+
+static void draw_spr64_to_30(unsigned int *fb, const unsigned int *spr, int dx, int dy, int flipX) {
+    for (int j = 0; j < 30; j++) {
+        int py = dy + j;
+        if ((unsigned)py >= SCR_H) continue;
+        unsigned int *dst = &fb[py * BUF_W];
+        int sj0 = (j * 64) / 30;
+        int sj1 = (sj0 < 63) ? sj0 + 1 : 63;
+        for (int i = 0; i < 30; i++) {
+            int px = dx + i;
+            if ((unsigned)px >= SCR_W) continue;
+            int si0 = (i * 64) / 30;
+            if (flipX) si0 = 63 - si0;
+            int si1 = flipX ? ((si0 > 0) ? si0 - 1 : 0) : ((si0 < 63) ? si0 + 1 : 63);
+            unsigned int c0 = spr[sj0 * 64 + si0];
+            unsigned int c1 = spr[sj0 * 64 + si1];
+            unsigned int c2 = spr[sj1 * 64 + si0];
+            unsigned int c3 = spr[sj1 * 64 + si1];
+            int cnt = (c0 != 0) + (c1 != 0) + (c2 != 0) + (c3 != 0);
+            if (cnt >= 2) {
+                unsigned int r = 0, g = 0, b = 0;
+                unsigned int cs[4] = { c0, c1, c2, c3 };
+                for (int k = 0; k < 4; k++) if (cs[k]) {
+                    r += cs[k] & 0xFF; g += (cs[k] >> 8) & 0xFF; b += (cs[k] >> 16) & 0xFF;
+                }
+                dst[px] = ((b / cnt) << 16) | ((g / cnt) << 8) | (r / cnt);
+            }
         }
     }
 }
@@ -826,7 +961,7 @@ static void update_draw_weather_and_lighting(unsigned int *fb, int mapXPos, int 
     }
 
     /* Soft Radial Hero Light Aura + Screen-Edge Atmospheric Vignette */
-    fill_ellipse_alpha(fb, 10 * 24 + 12, 5 * 24 + 6, 44, 34, RGB(255, 235, 175), (weatherMode >= 2) ? 26 : 14);
+    fill_ellipse_alpha(fb, 255, 130, 52, 40, RGB(255, 235, 175), (weatherMode >= 2) ? 26 : 14);
     fill_rect_alpha(fb, 0, 24, 12, SCR_H - 24, RGB(6, 8, 18), 32);
     fill_rect_alpha(fb, SCR_W - 12, 24, 12, SCR_H - 24, RGB(6, 8, 18), 32);
     fill_rect_alpha(fb, 0, SCR_H - 10, SCR_W, 10, RGB(6, 8, 18), 38);
@@ -1749,121 +1884,118 @@ int main(void) {
         char buf[64];
 
         if (inOverworld) {
-            /* Render 20x12 textured 24x24 tiles with animated river water & sandy shorelines */
-            int ox = mapX - 10, oy = mapY - 5;
+            /* Render 16x10 native 30x30 smooth-filtered 32-bit tiles (25% closer, zero jagged zoom!) */
+            int ox = mapX - 8, oy = mapY - 4;
             int waterOff = (animFrame / 8) % 24;
-            for (int ty = 0; ty < 12; ty++) {
-                int sy = ty * 24 - 8;
-                for (int tx = 0; tx < 20; tx++) {
-                    int sx = tx * 24;
+            for (int ty = 0; ty < 10; ty++) {
+                int sy = ty * 30 - 4;
+                for (int tx = 0; tx < 16; tx++) {
+                    int sx = tx * 30;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx < 0 || wy < 0 || wx >= MW || wy >= MH) {
-                        draw_tile24(fb, tile_grass, sx, sy);
-                        draw_spr24(fb, spr_mountain, sx, sy);
+                        draw_tile24_30(fb, tile_grass, sx, sy);
+                        draw_spr24_30(fb, spr_mountain, sx, sy);
                     } else {
                         unsigned char t = worldMap[wy][wx];
                         if (t == 3) {
-                            draw_tile24_scroll(fb, tile_water, sx, sy, waterOff);
+                            draw_tile24_30_scroll(fb, tile_water, sx, sy, waterOff);
                             if (wx > 0 && worldMap[wy][wx - 1] != 3 && worldMap[wy][wx - 1] != 6)
-                                fill_rect_alpha(fb, sx, sy, 3, 24, RGB(205, 185, 130), 175);
+                                fill_rect_alpha(fb, sx, sy, 4, 30, RGB(205, 185, 130), 175);
                             if (wx < MW - 1 && worldMap[wy][wx + 1] != 3 && worldMap[wy][wx + 1] != 6)
-                                fill_rect_alpha(fb, sx + 21, sy, 3, 24, RGB(205, 185, 130), 175);
-                            draw_tile_vegetation(fb, wx, wy, sx, sy, 1);
+                                fill_rect_alpha(fb, sx + 26, sy, 4, 30, RGB(205, 185, 130), 175);
+                            draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 1);
                         } else if (t == 4 || t >= 10) {
-                            draw_tile24(fb, tile_castle, sx, sy);
-                            if (t == 12) draw_spr24(fb, spr_fountain, sx, sy);
-                            else if (t == 13) draw_spr24(fb, spr_market, sx, sy);
+                            draw_tile24_30(fb, tile_castle, sx, sy);
+                            if (t == 12) draw_spr24_30(fb, spr_fountain, sx, sy);
+                            else if (t == 13) draw_spr24_30(fb, spr_market, sx, sy);
                             else if (t == 14) {
                                 int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
-                                fill_ellipse_alpha(fb, sx + 12, sy + 9, 26, 18, RGB(255, 175, 55), lGlow / 2);
-                                fill_ellipse_alpha(fb, sx + 12, sy + 7, 13, 10, RGB(255, 215, 95), lGlow);
-                                draw_spr24(fb, spr_lamp, sx, sy);
-                            } else if (t == 15) draw_spr24(fb, spr_well, sx, sy);
+                                fill_ellipse_alpha(fb, sx + 15, sy + 11, 30, 22, RGB(255, 175, 55), lGlow / 2);
+                                fill_ellipse_alpha(fb, sx + 15, sy + 9, 15, 12, RGB(255, 215, 95), lGlow);
+                                draw_spr24_30(fb, spr_lamp, sx, sy);
+                            } else if (t == 15) draw_spr24_30(fb, spr_well, sx, sy);
                         } else if (t == 6) {
-                            draw_tile24(fb, tile_bridge, sx, sy);
+                            draw_tile24_30(fb, tile_bridge, sx, sy);
                         } else if (t == 7) {
-                            draw_tile24(fb, tile_path, sx, sy);
+                            draw_tile24_30(fb, tile_path, sx, sy);
                         } else if (t == 8) {
-                            draw_tile24(fb, tile_wall, sx, sy);
+                            draw_tile24_30(fb, tile_wall, sx, sy);
                         } else {
-                            draw_tile24(fb, tile_grass, sx, sy);
-                            if (t == 0) draw_tile_vegetation(fb, wx, wy, sx, sy, 0);
-                            if (t == 2) draw_spr24(fb, spr_mountain, sx, sy);
+                            draw_tile24_30(fb, tile_grass, sx, sy);
+                            if (t == 0) draw_tile_vegetation(fb, wx, wy, sx + 3, sy + 3, 0);
+                            if (t == 2) draw_spr24_30(fb, spr_mountain, sx, sy);
                             else if (t == 5) {
                                 int dIdx = -1;
                                 for (int k = 0; k < 3; k++) if (dngX[k] == wx && dngY[k] == wy) dIdx = k;
-                                if (dIdx >= 0 && bossDefeated[dIdx]) draw_spr24(fb, spr_chest, sx, sy);
+                                if (dIdx >= 0 && bossDefeated[dIdx]) draw_spr24_30(fb, spr_chest, sx, sy);
                                 else {
                                     int pulse = 55 + (int)(sinf((float)animFrame * 0.10f) * 35.0f);
-                                    fill_ellipse_alpha(fb, sx + 12, sy + 13, 13, 11, RGB(170, 60, 255), pulse);
-                                    draw_spr24(fb, spr_dungeon, sx, sy);
+                                    fill_ellipse_alpha(fb, sx + 15, sy + 16, 16, 13, RGB(170, 60, 255), pulse);
+                                    draw_spr24_30(fb, spr_dungeon, sx, sy);
                                 }
                             } else if (t == 9) {
                                 int sIdx = (wx == shrineX[1] && wy == shrineY[1]) ? 1 : 0;
                                 if (!shrineClaimed[sIdx]) {
                                     int pulse = 60 + (int)(sinf((float)animFrame * 0.12f) * 35.0f);
-                                    fill_ellipse_alpha(fb, sx + 12, sy + 12, 12, 10, RGB(70, 225, 255), pulse);
+                                    fill_ellipse_alpha(fb, sx + 15, sy + 15, 15, 12, RGB(70, 225, 255), pulse);
                                 }
-                                draw_spr24(fb, spr_shrine, sx, sy);
+                                draw_spr24_30(fb, spr_shrine, sx, sy);
                             }
                         }
                     }
                 }
             }
-            /* 2.5D Overhanging Trees (spr_tree32) & Large 64x64 Town Buildings (spr_house/spr_tavern) with soft shadows */
-            for (int ty = 0; ty < 14; ty++) {
-                int sy = ty * 24 - 8;
-                for (int tx = -1; tx < 21; tx++) {
-                    int sx = tx * 24;
+            /* 2.5D Scale2x Overhanging Trees (40x40) & Crisp 64x64 Town Buildings with soft shadows */
+            for (int ty = 0; ty < 12; ty++) {
+                int sy = ty * 30 - 4;
+                for (int tx = -1; tx < 17; tx++) {
+                    int sx = tx * 30;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
                         unsigned char wt = worldMap[wy][wx];
                         if (wt == 1) {
-                            fill_ellipse_alpha(fb, sx + 12, sy + 20, 11, 5, RGB(0, 0, 0), 115);
-                            draw_spr32(fb, spr_tree32, sx - 4, sy - 7);
+                            fill_ellipse_alpha(fb, sx + 15, sy + 25, 14, 6, RGB(0, 0, 0), 115);
+                            draw_spr32_40_scale2x(fb, spr_tree32, sx - 5, sy - 10);
                         } else if (wt == 10 || wt == 11) {
-                            fill_ellipse_alpha(fb, sx + 12, sy + 20, 30, 8, RGB(0, 0, 0), 130);
-                            draw_spr32_x2(fb, (wt == 10) ? spr_house : spr_tavern, sx - 20, sy - 40);
+                            fill_ellipse_alpha(fb, sx + 15, sy + 26, 30, 8, RGB(0, 0, 0), 130);
+                            draw_spr32_scale2x(fb, (wt == 10) ? spr_house : spr_tavern, sx - 17, sy - 34);
                         }
                     }
                 }
             }
-            /* Visible Roaming Enemies across the map (Slimes, Goblins, Wraiths) */
+            /* Visible Roaming Enemies across the map (2x2 Supersampled 64->30) */
             for (int i = 0; i < MAX_ROAM; i++) if (roam[i].alive) {
-                int sx = (roam[i].x - ox) * 24, sy = (roam[i].y - oy) * 24 - 8;
-                if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
+                int sx = (roam[i].x - ox) * 30, sy = (roam[i].y - oy) * 30 - 4;
+                if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                     int mBob = ((animFrame / 14 + i) & 1);
-                    fill_ellipse_alpha(fb, sx + 12, sy + 21, 9, 4, RGB(190, 30, 45), 115);
+                    fill_ellipse_alpha(fb, sx + 15, sy + 26, 11, 5, RGB(190, 30, 45), 115);
                     const unsigned int *mspr = (roam[i].type == 0) ? mob_slime : (roam[i].type == 1 ? mob_goblin : mob_wraith);
-                    draw_spr64_as24(fb, mspr, sx, sy - mBob, roam[i].flip);
+                    draw_spr64_to_30(fb, mspr, sx, sy - mBob, roam[i].flip);
                 }
             }
             /* 8 NPCs across the 6 regions dynamically turning to look towards your Bard */
             for (int i = 0; i < 8; i++) {
-                int sx = (npcX[i] - ox) * 24, sy = (npcY[i] - oy) * 24 - 8;
-                if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
+                int sx = (npcX[i] - ox) * 30, sy = (npcY[i] - oy) * 30 - 4;
+                if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                     int npcFlip = (mapX < npcX[i]) ? 1 : 0;
                     int bob = ((animFrame / 20 + i) & 1);
-                    fill_ellipse_alpha(fb, sx + 12, sy + 21, 8, 3, RGB(0, 0, 0), 120);
-                    draw_spr24_dir(fb, (i & 1) ? spr_troubadour : spr_elder, sx, sy - bob, npcFlip);
-                    draw_text(fb, sx + 9, sy - 8 - bob, "!", RGB(255, 235, 60));
+                    fill_ellipse_alpha(fb, sx + 15, sy + 26, 10, 4, RGB(0, 0, 0), 120);
+                    draw_spr24_30_dir(fb, (i & 1) ? spr_troubadour : spr_elder, sx, sy - bob, npcFlip);
+                    draw_text(fb, sx + 12, sy - 9 - bob, "!", RGB(255, 235, 60));
                 }
             }
-            /* Your 3-Piece Band following in formation with soft shadows */
+            /* Your 3-Piece Band following in formation with Scale2x crisp 30x30 sprites */
             int bBob = ((animFrame / 16) & 1);
-            fill_ellipse_alpha(fb, (prevX2 - ox) * 24 + 12, (prevY2 - oy) * 24 + 13, 8, 3, RGB(0, 0, 0), 120);
-            fill_ellipse_alpha(fb, (prevX1 - ox) * 24 + 12, (prevY1 - oy) * 24 + 13, 8, 3, RGB(0, 0, 0), 120);
-            fill_ellipse_alpha(fb, 10 * 24 + 12, 5 * 24 + 13, 9, 4, RGB(0, 0, 0), 135);
-            draw_spr24_dir(fb, spr_band2, (prevX2 - ox) * 24, (prevY2 - oy) * 24 - 8 - bBob, band2Flip);
-            draw_spr24_dir(fb, spr_band1, (prevX1 - ox) * 24, (prevY1 - oy) * 24 - 8 - (bBob ^ 1), band1Flip);
-            draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8 - bBob, bardFlip);
+            fill_ellipse_alpha(fb, (prevX2 - ox) * 30 + 15, (prevY2 - oy) * 30 + 22, 10, 4, RGB(0, 0, 0), 120);
+            fill_ellipse_alpha(fb, (prevX1 - ox) * 30 + 15, (prevY1 - oy) * 30 + 22, 10, 4, RGB(0, 0, 0), 120);
+            fill_ellipse_alpha(fb, 8 * 30 + 15, 4 * 30 + 22, 11, 5, RGB(0, 0, 0), 135);
+            draw_spr24_30_dir(fb, spr_band2, (prevX2 - ox) * 30, (prevY2 - oy) * 30 - 4 - bBob, band2Flip);
+            draw_spr24_30_dir(fb, spr_band1, (prevX1 - ox) * 30, (prevY1 - oy) * 30 - 4 - (bBob ^ 1), band1Flip);
+            draw_spr24_30_dir(fb, spr_bard,  8 * 30, 4 * 30 - 4 - bBob, bardFlip);
 
             /* Living Insects (Fireflies/Butterflies/Dragonflies) + Dynamic Weather (Rain/Fog/God-Rays) & Lighting */
             update_draw_bugs(fb, (mapX >= 118 && mapX < 165), (weatherMode >= 2));
             update_draw_weather_and_lighting(fb, mapX, mapY);
-
-            /* 20% Camera Zoom-In centered on the player (HUD stays razor-sharp 1:1) */
-            zoom_world_20pct(fb);
 
             /* Top Adventure HUD Window with Level, XP, HP & MP bars + Region Name */
             draw_ff_window(fb, 4, 3, 472, 22);
@@ -1924,36 +2056,36 @@ int main(void) {
                 draw_text(fb, 48, 250, dlgText, RGB(255, 255, 255));
             }
         } else if (inDungeon) {
-            /* Diablo-Style Procedural Dungeon Rendering with Fog-of-War & Torch Radius */
-            int ox = dngPx - 10, oy = dngPy - 5;
-            for (int ty = 0; ty < 12; ty++) {
-                int sy = ty * 24 - 8;
-                for (int tx = 0; tx < 20; tx++) {
-                    int sx = tx * 24;
+            /* Diablo-Style Procedural Dungeon Rendering (Native 30x30 smooth-filtered tiles) */
+            int ox = dngPx - 8, oy = dngPy - 4;
+            for (int ty = 0; ty < 10; ty++) {
+                int sy = ty * 30 - 4;
+                for (int tx = 0; tx < 16; tx++) {
+                    int sx = tx * 30;
                     int wx = ox + tx, wy = oy + ty;
                     if (wx < 0 || wy < 0 || wx >= DW || wy >= DH || !dngSeen[wy][wx]) {
-                        fill_rect(fb, sx, sy, 24, 24, RGB(8, 7, 14));
+                        fill_rect(fb, sx, sy, 30, 30, RGB(8, 7, 14));
                     } else {
                         unsigned char dt = dngMap[wy][wx];
                         if (dt == 0) {
-                            draw_tile24(fb, tile_wall, sx, sy);
-                            fill_rect_alpha(fb, sx, sy, 24, 24, RGB(14, 10, 22), 105);
+                            draw_tile24_30(fb, tile_wall, sx, sy);
+                            fill_rect_alpha(fb, sx, sy, 30, 30, RGB(14, 10, 22), 105);
                         } else {
-                            draw_tile24(fb, tile_castle, sx, sy);
-                            fill_rect_alpha(fb, sx, sy, 24, 24, (curDngId == 0) ? RGB(28, 16, 14) : (curDngId == 1 ? RGB(14, 24, 42) : RGB(30, 10, 28)), 95);
+                            draw_tile24_30(fb, tile_castle, sx, sy);
+                            fill_rect_alpha(fb, sx, sy, 30, 30, (curDngId == 0) ? RGB(28, 16, 14) : (curDngId == 1 ? RGB(14, 24, 42) : RGB(30, 10, 28)), 95);
                             if (dt == 2) {
                                 int pulse = 65 + (int)(sinf((float)animFrame * 0.12f) * 35.0f);
-                                fill_ellipse_alpha(fb, sx + 12, sy + 12, 13, 11, (dngFloor < dngMaxFloors) ? RGB(60, 225, 255) : RGB(215, 50, 255), pulse);
-                                draw_spr24(fb, (dngFloor < dngMaxFloors) ? spr_stair_down : spr_boss_altar, sx, sy);
+                                fill_ellipse_alpha(fb, sx + 15, sy + 15, 16, 13, (dngFloor < dngMaxFloors) ? RGB(60, 225, 255) : RGB(215, 50, 255), pulse);
+                                draw_spr24_30(fb, (dngFloor < dngMaxFloors) ? spr_stair_down : spr_boss_altar, sx, sy);
                             } else if (dt == 3) {
-                                draw_spr24(fb, spr_chest_32bit, sx, sy);
+                                draw_spr24_30(fb, spr_chest_32bit, sx, sy);
                             } else if (dt == 4) {
-                                fill_ellipse_alpha(fb, sx + 12, sy + 12, 11, 9, RGB(80, 235, 130), 75);
-                                draw_text(fb, sx + 9, sy + 8, "^", RGB(140, 255, 170));
+                                fill_ellipse_alpha(fb, sx + 15, sy + 15, 13, 11, RGB(80, 235, 130), 75);
+                                draw_text(fb, sx + 12, sy + 11, "^", RGB(140, 255, 170));
                             }
                         }
                         int dist2 = (wx - dngPx) * (wx - dngPx) + (wy - dngPy) * (wy - dngPy);
-                        if (dist2 > 18) fill_rect_alpha(fb, sx, sy, 24, 24, RGB(6, 5, 12), 145);
+                        if (dist2 > 18) fill_rect_alpha(fb, sx, sy, 30, 30, RGB(6, 5, 12), 145);
                     }
                 }
             }
@@ -1961,24 +2093,21 @@ int main(void) {
             for (int m = 0; m < 5; m++) if (dngMobs[m].alive) {
                 int dist2 = (dngMobs[m].x - dngPx) * (dngMobs[m].x - dngPx) + (dngMobs[m].y - dngPy) * (dngMobs[m].y - dngPy);
                 if (dist2 <= 26) {
-                    int sx = (dngMobs[m].x - ox) * 24, sy = (dngMobs[m].y - oy) * 24 - 8;
-                    if (sx >= -24 && sx < SCR_W && sy >= -24 && sy < SCR_H) {
+                    int sx = (dngMobs[m].x - ox) * 30, sy = (dngMobs[m].y - oy) * 30 - 4;
+                    if (sx >= -30 && sx < SCR_W && sy >= -30 && sy < SCR_H) {
                         int mBob = ((animFrame / 14 + m) & 1);
-                        fill_ellipse_alpha(fb, sx + 12, sy + 21, 9, 4, RGB(210, 35, 50), 120);
+                        fill_ellipse_alpha(fb, sx + 15, sy + 26, 11, 5, RGB(210, 35, 50), 120);
                         const unsigned int *mspr = (dngMobs[m].type == 0) ? mob_slime : (dngMobs[m].type == 1 ? mob_goblin : mob_wraith);
-                        draw_spr64_as24(fb, mspr, sx, sy - mBob, dngMobs[m].flip);
+                        draw_spr64_to_30(fb, mspr, sx, sy - mBob, dngMobs[m].flip);
                     }
                 }
             }
             /* Band in Dungeon */
             int dBob = ((animFrame / 16) & 1);
-            fill_ellipse_alpha(fb, 10 * 24 + 12, 5 * 24 + 13, 9, 4, RGB(0, 0, 0), 145);
-            draw_spr24_dir(fb, spr_band2, (dngP2x - ox) * 24, (dngP2y - oy) * 24 - 8 - dBob, band2Flip);
-            draw_spr24_dir(fb, spr_band1, (dngP1x - ox) * 24, (dngP1y - oy) * 24 - 8 - (dBob ^ 1), band1Flip);
-            draw_spr24_dir(fb, spr_bard,  10 * 24, 5 * 24 - 8 - dBob, bardFlip);
-
-            /* 20% Camera Zoom-In centered on the player in Dungeons too */
-            zoom_world_20pct(fb);
+            fill_ellipse_alpha(fb, 8 * 30 + 15, 4 * 30 + 22, 11, 5, RGB(0, 0, 0), 145);
+            draw_spr24_30_dir(fb, spr_band2, (dngP2x - ox) * 30, (dngP2y - oy) * 30 - 4 - dBob, band2Flip);
+            draw_spr24_30_dir(fb, spr_band1, (dngP1x - ox) * 30, (dngP1y - oy) * 30 - 4 - (dBob ^ 1), band1Flip);
+            draw_spr24_30_dir(fb, spr_bard,  8 * 30, 4 * 30 - 4 - dBob, bardFlip);
 
             /* Top Dungeon HUD */
             draw_ff_window(fb, 4, 3, 472, 22);
