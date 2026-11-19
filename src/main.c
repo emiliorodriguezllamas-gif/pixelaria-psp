@@ -470,6 +470,8 @@ static const int bossWeak[3] = { 0, 1, 2 };
 
 static int chapter = 0, isMobBattle = 0, bossHitFlash = 0;
 static int pHp = 100, pMaxHp = 100, pMp = 50, pMaxMp = 50, bHp = 120, bMaxHp = 120;
+static int numEnemies = 1, targetEnemy = 0, turnMember = 0, guardActive = 0, attackMode = 0;
+static int eHp[3] = { 100, 0, 0 }, eMaxHp[3] = { 100, 0, 0 }, eType[3] = { 0, 0, 0 }, eIsBoss[3] = { 0, 0, 0 };
 static int pLevel = 1, pXp = 0, pNextXp = 60, pBaseAtk = 5;
 static int combo = 0, score = 0, best = 0, tick = 0, phaseTimer = 0;
 static int relicDmg = 0, relicVamp = 0, relicShield = 0;
@@ -801,11 +803,36 @@ static void enter_dungeon(int dId) {
     play_sfx(420.0f, 1400);
 }
 
+static void init_battle_enemies(int isMob, int ch) {
+    static const int mobHpTbl[3]  = { 75, 130, 200 };
+    static const int bossHpTbl[3] = { 260, 420, 660 };
+    if (isMob) {
+        numEnemies = 2 + (xr() & 1); /* 2 or 3 enemies from the very beginning! */
+        for (int i = 0; i < numEnemies; i++) {
+            eIsBoss[i] = 0;
+            eType[i] = (i == 0) ? ch : ((ch + (xr() & 1)) % 3);
+            if (eType[i] > ch) eType[i] = ch;
+            eHp[i] = eMaxHp[i] = mobHpTbl[eType[i]];
+        }
+    } else {
+        numEnemies = 3; /* 1 Boss + 2 Escorts! */
+        eIsBoss[0] = 1; eType[0] = ch; eHp[0] = eMaxHp[0] = bossHpTbl[ch];
+        for (int i = 1; i < 3; i++) {
+            eIsBoss[i] = 0; eType[i] = ch;
+            eHp[i] = eMaxHp[i] = mobHpTbl[ch];
+        }
+    }
+    targetEnemy = 0;
+    turnMember = 0;
+    guardActive = 0;
+    attackMode = 0;
+    bHp = eHp[0]; bMaxHp = eMaxHp[0];
+}
+
 static void start_mob_battle_type(int mtype) {
     isMobBattle = 1;
     chapter = mtype;
-    static const int mobHpTbl[3] = { 95, 165, 250 };
-    bHp = bMaxHp = mobHpTbl[chapter];
+    init_battle_enemies(1, mtype);
     combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
     bardX = 240.0f; bardY = 195.0f;
     memset(notes, 0, sizeof(notes));
@@ -822,8 +849,7 @@ static void start_mob_battle(void) {
 static void start_chapter(int ch) {
     isMobBattle = 0;
     chapter = ch;
-    static const int bossHpTbl[3] = { 290, 480, 760 };
-    bHp = bMaxHp = bossHpTbl[ch];
+    init_battle_enemies(0, ch);
     combo = 0; tick = 0; judgeT = 0; phaseTimer = 0; bossHitFlash = 0;
     bardX = 240.0f; bardY = 195.0f;
     memset(notes, 0, sizeof(notes));
@@ -1079,37 +1105,108 @@ int main(void) {
                 }
             }
         } else if (inFFMenu) {
+            if (judgeT > 0) judgeT--;
             if (pressed & PSP_CTRL_UP)   { ffCursor = (ffCursor + 3) % 4; play_sfx(440.0f, 400); }
             if (pressed & PSP_CTRL_DOWN) { ffCursor = (ffCursor + 1) % 4; play_sfx(440.0f, 400); }
+            if (pressed & (PSP_CTRL_LEFT | PSP_CTRL_RIGHT)) {
+                int dir = (pressed & PSP_CTRL_RIGHT) ? 1 : -1;
+                for (int k = 1; k <= numEnemies; k++) {
+                    int cand = (targetEnemy + dir * k + numEnemies * 2) % numEnemies;
+                    if (eHp[cand] > 0) { targetEnemy = cand; break; }
+                }
+                play_sfx(520.0f, 400);
+            }
             if (pressed & (PSP_CTRL_LTRIGGER | PSP_CTRL_RTRIGGER)) {
                 curStyle = (curStyle + 1) % 3; play_sfx(520.0f, 600);
             }
             if (pressed & PSP_CTRL_CROSS) {
-                if (ffCursor == 0) {
-                    inFFMenu = 0; inAttackResolve = 0; phaseTimer = 0; tick = 0; pendingDmg = 0; combo = 0;
-                    memset(notes, 0, sizeof(notes));
-                    play_sfx(660.0f, 800);
-                } else if (ffCursor == 1) {
-                    curStyle = (curStyle + 1) % 3;
-                    play_sfx(520.0f, 600);
-                } else if (ffCursor == 2) {
-                    if (pMp >= 15) {
-                        pMp -= 15; pHp = (pHp + 45 > pMaxHp) ? pMaxHp : pHp + 45;
-                        inFFMenu = 0; inDefense = 1; phaseTimer = 0;
-                        memset(projAlive, 0, sizeof(projAlive));
-                        play_sfx(880.0f, 1200);
-                    } else {
-                        play_sfx(180.0f, 600);
+                int advanceTurn = 0;
+                if (turnMember == 0) {
+                    /* KAEL (Bardo - Guitarra) */
+                    if (ffCursor == 0) {
+                        attackMode = 0; inFFMenu = 0; inAttackResolve = 0; phaseTimer = 0; tick = 0; pendingDmg = 0; combo = 0;
+                        memset(notes, 0, sizeof(notes)); play_sfx(660.0f, 800);
+                    } else if (ffCursor == 1) {
+                        curStyle = (curStyle + 1) % 3; play_sfx(520.0f, 600);
+                    } else if (ffCursor == 2) {
+                        if (pMp >= 12) {
+                            pMp -= 12; attackMode = 2;
+                            inFFMenu = 0; inAttackResolve = 0; phaseTimer = 0; tick = 0; pendingDmg = 0; combo = 0;
+                            memset(notes, 0, sizeof(notes)); play_sfx(740.0f, 900);
+                        } else play_sfx(180.0f, 600);
+                    } else if (ffCursor == 3) {
+                        if (isMobBattle) {
+                            inFFMenu = 0;
+                            if (wasInDungeon) inDungeon = 1; else inOverworld = 1;
+                            snprintf(dlgText, sizeof(dlgText), "Escapaste del combate!"); dlgTimer = 100;
+                            play_sfx(300.0f, 800);
+                        } else play_sfx(180.0f, 600);
                     }
-                } else if (ffCursor == 3) {
-                    if (isMobBattle) {
-                        inFFMenu = 0;
-                        if (wasInDungeon) inDungeon = 1;
-                        else inOverworld = 1;
-                        snprintf(dlgText, sizeof(dlgText), "Escapaste del combate!"); dlgTimer = 100;
-                        play_sfx(300.0f, 800);
+                } else if (turnMember == 1) {
+                    /* LYRA (Elfa - Laud) */
+                    if (ffCursor == 0) {
+                        if (pMp >= 10) {
+                            pMp -= 10; attackMode = 1; /* Hits ALL enemies! */
+                            inFFMenu = 0; inAttackResolve = 0; phaseTimer = 0; tick = 0; pendingDmg = 0; combo = 0;
+                            memset(notes, 0, sizeof(notes)); play_sfx(700.0f, 800);
+                        } else play_sfx(180.0f, 600);
+                    } else if (ffCursor == 1) {
+                        if (pMp >= 15) {
+                            pMp -= 15; pHp = (pHp + 45 > pMaxHp) ? pMaxHp : pHp + 45;
+                            snprintf(judge, sizeof(judge), "LYRA CURA +45 HP!"); judgeT = 50;
+                            play_sfx(880.0f, 1200); advanceTurn = 1;
+                        } else play_sfx(180.0f, 600);
+                    } else if (ffCursor == 2) {
+                        pMp = (pMp + 20 > pMaxMp) ? pMaxMp : pMp + 20;
+                        snprintf(judge, sizeof(judge), "CANTO MANA +20 MP!"); judgeT = 50;
+                        play_sfx(780.0f, 1000); advanceTurn = 1;
                     } else {
-                        play_sfx(180.0f, 600);
+                        if (pMp >= 8) {
+                            pMp -= 8; guardActive = 1;
+                            snprintf(judge, sizeof(judge), "ESCUDO ARMONICO!"); judgeT = 50;
+                            play_sfx(640.0f, 900); advanceTurn = 1;
+                        } else play_sfx(180.0f, 600);
+                    }
+                } else {
+                    /* THORIN (Bajista Acorazado) */
+                    if (ffCursor == 0) {
+                        attackMode = 0; inFFMenu = 0; inAttackResolve = 0; phaseTimer = 0; tick = 0; pendingDmg = 0; combo = 0;
+                        memset(notes, 0, sizeof(notes)); play_sfx(540.0f, 800);
+                    } else if (ffCursor == 1) {
+                        guardActive = 1;
+                        snprintf(judge, sizeof(judge), "THORIN CUBRE (-50%)!"); judgeT = 50;
+                        play_sfx(480.0f, 800); advanceTurn = 1;
+                    } else if (ffCursor == 2) {
+                        int bdmg = 14 + pLevel * 2;
+                        eHp[targetEnemy] -= bdmg; if (eHp[targetEnemy] < 0) eHp[targetEnemy] = 0;
+                        bossHitFlash = 10;
+                        snprintf(judge, sizeof(judge), "EMBESTIDA -%d HP!", bdmg); judgeT = 50;
+                        play_sfx(320.0f, 900); advanceTurn = 1;
+                    } else {
+                        pMp = (pMp + 10 > pMaxMp) ? pMaxMp : pMp + 10;
+                        snprintf(judge, sizeof(judge), "CONCENTRAR +10 MP"); judgeT = 50;
+                        play_sfx(520.0f, 600); advanceTurn = 1;
+                    }
+                }
+                if (advanceTurn) {
+                    int allDead = 1;
+                    for (int i = 0; i < numEnemies; i++) if (eHp[i] > 0) { allDead = 0; if (eHp[targetEnemy] <= 0) targetEnemy = i; }
+                    if (allDead) {
+                        if (isMobBattle) {
+                            int xpGain = 25 * numEnemies + chapter * 20;
+                            score += 150 * numEnemies;
+                            inFFMenu = 0;
+                            if (wasInDungeon) inDungeon = 1; else inOverworld = 1;
+                            snprintf(dlgText, sizeof(dlgText), "Victoria! +%d XP", xpGain);
+                            dlgTimer = 140; gain_xp(xpGain);
+                        } else { inFFMenu = 0; inRelic = 1; }
+                    } else {
+                        turnMember++;
+                        ffCursor = 0;
+                        if (turnMember >= 3) {
+                            turnMember = 0; inFFMenu = 0; inDefense = 1; phaseTimer = 0;
+                            bardX = 240.0f; bardY = 195.0f; memset(projAlive, 0, sizeof(projAlive));
+                        }
                     }
                 }
             }
@@ -1144,6 +1241,7 @@ int main(void) {
                     static const int bossEdmg[3] = { 28, 36, 46 };
                     int baseEdmg = isMobBattle ? mobEdmg[chapter] : bossEdmg[chapter];
                     int edmg = relicShield ? ((baseEdmg * 6) / 10) : baseEdmg;
+                    if (guardActive) edmg = (edmg + 1) / 2;
                     pHp -= edmg; play_sfx(140.0f, 1200);
                     snprintf(judge, sizeof(judge), "-%d HP!", edmg);
                     judgeT = 26;
@@ -1152,19 +1250,26 @@ int main(void) {
             }
             if (phaseTimer >= 240) {
                 inDefense = 0; inFFMenu = 1; phaseTimer = 0;
+                turnMember = 0; guardActive = 0; ffCursor = 0;
                 pMp = (pMp + 5 > pMaxMp) ? pMaxMp : pMp + 5;
                 memset(projAlive, 0, sizeof(projAlive));
             }
         } else if (inAttackResolve) {
-            /* Resolve accumulated Guitar Hero combo damage with sonic beam + impact + floating number! */
+            /* Resolve accumulated Guitar Hero combo damage onto target or ALL enemies! */
             if (judgeT > 0) judgeT--;
             phaseTimer++;
             if (phaseTimer == 18) {
                 if (pendingDmg > 0) {
-                    bHp -= pendingDmg;
-                    if (bHp < 0) bHp = 0;
+                    int dmgApplied = (attackMode == 2) ? (pendingDmg * 3) / 2 : pendingDmg;
+                    if (attackMode == 1) {
+                        for (int i = 0; i < numEnemies; i++) if (eHp[i] > 0) {
+                            eHp[i] -= dmgApplied; if (eHp[i] < 0) eHp[i] = 0;
+                        }
+                    } else {
+                        eHp[targetEnemy] -= dmgApplied; if (eHp[targetEnemy] < 0) eHp[targetEnemy] = 0;
+                    }
                     bossHitFlash = 16;
-                    spawn_sparks(390.0f, 118.0f, RGB(255, 225, 80), 18);
+                    spawn_sparks(385.0f, 118.0f, RGB(255, 225, 80), 18);
                     play_sfx(980.0f, 1800);
                 } else {
                     play_sfx(220.0f, 900);
@@ -1174,24 +1279,32 @@ int main(void) {
                 inAttackResolve = 0;
                 phaseTimer = 0;
                 pendingDmg = 0;
-                if (bHp <= 0) {
-                    bHp = 0;
+                int allDead = 1;
+                for (int i = 0; i < numEnemies; i++) {
+                    if (eHp[i] > 0) { allDead = 0; if (eHp[targetEnemy] <= 0) targetEnemy = i; }
+                }
+                if (allDead) {
                     if (isMobBattle) {
                         static const int mobXpTbl[3] = { 25, 55, 110 };
-                        int xpGain = mobXpTbl[chapter];
-                        score += 150 + chapter * 100;
-                        if (wasInDungeon) inDungeon = 1;
-                        else inOverworld = 1;
-                        snprintf(dlgText, sizeof(dlgText), "Enemigo vencido! +%d XP", xpGain);
-                        dlgTimer = 140;
-                        gain_xp(xpGain);
+                        int xpGain = mobXpTbl[chapter] * numEnemies;
+                        score += (150 + chapter * 100) * numEnemies;
+                        if (wasInDungeon) inDungeon = 1; else inOverworld = 1;
+                        snprintf(dlgText, sizeof(dlgText), "Grupo vencido! +%d XP", xpGain);
+                        dlgTimer = 140; gain_xp(xpGain);
                     } else {
                         inRelic = 1;
                     }
                 } else {
-                    inDefense = 1;
-                    bardX = 240.0f; bardY = 195.0f;
-                    memset(projAlive, 0, sizeof(projAlive));
+                    turnMember++;
+                    ffCursor = 0;
+                    if (turnMember >= 3) {
+                        turnMember = 0;
+                        inDefense = 1;
+                        bardX = 240.0f; bardY = 195.0f;
+                        memset(projAlive, 0, sizeof(projAlive));
+                    } else {
+                        inFFMenu = 1;
+                    }
                 }
             }
         } else {
@@ -1217,11 +1330,16 @@ int main(void) {
             }
 
             static int lastBeatStep = -1;
-            int stepMod = isMobBattle ? 2 : ((chapter == 0) ? 2 : 1); /* Mobs & Boss 1 every 2 beats, Boss 2-3 every beat! */
+            int stepMod = isMobBattle ? 2 : ((chapter == 0) ? 2 : 1);
             if (bgm_step != lastBeatStep && (bgm_step % stepMod) == 0 && phaseTimer < 330) {
-                lastBeatStep = bgm_step;
-                for (int i = 0; i < 24; i++) if (!notes[i].active) {
-                    notes[i].active = 1; notes[i].lane = (bgm_step + (xr() & 1)) & 3; notes[i].y = 104.0f; break;
+                /* Enforce minimum 38px vertical spacing so 2 buttons NEVER overlap/coincide! */
+                int tooClose = 0;
+                for (int i = 0; i < 24; i++) if (notes[i].active && notes[i].y < 142.0f) { tooClose = 1; break; }
+                if (!tooClose) {
+                    lastBeatStep = bgm_step;
+                    for (int i = 0; i < 24; i++) if (!notes[i].active) {
+                        notes[i].active = 1; notes[i].lane = (bgm_step + (xr() & 1)) & 3; notes[i].y = 104.0f; break;
+                    }
                 }
             }
 
@@ -1236,8 +1354,9 @@ int main(void) {
                     notes[hit].active = 0; combo++;
                     laneFlash[l] = 14;
                     int isPerf = (bestD < 14.0f);
-                    int base = (isPerf ? 9 : 6) + pBaseAtk + relicDmg + (combo / 4);
-                    if (curStyle == bossWeak[chapter]) base *= 2;
+                    /* Balanced chip damage across multiple combos & turns */
+                    int base = (isPerf ? 4 : 2) + (pLevel - 1) + (relicDmg / 2) + (combo / 6);
+                    if (curStyle == eType[targetEnemy]) base *= 2;
                     pendingDmg += base;
                     score += base * 10;
                     if (isPerf && relicVamp > 0) { pHp += relicVamp; if (pHp > pMaxHp) pHp = pMaxHp; }
@@ -1656,19 +1775,20 @@ int main(void) {
                 sprintf(buf, "%d/%d", pMp, pMaxMp);
                 draw_text(fb, 146, 34, buf, RGB(140, 235, 255));
 
-                /* Top-Right Boss/Enemy Status Window */
+                /* Top-Right Target Enemy Status Window */
                 draw_ff_window(fb, 266, 6, 206, 42);
-                draw_text(fb, 276, 11, isMobBattle ? mobNames[chapter] : bossNames[chapter], RGB(255, 255, 255));
+                sprintf(buf, "%s [%d/%d]", eIsBoss[targetEnemy] ? bossNames[chapter] : mobNames[chapter], targetEnemy + 1, numEnemies);
+                draw_text(fb, 276, 11, buf, RGB(255, 255, 255));
                 draw_text(fb, 276, 23, "HP", RGB(255, 130, 140));
                 fill_rect(fb, 294, 23, 104, 7, RGB(45, 14, 20));
-                fill_rect(fb, 294, 23, (bHp * 104) / bMaxHp, 7, RGB(240, 50, 70));
+                fill_rect(fb, 294, 23, eMaxHp[targetEnemy] > 0 ? (eHp[targetEnemy] * 104) / eMaxHp[targetEnemy] : 0, 7, RGB(240, 50, 70));
                 draw_border(fb, 294, 23, 104, 7, RGB(255, 230, 235));
-                sprintf(buf, "%d/%d", bHp, bMaxHp);
+                sprintf(buf, "%d/%d", eHp[targetEnemy], eMaxHp[targetEnemy]);
                 draw_text(fb, 402, 23, buf, RGB(255, 255, 255));
-                sprintf(buf, "DEBILIDAD: %s (x2!)", styleNames[bossWeak[chapter]]);
+                sprintf(buf, "DEBIL:%s(x2) </>OBJ", styleNames[eType[targetEnemy]]);
                 draw_text(fb, 276, 35, buf, RGB(255, 215, 80));
 
-                /* Soft Alpha Shadows + Glowing Runic Pads + Idle Breathing Animation on Band & Boss! */
+                /* Soft Alpha Shadows + Glowing Runic Pads + Idle Breathing Animation on Band! */
                 int bIdle0 = (int)(sinf((float)animFrame * 0.08f) * 2.0f);
                 int bIdle1 = (int)(sinf((float)animFrame * 0.08f + 1.5f) * 2.0f);
                 int bIdle2 = (int)(sinf((float)animFrame * 0.08f + 3.0f) * 2.0f);
@@ -1676,65 +1796,99 @@ int main(void) {
                 fill_ellipse_alpha(fb, 42,  144, 21, 6, RGB(0, 0, 0), 130);
                 fill_ellipse_alpha(fb, 122, 148, 21, 6, RGB(0, 0, 0), 130);
                 fill_ellipse_alpha(fb, 82,  158, 21, 6, RGB(0, 0, 0), 130);
-                fill_ellipse_alpha(fb, 42,  144, 22, 6, RGB(175, 105, 255), 60);
-                fill_ellipse_alpha(fb, 122, 148, 22, 6, RGB(65, 225, 255), 65);
-                fill_ellipse_alpha(fb, 82,  158, 22, 6, RGB(80, 235, 145), 60);
-                draw_ellipse_ring(fb, 42,  144, 22, 6, RGB(175, 105, 255));
-                draw_ellipse_ring(fb, 122, 148, 22, 6, RGB(65, 225, 255));
-                draw_ellipse_ring(fb, 82,  158, 22, 6, RGB(80, 235, 145));
+                fill_ellipse_alpha(fb, 42,  144, 22, 6, (turnMember == 2) ? RGB(255, 220, 70) : RGB(175, 105, 255), (turnMember == 2) ? 110 : 60);
+                fill_ellipse_alpha(fb, 122, 148, 22, 6, (turnMember == 0) ? RGB(255, 220, 70) : RGB(65, 225, 255),  (turnMember == 0) ? 110 : 65);
+                fill_ellipse_alpha(fb, 82,  158, 22, 6, (turnMember == 1) ? RGB(255, 220, 70) : RGB(80, 235, 145),  (turnMember == 1) ? 110 : 60);
+                draw_ellipse_ring(fb, 42,  144, 22, 6, (turnMember == 2) ? RGB(255, 235, 90) : RGB(175, 105, 255));
+                draw_ellipse_ring(fb, 122, 148, 22, 6, (turnMember == 0) ? RGB(255, 235, 90) : RGB(65, 225, 255));
+                draw_ellipse_ring(fb, 82,  158, 22, 6, (turnMember == 1) ? RGB(255, 235, 90) : RGB(80, 235, 145));
 
                 draw_spr48(fb, spr_band2_48, 18, 100 + bIdle2);
                 draw_spr48(fb, spr_bard_48,  98, 104 + bIdle0);
                 draw_spr48(fb, spr_band1_48, 58, 114 + bIdle1);
+                if (inFFMenu || inGuitar) {
+                    int px[3] = { 119, 79, 39 };
+                    int py[3] = { 92 + bIdle0, 102 + bIdle1, 88 + bIdle2 };
+                    draw_text(fb, px[turnMember], py[turnMember] + ((animFrame & 8) ? 2 : 0), "v", RGB(255, 235, 80));
+                }
+                if (guardActive) {
+                    draw_ellipse_ring(fb, 82, 150, 56, 14, RGB(90, 210, 255));
+                }
 
-                /* Boss Summoning Circle & Floating/Breathing 64x64 Boss on Right */
+                /* Multi-Enemy Staggered Formation (Final Fantasy Style) on Right */
                 int bossBob = (int)(sinf((float)animFrame * 0.06f) * 3.0f);
-                fill_ellipse_alpha(fb, 390, 148, 40, 10, RGB(0, 0, 0), 150);
-                fill_ellipse_alpha(fb, 390, 148, 42, 11, RGB(255, 55, 80), 65);
-                draw_ellipse_ring(fb, 390, 148, 42, 11, RGB(255, 65, 85));
-                draw_ellipse_ring(fb, 390, 148, 32, 8,  RGB(255, 185, 90));
-                const unsigned int *espr;
-                if (isMobBattle) espr = (chapter == 0) ? mob_slime : (chapter == 1 ? mob_goblin : mob_wraith);
-                else             espr = (chapter == 0) ? boss_golem : (chapter == 1 ? boss_automaton : boss_dragon);
-                int shakeX = (inAttackResolve && phaseTimer >= 18 && phaseTimer < 38) ? ((phaseTimer & 2) ? 6 : -6) : 0;
-                draw_boss64(fb, espr, 358 + shakeX, 86 + bossBob, bossHitFlash > 0);
+                int exPos[3] = { 356, 288, 408 };
+                int eyPos[3] = { 82,  96,  100 };
+                for (int ei = 0; ei < numEnemies; ei++) {
+                    if (eHp[ei] <= 0) continue;
+                    int isTgt = (ei == targetEnemy);
+                    int cx = exPos[ei] + 32;
+                    int cy = eyPos[ei] + 62;
+                    fill_ellipse_alpha(fb, cx, cy, 32, 8, RGB(0, 0, 0), 145);
+                    fill_ellipse_alpha(fb, cx, cy, 34, 9, isTgt ? RGB(255, 215, 65) : RGB(255, 55, 80), isTgt ? 95 : 55);
+                    draw_ellipse_ring(fb, cx, cy, 34, 9, isTgt ? RGB(255, 235, 90) : RGB(255, 65, 85));
+                    const unsigned int *espr;
+                    if (!eIsBoss[ei]) espr = (chapter == 0) ? mob_slime : (chapter == 1 ? mob_goblin : mob_wraith);
+                    else              espr = (chapter == 0) ? boss_golem : (chapter == 1 ? boss_automaton : boss_dragon);
+                    int hitThis = (attackMode == 1 || ei == targetEnemy);
+                    int shakeX = (inAttackResolve && hitThis && phaseTimer >= 18 && phaseTimer < 38) ? ((phaseTimer & 2) ? 6 : -6) : 0;
+                    draw_boss64(fb, espr, exPos[ei] + shakeX, eyPos[ei] + bossBob + (ei & 1 ? 2 : 0), bossHitFlash > 0 && hitThis);
+                    /* Individual Enemy HP Bar */
+                    fill_rect(fb, exPos[ei] + 8, eyPos[ei] + 64, 48, 5, RGB(35, 10, 18));
+                    fill_rect(fb, exPos[ei] + 8, eyPos[ei] + 64, eMaxHp[ei] > 0 ? (eHp[ei] * 48) / eMaxHp[ei] : 0, 5, RGB(240, 55, 75));
+                    draw_border(fb, exPos[ei] + 8, eyPos[ei] + 64, 48, 5, isTgt ? RGB(255, 235, 90) : RGB(200, 180, 190));
+                    if (isTgt) {
+                        draw_text(fb, exPos[ei] + 29, eyPos[ei] - 8 + ((animFrame & 8) ? 2 : 0), "v", RGB(255, 235, 80));
+                    }
+                }
+                if (judgeT > 0 && inFFMenu) {
+                    fill_rect(fb, 150, 54, 180, 16, RGB(18, 24, 58));
+                    draw_border(fb, 150, 54, 180, 16, RGB(255, 225, 85));
+                    draw_text(fb, 158, 58, judge, RGB(255, 240, 100));
+                }
 
                 if (inFFMenu) {
-                    /* Classic Final Fantasy Turn-Based Command Menu + Partitura Preview with REAL 32-Bit PSP Button Sprites! */
+                    /* Classic Final Fantasy Per-Character Turn Menu + Partitura Preview */
                     draw_ff_window(fb, 8, 170, 224, 96);
                     fill_rect(fb, 12, 174, 216, 12, RGB(38, 52, 128));
-                    draw_text(fb, 16, 176, "COMANDOS DE BATALLA (TURNO)", RGB(255, 220, 80));
+                    const char *turnHeaders[3] = {
+                        "TURNO 1/3: KAEL (GUITARRA)",
+                        "TURNO 2/3: LYRA (LAUD)",
+                        "TURNO 3/3: THORIN (BAJO)"
+                    };
+                    draw_text(fb, 16, 176, turnHeaders[turnMember], RGB(255, 220, 80));
 
                     fill_rect(fb, 14, 189 + ffCursor * 18, 212, 15, RGB(65, 85, 185));
                     draw_border(fb, 14, 189 + ffCursor * 18, 212, 15, RGB(255, 215, 85));
 
-                    const char *opts[4] = {
-                        "ATACAR (Tocar Melodia)",
-                        "CAMBIAR ESTILO MUSICAL",
-                        "HIMNO CURATIVO (+45 HP)",
-                        "HUIR DEL COMBATE"
+                    const char *optsByMember[3][4] = {
+                        { "SOLO GUITARRA (Objetivo)", "CAMBIAR ESTILO MUSICAL", "ROMPE-ARMADURA (1.5x)", "HUIR DEL COMBATE" },
+                        { "ARPEGIO GLOBAL (Todos)",   "HIMNO CURATIVO (+45HP)", "CANTO DE MANA (+20MP)",  "ESCUDO ARMONICO" },
+                        { "BAJO SISMICO (Objetivo)",  "GUARDIA FERREA (-50%)",  "GOLPE ESCUDO (Todos)",   "CONCENTRACION (+10MP)" }
+                    };
+                    const char *costsByMember[3][4] = {
+                        { "ATK", "EST", "12MP", "ESC" },
+                        { "10MP", "15MP", "+MP", "8MP" },
+                        { "ATK", "DEF", "AOE", "+MP" }
                     };
                     for (int i = 0; i < 4; i++) {
                         int ry = 193 + i * 18;
-                        draw_text(fb, 20, ry, opts[i], ffCursor == i ? RGB(255, 240, 90) : RGB(255, 255, 255));
+                        draw_text(fb, 20, ry, optsByMember[turnMember][i], ffCursor == i ? RGB(255, 240, 90) : RGB(255, 255, 255));
+                        draw_text(fb, 194, ry, costsByMember[turnMember][i], RGB(130, 235, 215));
                     }
-                    draw_spr16(fb, spr_btn_cr16, 204, 188);
-                    draw_spr_lr24(fb, 198, 207);
-                    draw_text(fb, 196, 229, "15MP", RGB(130, 235, 215));
-                    draw_spr16(fb, spr_btn_ci16, 204, 242);
 
                     /* Right Tactical & Partitura Window with Real 20x20 PSP Button Sprites */
                     draw_ff_window(fb, 238, 170, 234, 96);
                     fill_rect(fb, 242, 174, 226, 12, RGB(38, 52, 128));
-                    draw_text(fb, 248, 176, "ARMONIA Y PARTITURA ENEMIGA", RGB(100, 235, 255));
+                    draw_text(fb, 248, 176, "TACTICA Y PARTITURA (</>:OBJ)", RGB(100, 235, 255));
 
-                    fill_rect(fb, 246, 190, 218, 16, curStyle == bossWeak[chapter] ? RGB(18, 52, 36) : RGB(44, 34, 18));
-                    draw_border(fb, 246, 190, 218, 16, curStyle == bossWeak[chapter] ? RGB(80, 235, 135) : RGB(240, 190, 75));
-                    sprintf(buf, curStyle == bossWeak[chapter] ? "ESTILO: %s -> CRITICO x2!" : "ESTILO: %s", styleNames[curStyle]);
-                    draw_text(fb, 252, 194, buf, curStyle == bossWeak[chapter] ? RGB(120, 255, 150) : RGB(255, 225, 95));
-                    if (curStyle != bossWeak[chapter]) draw_spr_lr24(fb, 434, 191);
+                    int tgtWeak = eType[targetEnemy];
+                    fill_rect(fb, 246, 190, 218, 16, curStyle == tgtWeak ? RGB(18, 52, 36) : RGB(44, 34, 18));
+                    draw_border(fb, 246, 190, 218, 16, curStyle == tgtWeak ? RGB(80, 235, 135) : RGB(240, 190, 75));
+                    sprintf(buf, curStyle == tgtWeak ? "ESTILO:%s -> CRIT x2!" : "ESTILO:%s (DEBIL:%s)", styleNames[curStyle], styleNames[tgtWeak]);
+                    draw_text(fb, 252, 194, buf, curStyle == tgtWeak ? RGB(120, 255, 150) : RGB(255, 225, 95));
 
-                    draw_text(fb, 246, 211, isMobBattle ? "MELODIA: SENCILLA (LENTA):" : "MELODIA BOSS (RAPIDA):", RGB(180, 225, 255));
+                    draw_text(fb, 246, 211, guardActive ? "GUARDIA ACTIVA (-50% DMG)" : "SECUENCIA RITMICA:", guardActive ? RGB(110, 245, 255) : RGB(180, 225, 255));
                     for (int n = 0; n < 6; n++) {
                         int nl = (chapter + n * 3) & 3;
                         int nx = 248 + n * 36;
@@ -1742,7 +1896,7 @@ int main(void) {
                         draw_border(fb, nx, 221, 26, 22, RGB(130, 150, 220));
                         draw_spr20(fb, btns20_arr[nl], nx + 3, 222);
                     }
-                    sprintf(buf, "RELIQUIAS: +%dDMG  +%dVAMP  %s", relicDmg, relicVamp, relicShield ? "ESCUDO" : "-");
+                    sprintf(buf, "RELIQUIAS:+%dDMG +%dVAMP %s", relicDmg, relicVamp, relicShield ? "ESC" : "-");
                     draw_text(fb, 246, 248, buf, RGB(255, 215, 85));
                 } else if (inDefense) {
                     /* Enemy Turn: 32-Bit Runic Dodge Arena with Survival Bar & Fiery Shadow Orbs */
