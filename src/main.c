@@ -526,6 +526,16 @@ static const int dngX[3] = { 88, 178, 228 };
 typedef struct { int x, y, type, alive, flip, respawn; } RoamMob;
 static RoamMob roam[MAX_ROAM];
 
+static int is_tile_blocked(int x, int y) {
+    if (x < 0 || x >= MW || y < 0 || y >= MH) return 1;
+    unsigned char t = worldMap[y][x];
+    if (t == 1 || t == 2 || t == 3 || t == 8 || t >= 10) return 1;
+    for (int i = 0; i < 8; i++) {
+        if (x == npcX[i] && y == npcY[i]) return 1;
+    }
+    return 0;
+}
+
 static void spawn_roam_mob(int idx, int nearGate) {
     int rx = 50, ry = 84;
     if (nearGate == 0) { rx = 43; ry = 84; }
@@ -536,7 +546,7 @@ static void spawn_roam_mob(int idx, int nearGate) {
             int tx = 6 + (xr() % (MW - 12));
             int ty = 6 + (xr() % (MH - 12));
             unsigned char t = worldMap[ty][tx];
-            if ((t == 0 || t == 1 || t == 7) && (abs(tx - mapX) + abs(ty - mapY) > 10)) {
+            if ((t == 0 || t == 7) && !is_tile_blocked(tx, ty) && (abs(tx - mapX) + abs(ty - mapY) > 10)) {
                 rx = tx; ry = ty; break;
             }
         }
@@ -816,8 +826,7 @@ int main(void) {
             if ((dx != 0 || dy != 0) && moveCd <= 0) {
                 moveCd = 9;
                 int nx = mapX + dx, ny = mapY + dy;
-                unsigned char nt = (nx >= 0 && nx < MW && ny >= 0 && ny < MH) ? worldMap[ny][nx] : 2;
-                if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && nt != 2 && nt != 3 && nt != 8 && nt != 10 && nt != 11 && nt != 12 && nt != 15) {
+                if (!is_tile_blocked(nx, ny)) {
                     band2Flip = (prevX2 > prevX1) ? 1 : (prevX2 < prevX1 ? 0 : band1Flip);
                     band1Flip = (prevX1 > mapX)   ? 1 : (prevX1 < mapX   ? 0 : bardFlip);
                     if (dx < 0) bardFlip = 1;
@@ -865,7 +874,7 @@ int main(void) {
                     int nx = roam[i].x + rdx[dir], ny = roam[i].y + rdy[dir];
                     if (nx > 4 && nx < MW - 4 && ny > 4 && ny < MH - 4) {
                         unsigned char rt = worldMap[ny][nx];
-                        if (rt == 0 || rt == 1 || rt == 7) {
+                        if ((rt == 0 || rt == 7) && !is_tile_blocked(nx, ny)) {
                             if (rdx[dir] > 0) roam[i].flip = 1;
                             else if (rdx[dir] < 0) roam[i].flip = 0;
                             roam[i].x = nx; roam[i].y = ny;
