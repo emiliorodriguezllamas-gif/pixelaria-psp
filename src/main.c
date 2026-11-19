@@ -581,9 +581,27 @@ static void init_world(void) {
     }
 
     /* 3 Asentamientos Amurallados: Solaria, Aldea de Bruma, Taberna del Trovador */
-    build_walled_town(18, 74, 38, 94);   /* Ciudadela de Solaria */
-    build_walled_town(76, 56, 86, 64);   /* Aldea de Bruma */
+    build_walled_town(18, 74, 38, 94);     /* Ciudadela de Solaria */
+    build_walled_town(76, 56, 86, 64);     /* Aldea de Bruma */
     build_walled_town(150, 108, 160, 116); /* Taberna del Trovador */
+
+    /* Decoracion de Solaria: Casas (10), Taberna (11), Fuente (12), Mercado (13), Farolas (14), Pozo (15) */
+    worldMap[77][21] = 10; worldMap[77][25] = 10; worldMap[77][31] = 11; worldMap[77][35] = 10;
+    worldMap[90][21] = 10; worldMap[90][35] = 10;
+    worldMap[84][28] = 12; /* Fuente central de la plaza de Solaria */
+    worldMap[80][24] = 13; worldMap[80][32] = 13; /* Puestos de mercado */
+    worldMap[88][24] = 15; /* Pozo de piedra */
+    worldMap[82][22] = 14; worldMap[82][34] = 14; worldMap[86][22] = 14; worldMap[86][34] = 14; /* Farolas */
+
+    /* Decoracion de Aldea de Bruma */
+    worldMap[58][78] = 10; worldMap[58][83] = 10;
+    worldMap[61][78] = 13; worldMap[62][83] = 15;
+    worldMap[60][77] = 14; worldMap[60][84] = 14;
+
+    /* Decoracion de Taberna del Trovador */
+    worldMap[110][153] = 11; worldMap[110][157] = 10;
+    worldMap[113][157] = 13; worldMap[114][152] = 12;
+    worldMap[112][151] = 14; worldMap[112][159] = 14;
 
     /* Red de carreteras reales conectando Solaria -> Aldeas -> 3 Puentes -> 3 Dungeons */
     carve_road(38, 84, 81, 64);   /* Solaria -> Aldea de Bruma */
@@ -754,7 +772,8 @@ int main(void) {
             if ((dx != 0 || dy != 0) && moveCd <= 0) {
                 moveCd = 9;
                 int nx = mapX + dx, ny = mapY + dy;
-                if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && worldMap[ny][nx] != 2 && worldMap[ny][nx] != 3 && worldMap[ny][nx] != 8) {
+                unsigned char nt = (nx >= 0 && nx < MW && ny >= 0 && ny < MH) ? worldMap[ny][nx] : 2;
+                if (nx >= 0 && nx < MW && ny >= 0 && ny < MH && nt != 2 && nt != 3 && nt != 8 && nt != 10 && nt != 11 && nt != 12 && nt != 15) {
                     band2Flip = (prevX2 > prevX1) ? 1 : (prevX2 < prevX1 ? 0 : band1Flip);
                     band1Flip = (prevX1 > mapX)   ? 1 : (prevX1 < mapX   ? 0 : bardFlip);
                     if (dx < 0) bardFlip = 1;
@@ -1043,8 +1062,15 @@ int main(void) {
                                 fill_rect_alpha(fb, sx, sy, 3, 24, RGB(205, 185, 130), 175);
                             if (wx < MW - 1 && worldMap[wy][wx + 1] != 3 && worldMap[wy][wx + 1] != 6)
                                 fill_rect_alpha(fb, sx + 21, sy, 3, 24, RGB(205, 185, 130), 175);
-                        } else if (t == 4) {
+                        } else if (t == 4 || t >= 10) {
                             draw_tile24(fb, tile_castle, sx, sy);
+                            if (t == 12) draw_spr24(fb, spr_fountain, sx, sy);
+                            else if (t == 13) draw_spr24(fb, spr_market, sx, sy);
+                            else if (t == 14) {
+                                int lGlow = 50 + (int)(sinf((float)animFrame * 0.14f) * 18.0f);
+                                fill_ellipse_alpha(fb, sx + 12, sy + 7, 13, 10, RGB(255, 195, 70), lGlow);
+                                draw_spr24(fb, spr_lamp, sx, sy);
+                            } else if (t == 15) draw_spr24(fb, spr_well, sx, sy);
                         } else if (t == 6) {
                             draw_tile24(fb, tile_bridge, sx, sy);
                         } else if (t == 7) {
@@ -1075,15 +1101,21 @@ int main(void) {
                     }
                 }
             }
-            /* 2.5D Overhanging Trees (spr_tree32) with soft elliptical drop shadows */
+            /* 2.5D Overhanging Trees (spr_tree32) & Town Buildings (spr_house/spr_tavern) with soft shadows */
             for (int ty = 0; ty < 12; ty++) {
                 int sy = ty * 24 - 8;
                 for (int tx = 0; tx < 20; tx++) {
                     int sx = tx * 24;
                     int wx = ox + tx, wy = oy + ty;
-                    if (wx >= 0 && wy >= 0 && wx < MW && wy < MH && worldMap[wy][wx] == 1) {
-                        fill_ellipse_alpha(fb, sx + 12, sy + 20, 11, 5, RGB(0, 0, 0), 115);
-                        draw_spr32(fb, spr_tree32, sx - 4, sy - 7);
+                    if (wx >= 0 && wy >= 0 && wx < MW && wy < MH) {
+                        unsigned char wt = worldMap[wy][wx];
+                        if (wt == 1) {
+                            fill_ellipse_alpha(fb, sx + 12, sy + 20, 11, 5, RGB(0, 0, 0), 115);
+                            draw_spr32(fb, spr_tree32, sx - 4, sy - 7);
+                        } else if (wt == 10 || wt == 11) {
+                            fill_ellipse_alpha(fb, sx + 12, sy + 21, 14, 5, RGB(0, 0, 0), 125);
+                            draw_spr32(fb, (wt == 10) ? spr_house : spr_tavern, sx - 4, sy - 8);
+                        }
                     }
                 }
             }
