@@ -522,6 +522,24 @@ static int bardFlip = 0, band1Flip = 0, band2Flip = 0;
 static int bossDefeated[3] = { 0, 0, 0 };
 static int shrineClaimed[2] = { 0, 0 };
 static const int dngX[3] = { 88, 178, 228 };
+static const int dngY[3] = { 36, 138, 28 };
+static const int shrineX[2] = { 132, 206 };
+static const int shrineY[2] = { 24, 168 };
+static const int npcX[8] = { 30, 80, 114, 114, 114, 154, 190, 210 };
+static const int npcY[8] = { 82, 60, 43,  91,  145, 112, 72,  42 };
+static const char *npcMsg[8] = {
+    "CRONISTA: Sube nivel en el Valle antes del Golem!",
+    "HERRERO DE BRUMA: El Golem al Norte teme al ROCK!",
+    "CENTINELA: Al Norte espera la Cordillera Ceniza.",
+    "TROVADOR: El Automata tras el puente teme al SYNTH!",
+    "JUGLAR DEL SUR: Hay un Santuario en el Delta SE!",
+    "TABERNERO: Descansa aqui. (+HP/MP) Sigue al SE!",
+    "EXPLORADOR: Los Espectros golpean muy duro!",
+    "SABIO DEL ABISMO: Solo lo SINFONICO vence al Dragon!"
+};
+static char dlgText[64] = "";
+static int dlgTimer = 0;
+
 #define MAX_ROAM 32
 typedef struct { int x, y, type, alive, flip, respawn; } RoamMob;
 static RoamMob roam[MAX_ROAM];
@@ -555,23 +573,6 @@ static void spawn_roam_mob(int idx, int nearGate) {
     roam[idx].type = (rx < 118) ? 0 : ((ry >= 85) ? 1 : 2);
     roam[idx].alive = 1; roam[idx].flip = 0; roam[idx].respawn = 0;
 }
-static const int dngY[3] = { 36, 138, 28 };
-static const int shrineX[2] = { 132, 206 };
-static const int shrineY[2] = { 24, 168 };
-static const int npcX[8] = { 30, 80, 114, 114, 114, 154, 190, 210 };
-static const int npcY[8] = { 82, 60, 43,  91,  145, 112, 72,  42 };
-static const char *npcMsg[8] = {
-    "CRONISTA: Sube nivel en el Valle antes del Golem!",
-    "HERRERO DE BRUMA: El Golem al Norte teme al ROCK!",
-    "CENTINELA: Al Norte espera la Cordillera Ceniza.",
-    "TROVADOR: El Automata tras el puente teme al SYNTH!",
-    "JUGLAR DEL SUR: Hay un Santuario en el Delta SE!",
-    "TABERNERO: Descansa aqui. (+HP/MP) Sigue al SE!",
-    "EXPLORADOR: Los Espectros golpean muy duro!",
-    "SABIO DEL ABISMO: Solo lo SINFONICO vence al Dragon!"
-};
-static char dlgText[64] = "";
-static int dlgTimer = 0;
 
 static void carve_road(int x0, int y0, int x1, int y1) {
     int cx = x0, cy = y0;
