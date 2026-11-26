@@ -424,7 +424,51 @@ static int heroRelics = 0, runesLit = 0, keysFound = 0;
 static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
 static float dashDx = 0.0f, dashDz = 0.0f;
 static int worldMode = 0; /* 0=Overworld, 1=Dungeon */
-static int curDungeon = 0, dngRunes = 0;
+static int curDungeon = 0, dngRunes = 0, hasSave = 0;
+
+typedef struct {
+    unsigned int magic;
+    int lv, xp, gold, potions, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
+    int chests[16], obelisks[12], dngs[3], clueArr[6], qSt[4], qF, qL, qC;
+} SaveData;
+
+static void save_game(void) {
+    SaveData sd;
+    sd.magic = 0xAE7E2026u;
+    sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.potions = heroPotions;
+    sd.atk = heroAtk; sd.maxHp = heroMaxHp; sd.forge = forgeCount; sd.furor = furorCharge;
+    sd.clues = cluesCount; sd.runes = runesLit; sd.keys = keysFound; sd.relics = heroRelics;
+    sd.ending = trueEnding;
+    memcpy(sd.chests, chestOpened, sizeof(chestOpened));
+    memcpy(sd.obelisks, obeliskLit, sizeof(obeliskLit));
+    memcpy(sd.dngs, dngCleared, sizeof(dngCleared));
+    memcpy(sd.clueArr, clueFound, sizeof(clueFound));
+    memcpy(sd.qSt, qState, sizeof(qState));
+    sd.qF = qKillsForest; sd.qL = qKillsLake; sd.qC = qKillsCanyon;
+    SceUID fd = sceIoOpen("ms0:/PSP/GAME/AetheriaSkyRuins/save.bin", PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
+    if (fd >= 0) { sceIoWrite(fd, &sd, sizeof(sd)); sceIoClose(fd); hasSave = 1; }
+}
+
+static int load_game(void) {
+    SaveData sd;
+    SceUID fd = sceIoOpen("ms0:/PSP/GAME/AetheriaSkyRuins/save.bin", PSP_O_RDONLY, 0);
+    if (fd < 0) return 0;
+    int rd = sceIoRead(fd, &sd, sizeof(sd));
+    sceIoClose(fd);
+    if (rd != (int)sizeof(sd) || sd.magic != 0xAE7E2026u) return 0;
+    heroLv = sd.lv; heroXp = sd.xp; heroGold = sd.gold; heroPotions = sd.potions;
+    heroAtk = sd.atk; heroMaxHp = sd.maxHp; heroHp = heroMaxHp; forgeCount = sd.forge;
+    furorCharge = sd.furor; cluesCount = sd.clues; runesLit = sd.runes; keysFound = sd.keys;
+    heroRelics = sd.relics; trueEnding = sd.ending;
+    memcpy(chestOpened, sd.chests, sizeof(chestOpened));
+    memcpy(obeliskLit, sd.obelisks, sizeof(obeliskLit));
+    memcpy(dngCleared, sd.dngs, sizeof(dngCleared));
+    memcpy(clueFound, sd.clueArr, sizeof(clueFound));
+    memcpy(qState, sd.qSt, sizeof(qState));
+    qKillsForest = sd.qF; qKillsLake = sd.qL; qKillsCanyon = sd.qC;
+    hasSave = 1;
+    return 1;
+}
 static char bannerMsg[64] = "", dialogMsg[96] = "";
 static int bannerT = 0, dialogT = 0;
 static int inTitle = 1;
@@ -507,7 +551,8 @@ static void build_overworld(void) {
     add_plat(0.0f,  0.0f,  -35.0f, 26.0f, 26.0f, 2.5f, 1, 1);
     add_prop(-8.5f, 0.0f, -27.0f, 2.0f, 2.8f, 5, 4); /* Lake Village House */
     add_prop( 8.5f, 0.0f, -27.0f, 2.0f, 2.8f, 5, 5);
-    add_prop( 0.0f, 0.0f, -29.0f, 0.7f, 2.5f, 4, 0); /* Lake Crystal */
+    add_prop( 0.0f, 0.0f, -29.0f, 0.7f, 2.5f, 4, 1); /* Lake Crystal (Heal only) */
+    add_prop( 6.0f, 0.0f, -24.5f, 1.0f, 3.0f, 9, 0); /* Paid Return Portal -> Pueblo del Alba */
     add_prop(-9.0f, 0.0f, -41.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
     add_prop( 9.5f, 0.0f, -42.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
     add_prop( 8.5f, 0.0f, -34.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
@@ -520,6 +565,7 @@ static void build_overworld(void) {
     add_plat(18.0f, -0.04f, 0.0f, 8.0f, 4.5f, 0.6f, 3, 2); /* East Bridge */
     add_plat(35.0f,  0.0f,  0.0f, 26.0f, 26.0f, 2.5f, 2, 2);
     add_prop(27.0f, 0.0f, -8.5f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
+    add_prop(31.0f, 0.0f, -5.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal -> Pueblo del Alba */
     add_prop(28.0f, 0.0f,  7.0f, 0.6f, 3.4f, 0, 0);
     add_prop(42.0f, 0.0f, -7.0f, 0.6f, 3.4f, 0, 0);
     add_prop(42.0f, 0.0f,  7.0f, 0.6f, 3.4f, 0, 0);
@@ -538,7 +584,7 @@ static void build_overworld(void) {
     add_prop( 9.0f, 0.30f, -63.0f, 0.7f, 4.2f, 2, 4); /* Obelisk 4 */
     add_prop(-9.0f, 0.30f, -79.0f, 0.7f, 4.2f, 0, 0);
     add_prop( 9.0f, 0.30f, -79.0f, 0.7f, 4.2f, 0, 0);
-    add_prop( 0.0f, 0.30f, -81.0f, 0.7f, 2.8f, 4, 0); /* Astral Crystal */
+    add_prop( 0.0f, 0.30f, -81.0f, 0.7f, 2.8f, 4, 2); /* Astral Crystal (Heal only) */
     add_prop( 0.0f, 0.30f, -66.0f, 0.6f, 0.9f, 3, 5); /* Chest 5 */
     add_enemy(0.0f, 0.30f, -73.0f, 2, 1, 2); /* Final Sky Dragon Boss */
 }
@@ -708,6 +754,7 @@ int main(void) {
     sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
     build_textures();
+    load_game();
     build_overworld();
 
     sceGuInit();
@@ -755,13 +802,36 @@ int main(void) {
 
         if (inTitle) {
             camYaw += 0.004f;
-            if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_START)) {
+            if (pressed & PSP_CTRL_CROSS) {
                 inTitle = 0;
+                play_sfx(880.0f, 1800);
+                if (!hasSave) {
+                    show_story("EL SILENCIO DE LA BOVEDA",
+                        "Hace 3 dias la Gran Campana del Cielo callo.",
+                        "Las islas se hunden y el Arconte Vaelen desaparecio.",
+                        "Investiga las 6 Pistas (O) y busca las 3 Llaves.");
+                } else {
+                    snprintf(bannerMsg, sizeof(bannerMsg), "PARTIDA CARGADA - PUEBLO DEL ALBA (NV.%d)", heroLv);
+                    bannerT = 140;
+                }
+            } else if (pressed & PSP_CTRL_START) {
+                inTitle = 0;
+                heroLv = 1; heroXp = 0; heroGold = 25; heroPotions = 2;
+                heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
+                furorCharge = 40; cluesCount = 0; runesLit = 0; keysFound = 0;
+                heroRelics = 0; trueEnding = 0;
+                memset(chestOpened, 0, sizeof(chestOpened));
+                memset(obeliskLit, 0, sizeof(obeliskLit));
+                memset(dngCleared, 0, sizeof(dngCleared));
+                memset(clueFound, 0, sizeof(clueFound));
+                memset(qState, 0, sizeof(qState));
+                qKillsForest = 0; qKillsLake = 0; qKillsCanyon = 0;
+                build_overworld();
                 play_sfx(880.0f, 1800);
                 show_story("EL SILENCIO DE LA BOVEDA",
                     "Hace 3 dias la Gran Campana del Cielo callo.",
                     "Las islas se hunden y el Arconte Vaelen desaparecio.",
-                    "Investiga las 6 Pistas (O) y busca las 3 Llaves.");
+                    "Solo puedes guardar en el Cristal de Pueblo del Alba!");
             }
         } else if (storyOpen) {
             if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_CIRCLE | PSP_CTRL_SELECT)) {
@@ -1258,9 +1328,25 @@ int main(void) {
                             snprintf(dialogMsg, sizeof(dialogMsg), "COFRE %d: +35 Oro, +4 ATK y +10 HP!", heroRelics);
                             dialogT = 150; play_sfx(1100.0f, 1800); acted = 1;
                         } else if (props[i].kind == 4) {
-                            heroHp = heroMaxHp;
-                            snprintf(dialogMsg, sizeof(dialogMsg), "CRISTAL DE SANTUARIO: VIDA RESTAURADA!");
-                            dialogT = 120; play_sfx(880.0f, 1400); acted = 1;
+                            heroHp = heroMaxHp; heroStam = heroMaxStam;
+                            if (props[i].id == 0) {
+                                save_game();
+                                snprintf(dialogMsg, sizeof(dialogMsg), "PARTIDA GUARDADA EN PUEBLO DEL ALBA! (HP 100%%)");
+                            } else {
+                                snprintf(dialogMsg, sizeof(dialogMsg), "VIDA RESTAURADA! (Solo se guarda en Pueblo del Alba)");
+                            }
+                            dialogT = 150; play_sfx(880.0f, 1400); acted = 1;
+                        } else if (props[i].kind == 9) {
+                            if (heroGold >= 25) {
+                                heroGold -= 25;
+                                heroX = 0.0f; heroY = 0.20f; heroZ = 2.0f;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "VIAJE RAPIDO A PUEBLO DEL ALBA (-25 Oro)!");
+                                play_sfx(1040.0f, 1800);
+                            } else {
+                                snprintf(dialogMsg, sizeof(dialogMsg), "PORTAL DE RETORNO: Cuesta 25 Oro volver a Pueblo del Alba!");
+                                play_sfx(220.0f, 800);
+                            }
+                            dialogT = 140; acted = 1;
                         } else if (props[i].kind == 6) {
                             saveOvX = heroX; saveOvY = heroY; saveOvZ = heroZ + 1.5f;
                             int dId = props[i].id;
@@ -1472,6 +1558,12 @@ int main(void) {
                 unsigned int lc = pr->active ? ABGR(140, 235, 255, 255) : ABGR(255, 215, 95, 255);
                 draw_ground_disc(pr->x, pr->y, pr->z, 1.0f, lc);
                 draw_box3d(pr->x, pr->y + 1.8f, pr->z, 0.9f, 1.8f, 0.45f, texStone, lc, 0.7f);
+            } else if (pr->kind == 9) {
+                unsigned int wc = ABGR(255, 210, 90, 255);
+                draw_ground_disc(pr->x, pr->y, pr->z, 1.5f, ABGR(110, 215, 255, 190));
+                draw_box3d(pr->x - 0.9f, pr->y + 2.6f, pr->z, 0.45f, 2.6f, 0.45f, texCrystal, wc, 0.5f);
+                draw_box3d(pr->x + 0.9f, pr->y + 2.6f, pr->z, 0.45f, 2.6f, 0.45f, texCrystal, wc, 0.5f);
+                draw_box3d(pr->x, pr->y + 2.9f, pr->z, 2.2f, 0.4f, 0.5f, texCrystal, ABGR(140, 240, 255, 255), 0.5f);
             }
         }
 
@@ -1548,9 +1640,15 @@ int main(void) {
             gu_text2d(104, 46, "AETHERIA", ABGR(255, 225, 110, 255), 3);
             gu_text2d(114, 84, "MUNDO 3D: PUEBLOS Y MAZMORRAS", ABGR(145, 235, 255, 255), 1);
 
-            gu_window2d(108, 196, 264, 48);
-            gu_text2d(136, 208, "PULSA X O START PARA VIAJAR", ABGR(255, 240, 120, 255), 1);
-            gu_text2d(124, 224, "3 MAZMORRAS + PUEBLOS + 60 FPS", ABGR(140, 255, 175, 255), 1);
+            gu_window2d(96, 194, 288, 52);
+            if (hasSave) {
+                char sb[48]; snprintf(sb, sizeof(sb), "X: CONTINUAR (NV.%d - %d ORO)", heroLv, heroGold);
+                gu_text2d(114, 206, sb, ABGR(120, 255, 160, 255), 1);
+                gu_text2d(132, 224, "START: NUEVA PARTIDA", ABGR(255, 230, 110, 255), 1);
+            } else {
+                gu_text2d(136, 208, "PULSA X O START PARA VIAJAR", ABGR(255, 240, 120, 255), 1);
+                gu_text2d(124, 224, "3 MAZMORRAS + PUEBLOS + 60 FPS", ABGR(140, 255, 175, 255), 1);
+            }
         } else {
             gu_window2d(6, 6, 304, 50);
             char buf[72];
