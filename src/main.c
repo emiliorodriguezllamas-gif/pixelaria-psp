@@ -232,6 +232,15 @@ static void gu_rect2d(int x, int y, int w, int h, unsigned int col) {
     sceGuDrawArray(GU_SPRITES, VTYPE_COL2D, 2, 0, v);
 }
 
+static void gu_tri2d(int x0, int y0, int x1, int y1, int x2, int y2, unsigned int c0, unsigned int c1, unsigned int c2) {
+    VtxCol2D *v = (VtxCol2D *)sceGuGetMemory(3 * sizeof(VtxCol2D));
+    v[0].color = c0; v[0].x = (short)x0; v[0].y = (short)y0; v[0].z = 0;
+    v[1].color = c1; v[1].x = (short)x1; v[1].y = (short)y1; v[1].z = 0;
+    v[2].color = c2; v[2].x = (short)x2; v[2].y = (short)y2; v[2].z = 0;
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuDrawArray(GU_TRIANGLES, VTYPE_COL2D, 3, 0, v);
+}
+
 static void gu_window2d(int x, int y, int w, int h) {
     gu_rect2d(x, y, w, h, ABGR(14, 22, 58, 210));
     gu_rect2d(x, y, w, 1, ABGR(220, 235, 255, 240));
@@ -2987,72 +2996,117 @@ int main(void) {
             snprintf(buf, sizeof(buf), "MD:%d PD:%d", heroWood, heroStone);
             gu_text2d(12, 148, buf, ABGR(220, 185, 125, 255), 1);
 
-            /* Hero-Centered Open-World Radar Minimap + FPS + Clock */
-            gu_window2d(406, 6, 68, 68);
+            /* Hero-Centered Compass Minimap + FPS + Clock */
+            const int mmX = 400, mmY = 6, mmS = 74;
+            const int mmCx = 437, mmCy = 43;
+            const int mmL = 403, mmR = 471, mmT = 9, mmB = 77;
+            gu_rect2d(mmX, mmY, mmS, mmS, ABGR(10, 16, 36, 225));
+            gu_rect2d(mmX, mmY, mmS, 1, ABGR(255, 215, 110, 240));
+            gu_rect2d(mmX, mmY + mmS - 1, mmS, 1, ABGR(255, 215, 110, 240));
+            gu_rect2d(mmX, mmY, 1, mmS, ABGR(255, 215, 110, 240));
+            gu_rect2d(mmX + mmS - 1, mmY, 1, mmS, ABGR(255, 215, 110, 240));
             const float mScale = 0.14f;
             for (int i = 0; i < nPlats; i++) {
                 if (plats[i].texType == 3) continue; /* Bridges drawn after water */
-                int mx = 440 + (int)((plats[i].x - heroX) * mScale);
-                int mz = 40  + (int)((plats[i].z - heroZ) * mScale);
+                int mx = mmCx + (int)((plats[i].x - heroX) * mScale);
+                int mz = mmCy + (int)((plats[i].z - heroZ) * mScale);
                 int mw = (int)(plats[i].w * mScale); if (mw < 2) mw = 2;
                 int md = (int)(plats[i].d * mScale); if (md < 2) md = 2;
                 int x0 = mx - mw/2, y0 = mz - md/2, x1 = mx + mw/2, y1 = mz + md/2;
-                if (x1 < 408 || x0 > 472 || y1 < 8 || y0 > 72) continue;
-                if (x0 < 408) x0 = 408;
-                if (x1 > 472) x1 = 472;
-                if (y0 < 8) y0 = 8;
-                if (y1 > 72) y1 = 72;
-                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(80, 145, 95, 175));
+                if (x1 < mmL || x0 > mmR || y1 < mmT || y0 > mmB) continue;
+                if (x0 < mmL) x0 = mmL; if (x1 > mmR) x1 = mmR;
+                if (y0 < mmT) y0 = mmT; if (y1 > mmB) y1 = mmB;
+                unsigned int pCol = (plats[i].texType == 1) ? ABGR(115, 125, 145, 185) :
+                                    ((plats[i].texType == 2) ? ABGR(120, 58, 72, 185) :
+                                    ((plats[i].texType == 4) ? ABGR(95, 155, 205, 200) : ABGR(62, 130, 78, 185)));
+                gu_rect2d(x0, y0, x1 - x0, y1 - y0, pCol);
             }
             for (int i = 0; i < nWater; i++) {
-                int mx = 440 + (int)((waters[i].x - heroX) * mScale);
-                int mz = 40  + (int)((waters[i].z - heroZ) * mScale);
+                int mx = mmCx + (int)((waters[i].x - heroX) * mScale);
+                int mz = mmCy + (int)((waters[i].z - heroZ) * mScale);
                 int mw = (int)(waters[i].hw * 2.0f * mScale); if (mw < 2) mw = 2;
                 int md = (int)(waters[i].hd * 2.0f * mScale); if (md < 2) md = 2;
                 int x0 = mx - mw/2, y0 = mz - md/2, x1 = mx + mw/2, y1 = mz + md/2;
-                if (x1 < 408 || x0 > 472 || y1 < 8 || y0 > 72) continue;
-                if (x0 < 408) x0 = 408;
-                if (x1 > 472) x1 = 472;
-                if (y0 < 8) y0 = 8;
-                if (y1 > 72) y1 = 72;
-                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(45, 150, 245, 230));
+                if (x1 < mmL || x0 > mmR || y1 < mmT || y0 > mmB) continue;
+                if (x0 < mmL) x0 = mmL; if (x1 > mmR) x1 = mmR;
+                if (y0 < mmT) y0 = mmT; if (y1 > mmB) y1 = mmB;
+                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(40, 145, 245, 235));
             }
             for (int i = 0; i < nPlats; i++) {
                 if (plats[i].texType != 3) continue; /* Wooden Bridges */
-                int mx = 440 + (int)((plats[i].x - heroX) * mScale);
-                int mz = 40  + (int)((plats[i].z - heroZ) * mScale);
+                int mx = mmCx + (int)((plats[i].x - heroX) * mScale);
+                int mz = mmCy + (int)((plats[i].z - heroZ) * mScale);
                 int mw = (int)(plats[i].w * mScale); if (mw < 3) mw = 3;
                 int md = (int)(plats[i].d * mScale); if (md < 3) md = 3;
                 int x0 = mx - mw/2, y0 = mz - md/2, x1 = mx + mw/2, y1 = mz + md/2;
-                if (x1 < 408 || x0 > 472 || y1 < 8 || y0 > 72) continue;
-                if (x0 < 408) x0 = 408;
-                if (x1 > 472) x1 = 472;
-                if (y0 < 8) y0 = 8;
-                if (y1 > 72) y1 = 72;
-                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(225, 175, 95, 255));
+                if (x1 < mmL || x0 > mmR || y1 < mmT || y0 > mmB) continue;
+                if (x0 < mmL) x0 = mmL; if (x1 > mmR) x1 = mmR;
+                if (y0 < mmT) y0 = mmT; if (y1 > mmB) y1 = mmB;
+                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(235, 185, 95, 255));
+            }
+            /* Subtle compass radar crosshair */
+            gu_rect2d(mmCx, mmT, 1, mmB - mmT, ABGR(180, 215, 255, 38));
+            gu_rect2d(mmL, mmCy, mmR - mmL, 1, ABGR(180, 215, 255, 38));
+            for (int i = 0; i < nProps; i++) {
+                int k = props[i].kind;
+                if (k != 15 && k != 6 && k != 7 && k != 9) continue;
+                int px = mmCx + (int)((props[i].x - heroX) * mScale);
+                int pz = mmCy + (int)((props[i].z - heroZ) * mScale);
+                if (px >= mmL + 1 && px <= mmR - 2 && pz >= mmT + 1 && pz <= mmB - 2) {
+                    unsigned int pc = (k == 15) ? ABGR(255, 155, 45, 255) : ABGR(200, 120, 255, 255);
+                    gu_rect2d(px - 1, pz - 1, 3, 3, pc);
+                }
             }
             for (int i = 0; i < nNpcs; i++) {
-                int nx = 440 + (int)((npcs[i].x - heroX) * mScale);
-                int nz = 40  + (int)((npcs[i].z - heroZ) * mScale);
-                if (nx >= 409 && nx <= 470 && nz >= 9 && nz <= 70)
+                int nx = mmCx + (int)((npcs[i].x - heroX) * mScale);
+                int nz = mmCy + (int)((npcs[i].z - heroZ) * mScale);
+                if (nx >= mmL + 1 && nx <= mmR - 1 && nz >= mmT + 1 && nz <= mmB - 1)
                     gu_rect2d(nx - 1, nz - 1, 2, 2, ABGR(100, 245, 255, 255));
             }
             for (int i = 0; i < nEnemies; i++) {
                 if (!enemies[i].alive) continue;
-                int ex = 440 + (int)((enemies[i].x - heroX) * mScale);
-                int ez = 40  + (int)((enemies[i].z - heroZ) * mScale);
-                if (ex >= 409 && ex <= 470 && ez >= 9 && ez <= 70)
-                    gu_rect2d(ex - 1, ez - 1, 2, 2, ABGR(255, 80, 80, 255));
+                int ex = mmCx + (int)((enemies[i].x - heroX) * mScale);
+                int ez = mmCy + (int)((enemies[i].z - heroZ) * mScale);
+                if (ex >= mmL + 1 && ex <= mmR - 1 && ez >= mmT + 1 && ez <= mmB - 1)
+                    gu_rect2d(ex - 1, ez - 1, 2, 2, ABGR(255, 75, 75, 255));
             }
-            gu_rect2d(439, 39, 3, 3, ABGR(255, 240, 80, 255));
+            /* Hero facing cone + directional arrow */
+            float hdx = sinf(heroYaw), hdy = cosf(heroYaw);
+            float hrx = -hdy, hry = hdx;
+            gu_tri2d(mmCx, mmCy,
+                     mmCx + (int)(hdx * 15.0f + hrx * 7.0f), mmCy + (int)(hdy * 15.0f + hry * 7.0f),
+                     mmCx + (int)(hdx * 15.0f - hrx * 7.0f), mmCy + (int)(hdy * 15.0f - hry * 7.0f),
+                     ABGR(140, 245, 255, 115), ABGR(140, 245, 255, 0), ABGR(140, 245, 255, 0));
+            gu_tri2d(mmCx + (int)(hdx * 6.5f), mmCy + (int)(hdy * 6.5f),
+                     mmCx + (int)(-hdx * 3.8f + hrx * 4.2f), mmCy + (int)(-hdy * 3.8f + hry * 4.2f),
+                     mmCx + (int)(-hdx * 3.8f - hrx * 4.2f), mmCy + (int)(-hdy * 3.8f - hry * 4.2f),
+                     ABGR(255, 255, 255, 255), ABGR(255, 215, 70, 255), ABGR(255, 215, 70, 255));
 
-            gu_window2d(336, 6, 64, 20);
+            /* Compass Cardinals (N, S, E, O) + Heading Readout */
+            gu_rect2d(mmCx - 4, 1, 8, 9, ABGR(14, 22, 58, 225));
+            gu_text2d(mmCx - 3, 2, "N", ABGR(255, 95, 85, 255), 1);
+            gu_rect2d(mmCx - 4, 75, 8, 9, ABGR(14, 22, 58, 225));
+            gu_text2d(mmCx - 3, 75, "S", ABGR(210, 225, 255, 255), 1);
+            gu_rect2d(mmX - 5, mmCy - 4, 8, 9, ABGR(14, 22, 58, 225));
+            gu_text2d(mmX - 4, mmCy - 4, "O", ABGR(210, 225, 255, 255), 1);
+            gu_rect2d(mmX + mmS - 3, mmCy - 4, 8, 9, ABGR(14, 22, 58, 225));
+            gu_text2d(mmX + mmS - 2, mmCy - 4, "E", ABGR(210, 225, 255, 255), 1);
+
+            float hDeg = atan2f(hdx, -hdy) * 57.29578f;
+            if (hDeg < 0.0f) hDeg += 360.0f;
+            static const char *cDirs[8] = { "NORTE", "NE", "ESTE", "SE", "SUR", "SO", "OESTE", "NO" };
+            int cIdx = ((int)((hDeg + 22.5f) / 45.0f)) & 7;
+            gu_window2d(400, 86, 74, 16);
+            snprintf(buf, sizeof(buf), "DIR:%s", cDirs[cIdx]);
+            gu_text2d(407, 90, buf, ABGR(255, 230, 115, 255), 1);
+
+            gu_window2d(330, 6, 62, 20);
             snprintf(buf, sizeof(buf), "FPS:%2d", curFps);
-            gu_text2d(344, 12, buf, curFps >= 28 ? ABGR(110, 255, 140, 255) : ABGR(255, 225, 90, 255), 1);
+            gu_text2d(337, 12, buf, curFps >= 28 ? ABGR(110, 255, 140, 255) : ABGR(255, 225, 90, 255), 1);
 
-            gu_window2d(336, 28, 64, 20);
+            gu_window2d(330, 28, 62, 20);
             snprintf(buf, sizeof(buf), "%02d:%02d", curHour, curMin);
-            gu_text2d(349, 34, buf, (nightFactor > 0.5f) ? ABGR(160, 205, 255, 255) : ABGR(255, 230, 120, 255), 1);
+            gu_text2d(342, 34, buf, (nightFactor > 0.5f) ? ABGR(160, 205, 255, 255) : ABGR(255, 230, 120, 255), 1);
 
             gu_window2d(6, 246, 468, 20);
             gu_text2d(12, 252, "X:ATACAR/TALAR []:DASH /\\:PULSO O:INTERACT SELECT:DIARIO START:INV/GUARDAR", ABGR(200, 225, 255, 255), 1);
