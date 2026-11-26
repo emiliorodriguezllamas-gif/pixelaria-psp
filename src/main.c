@@ -13,6 +13,7 @@
 #include "font5x7.h"
 #include "world_sprites.h"
 #include "ground_deco.h"
+#include "psp_buttons.h"
 
 PSP_MODULE_INFO("AetheriaSkyRuins", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -262,6 +263,19 @@ static void gu_text2d(int x, int y, const char *s, unsigned int col, int scale) 
         cx += 6 * scale;
     }
     sceGuDrawArray(GU_SPRITES, VTYPE_2D, len * 2, 0, v);
+}
+
+static void gu_btn2d(int x, int y, int sz, int btnId, unsigned int col) {
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+    sceGuTexImage(0, 32, 32, 32, texPspBtn[btnId & 3]);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    Vtx2D *v = (Vtx2D *)sceGuGetMemory(2 * sizeof(Vtx2D));
+    v[0].u = 0.0f;  v[0].v = 0.0f;  v[0].color = col; v[0].x = (short)x;        v[0].y = (short)y;        v[0].z = 0;
+    v[1].u = 32.0f; v[1].v = 32.0f; v[1].color = col; v[1].x = (short)(x + sz); v[1].y = (short)(y + sz); v[1].z = 0;
+    sceGuDrawArray(GU_SPRITES, VTYPE_2D, 2, 0, v);
 }
 
 /* ================= FAST LUT AMBIENT ADVENTURE AUDIO ================= */
@@ -2587,11 +2601,6 @@ int main(void) {
                 gu_text2d(92, 182, "[ARRIBA/ABAJO] ELEGIR   [X] COMPRAR   [O] SALIR", ABGR(145, 240, 255, 255), 1);
             }
             if (ghActive) {
-                static const unsigned int lCols[4] = {
-                    ABGR(235, 95, 225, 255), ABGR(80, 235, 130, 255),
-                    ABGR(255, 95, 95, 255),  ABGR(95, 165, 255, 255)
-                };
-                static const char *lLbls[4] = { "[]", "/\\", "O", "X" };
                 gu_window2d(140, 52, 200, 186);
                 gu_text2d(156, 58, "SINFONIA CRITICA!", ABGR(255, 225, 90, 255), 1);
                 char mb[32]; snprintf(mb, sizeof(mb), "PODER: x%.1f", ghMult);
@@ -2599,14 +2608,14 @@ int main(void) {
                 for (int l = 0; l < 4; l++) {
                     int lx = 152 + l * 46;
                     gu_rect2d(lx + 14, 72, 2, 148, ABGR(70, 90, 140, 220));
-                    gu_rect2d(lx + 2, GH_HIT_Y - 7, 26, 14, ABGR(25, 35, 65, 220));
-                    gu_text2d(lx + 9, GH_HIT_Y - 3, lLbls[l], lCols[l], 1);
+                    gu_rect2d(lx + 3, GH_HIT_Y - 12, 24, 24, ABGR(20, 30, 55, 200));
+                    gu_btn2d(lx + 4, GH_HIT_Y - 11, 22, l, ABGR(255, 255, 255, 210));
                 }
                 for (int i = 0; i < GH_MAX; i++) {
                     if (!ghNotes[i].active) continue;
-                    int nx = 154 + ghNotes[i].lane * 46;
+                    int nx = 156 + ghNotes[i].lane * 46;
                     int ny = (int)ghNotes[i].y;
-                    gu_rect2d(nx, ny - 5, 26, 10, lCols[ghNotes[i].lane]);
+                    gu_btn2d(nx, ny - 11, 22, ghNotes[i].lane, ABGR(255, 255, 255, 255));
                 }
                 if (ghJudgeT > 0) gu_text2d(196, 86, ghJudge, ABGR(255, 240, 100, 255), 1);
             }
