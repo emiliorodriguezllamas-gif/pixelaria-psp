@@ -568,7 +568,7 @@ static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
 static float dashDx = 0.0f, dashDz = 0.0f;
 static int worldMode = 0; /* 0=Overworld, 1=Dungeon */
 static int curDungeon = 0, dngRunes = 0, hasSave = 0;
-static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, fireOpen = 0, fireCursor = 0, hungerTick = 0;
+static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, fireOpen = 0, fireCursor = 0, guideOpen = 0, guidePage = 0, hungerTick = 0;
 
 typedef struct {
     unsigned int magic;
@@ -1354,7 +1354,7 @@ int main(void) {
                 heroHunger = 100.0f; heroThirst = 100.0f; heroSleep = 100.0f; gameClockHour = 8.0f;
                 heroMaxStam = 100.0f; heroStam = 100.0f;
                 heroWood = 0; heroStone = 0; qGather = 0;
-                shopOpen = 0; menuOpen = 0; fireOpen = 0; hungerTick = 0;
+                shopOpen = 0; menuOpen = 0; fireOpen = 0; guideOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
                 furorCharge = 40; cluesCount = 0; runesLit = 0; keysFound = 0;
                 heroRelics = 0; trueEnding = 0;
@@ -1401,9 +1401,13 @@ int main(void) {
                     play_sfx(180.0f, 800);
                 }
             }
+        } else if (guideOpen) {
+            if (pressed & PSP_CTRL_LEFT)  { guidePage = (guidePage + 2) % 3; play_sfx(520.0f, 400); }
+            if (pressed & (PSP_CTRL_RIGHT | PSP_CTRL_CROSS)) { guidePage = (guidePage + 1) % 3; play_sfx(560.0f, 400); }
+            if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { guideOpen = 0; play_sfx(420.0f, 500); }
         } else if (menuOpen) {
-            if (pressed & PSP_CTRL_UP) { menuCursor = (menuCursor + 5) % 6; play_sfx(520.0f, 400); }
-            if (pressed & PSP_CTRL_DOWN) { menuCursor = (menuCursor + 1) % 6; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_UP) { menuCursor = (menuCursor + 6) % 7; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { menuCursor = (menuCursor + 1) % 7; play_sfx(520.0f, 400); }
             if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { menuOpen = 0; play_sfx(420.0f, 500); }
             if (pressed & PSP_CTRL_CROSS) {
                 if (menuCursor == 0) {
@@ -1465,7 +1469,7 @@ int main(void) {
                         play_sfx(200.0f, 600);
                     }
                     dialogT = 130;
-                } else {
+                } else if (menuCursor == 5) {
                     if (heroCampfires > 0) {
                         float fx = heroX + sinf(heroYaw) * 2.0f;
                         float fz = heroZ + cosf(heroYaw) * 2.0f;
@@ -1487,6 +1491,9 @@ int main(void) {
                         play_sfx(200.0f, 600);
                     }
                     dialogT = 140;
+                } else {
+                    guideOpen = 1; guidePage = 0;
+                    play_sfx(780.0f, 900);
                 }
             }
         } else if (fireOpen) {
@@ -2949,29 +2956,69 @@ int main(void) {
                 }
                 gu_text2d(92, 192, "[ARRIBA/ABAJO] ELEGIR   [X] COMPRAR   [O] SALIR", ABGR(145, 240, 255, 255), 1);
             }
-            if (menuOpen) {
-                gu_window2d(26, 32, 428, 202);
-                snprintf(buf, sizeof(buf), "INVENTARIO Y HOGUERAS | NV.%d HP %d/%d ATK %d", heroLv, heroHp, heroMaxHp, heroAtk);
-                gu_text2d(38, 42, buf, ABGR(255, 225, 95, 255), 1);
+            if (menuOpen && !guideOpen) {
+                gu_window2d(26, 22, 428, 220);
+                snprintf(buf, sizeof(buf), "INVENTARIO, HOGUERAS Y GUIA | NV.%d HP %d/%d ATK %d", heroLv, heroHp, heroMaxHp, heroAtk);
+                gu_text2d(38, 32, buf, ABGR(255, 225, 95, 255), 1);
                 snprintf(buf, sizeof(buf), "ORO:%d MON:%d MADERA:%d PIEDRA:%d HOGUERAS:%d", heroGold, heroCoins, heroWood, heroStone, heroCampfires);
-                gu_text2d(38, 55, buf, ABGR(145, 245, 255, 255), 1);
+                gu_text2d(38, 45, buf, ABGR(145, 245, 255, 255), 1);
                 snprintf(buf, sizeof(buf), "LLAVES:%d/3 PISTAS:%d/6 COM:%d%% SED:%d%% SUENO:%d%%", keysFound, cluesCount, (int)heroHunger, (int)heroThirst, (int)heroSleep);
-                gu_text2d(38, 67, buf, ABGR(200, 230, 255, 255), 1);
-                char mItems[6][64];
+                gu_text2d(38, 57, buf, ABGR(200, 230, 255, 255), 1);
+                char mItems[7][64];
                 snprintf(mItems[0], 64, "USAR POCION CURATIVA (+60 HP)      [Tienes: %d]", heroPotions);
                 snprintf(mItems[1], 64, "COMER RACION VIAJE (+50%% Com,+20HP) [Tienes: %d]", heroFood);
                 snprintf(mItems[2], 64, "BEBER AGUA FRESCA (+50%% Sed,+15HP)  [Tienes: %d]", heroWater);
                 snprintf(mItems[3], 64, "BEBER ELIXIR ESTAMINA (100%%,+40HP)  [Tienes: %d]", heroElixirs);
                 snprintf(mItems[4], 64, "CREAR HOGUERA (3 Mad + 2 Piedra)   [Tienes: %d]", heroCampfires);
-                snprintf(mItems[5], 64, "PONER HOGUERA EN SUELO (Descansar y Guardar)");
-                for (int m = 0; m < 6; m++) {
-                    int ry = 87 + m * 19;
+                snprintf(mItems[5], 64, "PONER HOGUERA EN SUELO (Dormir o Guardar)");
+                snprintf(mItems[6], 64, "VER GUIA DEL JUEGO (Controles y Supervivencia)");
+                for (int m = 0; m < 7; m++) {
+                    int ry = 76 + m * 19;
                     if (m == menuCursor) gu_rect2d(36, ry - 3, 408, 15, ABGR(55, 85, 145, 210));
                     snprintf(buf, sizeof(buf), "%s %s", (m == menuCursor) ? ">" : " ", mItems[m]);
-                    unsigned int col = (m >= 4) ? ABGR(255, 195, 95, 255) : ABGR(235, 250, 255, 255);
+                    unsigned int col = (m == 6) ? ABGR(120, 255, 165, 255) : ((m >= 4) ? ABGR(255, 195, 95, 255) : ABGR(235, 250, 255, 255));
                     gu_text2d(40, ry, buf, col, 1);
                 }
-                gu_text2d(72, 214, "[ARRIBA/ABAJO] ELEGIR  [X] USAR/CREAR  [O/START] SALIR", ABGR(145, 240, 255, 255), 1);
+                gu_text2d(72, 220, "[ARRIBA/ABAJO] ELEGIR  [X] USAR/ABRIR  [O/START] SALIR", ABGR(145, 240, 255, 255), 1);
+            }
+            if (guideOpen) {
+                static const char *gTitles[3] = {
+                    "GUIA DEL JUEGO (1/3): CONTROLES Y COMBATE",
+                    "GUIA DEL JUEGO (2/3): SUPERVIVENCIA Y HOGUERAS",
+                    "GUIA DEL JUEGO (3/3): RIOS, MAZMORRAS Y FINAL"
+                };
+                static const char *gLines[3][6] = {
+                    {
+                        "- Stick / Cruceta: Moverse   |  L / R: Girar Camara",
+                        "- X: Atacar (acordes), Talar arboles o Picar piedras",
+                        "- []: Dash evasivo  |  /\\: Pulso Resonante (Obeliscos)",
+                        "- L + R: Sinfonia Critica (cuando Furor FR = 100%)",
+                        "- O: Hablar con NPCs, abrir cofres, Portales y Hogueras",
+                        "- SELECT: Diario de Misiones  |  START: Inventario"
+                    },
+                    {
+                        "- Comida (CM) baja cada 6h | Agua (AG) cada 9h | Sueno 16h",
+                        "- Al usar estamina baja tu Max ST: come, bebe o duerme!",
+                        "- Consume Raciones y Agua manualmente desde el menu START",
+                        "- La comida es cara (45M): farmea enemigos y cofres!",
+                        "- Crea Hogueras (3 Mad + 2 Piedra) y ponlas en el suelo",
+                        "- Pulsa O junto a una Hoguera para Dormir (07:00) o Guardar"
+                    },
+                    {
+                        "- 4 Rios y 5 Lagos: busca los puentes (marron en minimapa)",
+                        "- Explora Bosque (Oeste), Lago (Norte) y Canon (Este)",
+                        "- Completa las 3 Mazmorras para lograr las 3 Llaves Astrales",
+                        "- Busca las 6 Tablillas (Pistas) sobre el Arconte Vaelen",
+                        "- Usa Portales de Retorno (25 Oro) para volver al Pueblo",
+                        "- Con 3 Llaves + 6 Pistas, usa /\\ ante el Dragon (Final Real)"
+                    }
+                };
+                gu_window2d(22, 34, 436, 198);
+                gu_text2d(36, 46, gTitles[guidePage], ABGR(255, 225, 95, 255), 1);
+                for (int ln = 0; ln < 6; ln++) {
+                    gu_text2d(36, 70 + ln * 21, gLines[guidePage][ln], (ln & 1) ? ABGR(185, 235, 255, 255) : ABGR(240, 250, 255, 255), 1);
+                }
+                gu_text2d(68, 208, "[IZQ/DER o X] PAGINA SIGUIENTE   [O/START] VOLVER", ABGR(120, 255, 165, 255), 1);
             }
             if (fireOpen) {
                 gu_window2d(64, 84, 352, 102);
