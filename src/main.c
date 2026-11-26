@@ -211,15 +211,16 @@ static void gu_text2d(int x, int y, const char *s, unsigned int col, int scale) 
     sceGuTexImage(0, 128, 64, 128, texFont);
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
     Vtx2D *v = (Vtx2D *)sceGuGetMemory(len * 2 * sizeof(Vtx2D));
     int cx = x;
     for (int i = 0; i < len; i++) {
         int ch = (unsigned char)s[i] - 32;
         if (ch < 0 || ch >= 96) ch = 31;
-        float u0 = (float)((ch % 16) * 8) / 128.0f;
-        float v0 = (float)((ch / 16) * 8) / 64.0f;
-        float u1 = u0 + 6.0f / 128.0f;
-        float v1 = v0 + 8.0f / 64.0f;
+        float u0 = (float)((ch % 16) * 8);
+        float v0 = (float)((ch / 16) * 8);
+        float u1 = u0 + 6.0f;
+        float v1 = v0 + 8.0f;
         v[i*2+0].u = u0; v[i*2+0].v = v0; v[i*2+0].color = col; v[i*2+0].x = (short)cx;             v[i*2+0].y = (short)y;             v[i*2+0].z = 0;
         v[i*2+1].u = u1; v[i*2+1].v = v1; v[i*2+1].color = col; v[i*2+1].x = (short)(cx+6*scale); v[i*2+1].y = (short)(y+8*scale); v[i*2+1].z = 0;
         cx += 6 * scale;
@@ -494,6 +495,7 @@ static void draw_box3d(float cx, float cy, float cz, float w, float h, float d, 
     sceGuTexImage(0, 64, 64, 64, tex);
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexWrap(GU_REPEAT, GU_REPEAT);
 
     float hw = w * 0.5f, hd = d * 0.5f;
     float y0 = cy - h, y1 = cy;
@@ -549,6 +551,7 @@ static void draw_billboard(float x, float y, float z, float w, float h, const un
     sceGuTexImage(0, 64, 64, 64, tex);
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
 
     float rx = cosf(camAngle) * (w * 0.5f);
     float rz = -sinf(camAngle) * (w * 0.5f);
@@ -604,6 +607,7 @@ int main(void) {
     sceGuEnable(GU_SCISSOR_TEST);
     sceGuDepthFunc(GU_GEQUAL);
     sceGuEnable(GU_DEPTH_TEST);
+    sceGuEnable(GU_CLIP_PLANES);
     sceGuFrontFace(GU_CW);
     sceGuShadeModel(GU_SMOOTH);
     sceGuEnable(GU_BLEND);
@@ -866,12 +870,13 @@ int main(void) {
         sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
 
         sceGuEnable(GU_DEPTH_TEST);
+        sceGuEnable(GU_CLIP_PLANES);
         sceGuEnable(GU_FOG);
         sceGuFog(22.0f, 68.0f, fogCols[curZone]);
 
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(52.0f, 16.0f / 9.0f, 0.5f, 110.0f);
+        sceGumPerspective(52.0f, 16.0f / 9.0f, 1.0f, 95.0f);
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
@@ -893,6 +898,7 @@ int main(void) {
             sceGuTexImage(0, 64, 64, 64, texWater);
             sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
             sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
             Vtx3D *wv = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
             unsigned int wc = ABGR(190, 225, 255, 190);
             wv[0] = (Vtx3D){ 0 + wOff,  0 + wOff,  wc, heroX - 60, -3.5f, heroZ - 60 };
@@ -963,6 +969,7 @@ int main(void) {
 
         /* ==================== HARDWARE 2D GPU OVERLAY ==================== */
         sceGuDisable(GU_DEPTH_TEST);
+        sceGuDisable(GU_CLIP_PLANES);
         sceGuDisable(GU_FOG);
 
         if (inTitle) {
