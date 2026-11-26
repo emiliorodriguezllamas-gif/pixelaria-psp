@@ -542,7 +542,7 @@ static int ghActive = 0, ghSpawned = 0, ghSpawnT = 0, ghHits = 0;
 static float ghMult = 1.5f;
 static char ghJudge[32] = "";
 static int ghJudgeT = 0;
-static int heroGold = 25, heroCoins = 30, heroPotions = 2, heroFood = 2, heroWater = 2, heroElixirs = 1, heroCampfires = 0, heroLv = 1, heroXp = 0;
+static int heroGold = 25, heroCoins = 15, heroPotions = 2, heroFood = 1, heroWater = 1, heroElixirs = 1, heroCampfires = 0, heroLv = 1, heroXp = 0;
 static float heroHunger = 100.0f, heroThirst = 100.0f, heroSleep = 100.0f, gameClockHour = 8.0f;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
 typedef struct {
@@ -1347,8 +1347,8 @@ int main(void) {
                 }
             } else if (pressed & PSP_CTRL_START) {
                 inTitle = 0;
-                heroLv = 1; heroXp = 0; heroGold = 25; heroCoins = 30;
-                heroPotions = 2; heroFood = 2; heroWater = 2; heroElixirs = 1; heroCampfires = 0;
+                heroLv = 1; heroXp = 0; heroGold = 25; heroCoins = 15;
+                heroPotions = 2; heroFood = 1; heroWater = 1; heroElixirs = 1; heroCampfires = 0;
                 heroHunger = 100.0f; heroThirst = 100.0f; heroSleep = 100.0f; gameClockHour = 8.0f;
                 heroWood = 0; heroStone = 0; qGather = 0;
                 shopOpen = 0; hungerTick = 0;
@@ -1378,7 +1378,7 @@ int main(void) {
             if (pressed & PSP_CTRL_DOWN) { shopCursor = (shopCursor + 1) % 5; play_sfx(520.0f, 400); }
             if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { shopOpen = 0; play_sfx(420.0f, 500); }
             if (pressed & PSP_CTRL_CROSS) {
-                static const int sPrices[5] = { 10, 8, 18, 22, 35 };
+                static const int sPrices[5] = { 45, 35, 50, 60, 165 };
                 int p = sPrices[shopCursor];
                 if (heroCoins >= p) {
                     heroCoins -= p;
@@ -2907,14 +2907,14 @@ int main(void) {
                     "ELIXIR ESTAMINA   (Estamina 100%, +40 HP)",
                     "PACK SUPERVIVENCIA(+2 Rac, +2 Agua, +1 Poc)"
                 };
-                static const int sPrices[5] = { 10, 8, 18, 22, 35 };
+                static const int sPrices[5] = { 45, 35, 50, 60, 165 };
                 gu_window2d(34, 58, 412, 150);
                 snprintf(buf, sizeof(buf), "TIENDA DE SUPERVIVENCIA   |   MONEDAS: %d", heroCoins);
                 gu_text2d(48, 70, buf, ABGR(255, 225, 95, 255), 1);
                 for (int s = 0; s < 5; s++) {
                     int ry = 92 + s * 19;
                     if (s == shopCursor) gu_rect2d(44, ry - 3, 392, 15, ABGR(55, 85, 145, 210));
-                    snprintf(buf, sizeof(buf), "%s %-40s %2dM", (s == shopCursor) ? ">" : " ", sNames[s], sPrices[s]);
+                    snprintf(buf, sizeof(buf), "%s %-39s %3dM", (s == shopCursor) ? ">" : " ", sNames[s], sPrices[s]);
                     unsigned int col = (heroCoins >= sPrices[s]) ? ABGR(235, 250, 255, 255) : ABGR(160, 120, 120, 255);
                     gu_text2d(48, ry, buf, col, 1);
                 }
