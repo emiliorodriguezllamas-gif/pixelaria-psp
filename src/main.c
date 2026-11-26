@@ -813,8 +813,8 @@ static int is_walkable(float nx, float nz, float *outY) {
     float bestY = -100.0f;
     for (int i = 0; i < nPlats; i++) {
         Platform *p = &plats[i];
-        if (nx >= p->x - p->w * 0.5f - 0.05f && nx <= p->x + p->w * 0.5f + 0.05f &&
-            nz >= p->z - p->d * 0.5f - 0.05f && nz <= p->z + p->d * 0.5f + 0.05f) {
+        if (nx >= p->x - p->w * 0.5f - 0.15f && nx <= p->x + p->w * 0.5f + 0.15f &&
+            nz >= p->z - p->d * 0.5f - 0.15f && nz <= p->z + p->d * 0.5f + 0.15f) {
             if (!found || p->y > bestY) { bestY = p->y; found = 1; }
         }
     }
@@ -1284,14 +1284,20 @@ int main(void) {
             if ((pad.Buttons & PSP_CTRL_LTRIGGER) && !(pad.Buttons & PSP_CTRL_RTRIGGER)) camYaw -= 0.035f;
             if ((pad.Buttons & PSP_CTRL_RTRIGGER) && !(pad.Buttons & PSP_CTRL_LTRIGGER)) camYaw += 0.035f;
 
-            float ax = ((float)pad.Lx - 128.0f) / 128.0f;
-            float ay = ((float)pad.Ly - 128.0f) / 128.0f;
-            if (fabsf(ax) < 0.22f) ax = 0.0f;
-            if (fabsf(ay) < 0.22f) ay = 0.0f;
-            if (pad.Buttons & PSP_CTRL_LEFT)  ax = -1.0f;
-            if (pad.Buttons & PSP_CTRL_RIGHT) ax =  1.0f;
-            if (pad.Buttons & PSP_CTRL_UP)    ay = -1.0f;
-            if (pad.Buttons & PSP_CTRL_DOWN)  ay =  1.0f;
+            float ax = 0.0f, ay = 0.0f;
+            if (pad.Buttons & (PSP_CTRL_LEFT | PSP_CTRL_RIGHT | PSP_CTRL_UP | PSP_CTRL_DOWN)) {
+                if (pad.Buttons & PSP_CTRL_LEFT)  ax = -1.0f;
+                if (pad.Buttons & PSP_CTRL_RIGHT) ax =  1.0f;
+                if (pad.Buttons & PSP_CTRL_UP)    ay = -1.0f;
+                if (pad.Buttons & PSP_CTRL_DOWN)  ay =  1.0f;
+            } else {
+                ax = ((float)pad.Lx - 128.0f) / 128.0f;
+                ay = ((float)pad.Ly - 128.0f) / 128.0f;
+                if (fabsf(ax) < 0.34f) ax = 0.0f;
+                else ax = (ax > 0.0f ? 1.0f : -1.0f) * ((fabsf(ax) - 0.34f) / 0.66f);
+                if (fabsf(ay) < 0.34f) ay = 0.0f;
+                else ay = (ay > 0.0f ? 1.0f : -1.0f) * ((fabsf(ay) - 0.34f) / 0.66f);
+            }
             float mag = sqrtf(ax * ax + ay * ay);
             if (mag > 1.0f) { ax /= mag; ay /= mag; }
 
@@ -1303,7 +1309,7 @@ int main(void) {
 
             if (dashT > 0) {
                 dashT--;
-                mvX = dashDx * 0.32f; mvZ = dashDz * 0.32f;
+                mvX = dashDx * 0.58f; mvZ = dashDz * 0.58f;
                 if ((animFrame & 1) == 0)
                     spawn_part(heroX, heroY + 0.6f, heroZ, 0, 0.02f, 0, 14.0f, 0.45f, ABGR(130, 235, 255, 210));
             } else {
