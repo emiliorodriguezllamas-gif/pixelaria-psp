@@ -392,7 +392,7 @@ static void build_world(void) {
 
     /* Zone 0: Prado Esmeralda (Floating Meadow Island) */
     add_plat(0.0f, 0.0f, 0.0f, 22.0f, 22.0f, 2.5f, 0, 0);
-    add_plat(0.0f, 0.25f, -3.0f, 7.0f, 7.0f, 0.5f, 1, 0); /* Stone Sanctuary dais */
+    add_plat(0.0f, 0.25f, -3.0f, 7.0f, 7.0f, 0.25f, 1, 0); /* Stone Sanctuary dais */
     add_prop(-6.5f, 0.0f, -6.5f, 1.2f, 3.4f, 1, 0);
     add_prop( 6.8f, 0.0f, -6.0f, 1.2f, 3.6f, 1, 0);
     add_prop(-7.5f, 0.0f,  5.5f, 1.2f, 3.2f, 1, 0);
@@ -403,8 +403,8 @@ static void build_world(void) {
     add_prop(-8.0f, 0.0f, -1.0f, 0.6f, 2.8f, 2, 1); /* Rune Obelisk 1 */
     add_prop( 8.2f, 0.0f,  1.0f, 0.6f, 0.9f, 3, 1); /* Relic Chest 1 */
 
-    /* Bridge North -> Zone 1: Lago de los Ecos */
-    add_plat(0.0f, 0.0f, -16.5f, 4.0f, 12.0f, 0.6f, 3, 1);
+    /* Bridge North -> Zone 1: Lago de los Ecos (flush seam, -0.04m step to avoid Z-fighting) */
+    add_plat(0.0f, -0.04f, -16.5f, 4.0f, 11.0f, 0.6f, 3, 1);
     add_plat(0.0f, 0.0f, -32.0f, 22.0f, 20.0f, 2.5f, 1, 1);
     add_prop(-7.0f, 0.0f, -28.0f, 0.6f, 3.6f, 0, 0);
     add_prop( 7.0f, 0.0f, -28.0f, 0.6f, 3.6f, 0, 0);
@@ -416,8 +416,8 @@ static void build_world(void) {
     add_enemy( 4.5f, 0.0f, -31.0f, 0);
     add_enemy( 0.0f, 0.0f, -38.0f, 1);
 
-    /* Bridge East -> Zone 2: Canon Carmesi */
-    add_plat(16.5f, 0.0f, 0.0f, 12.0f, 4.0f, 0.6f, 3, 2);
+    /* Bridge East -> Zone 2: Canon Carmesi (flush seam, -0.04m step) */
+    add_plat(16.5f, -0.04f, 0.0f, 11.0f, 4.0f, 0.6f, 3, 2);
     add_plat(32.0f, 0.0f, 0.0f, 20.0f, 22.0f, 2.5f, 2, 2);
     add_prop(28.0f, 0.0f, -6.5f, 0.6f, 3.5f, 0, 0);
     add_prop(36.0f, 0.0f, -6.5f, 0.6f, 3.5f, 0, 0);
@@ -430,9 +430,9 @@ static void build_world(void) {
     add_enemy(35.0f, 0.0f,  3.5f, 2);
     add_enemy(38.0f, 0.0f,  0.0f, 1);
 
-    /* Bridge North from Lago -> Zone 3: Santuario Astral (Boss Isle) */
-    add_plat(0.0f, 0.0f, -47.5f, 4.5f, 12.0f, 0.7f, 4, 3);
-    add_plat(0.0f, 0.3f, -64.0f, 24.0f, 22.0f, 3.0f, 4, 3);
+    /* Bridge North from Lago -> Zone 3: Santuario Astral (Boss Isle, flush seam) */
+    add_plat(0.0f, 0.15f, -47.5f, 4.5f, 11.0f, 0.7f, 4, 3);
+    add_plat(0.0f, 0.30f, -64.0f, 24.0f, 22.0f, 3.0f, 4, 3);
     add_prop(-8.0f, 0.3f, -58.0f, 0.7f, 4.2f, 2, 4);
     add_prop( 8.0f, 0.3f, -58.0f, 0.7f, 4.2f, 2, 5);
     add_prop(-8.0f, 0.3f, -70.0f, 0.7f, 4.2f, 0, 0);
@@ -449,15 +449,17 @@ static int get_current_zone(void) {
 }
 
 static int is_walkable(float nx, float nz, float *outY) {
+    int found = 0;
+    float bestY = -100.0f;
     for (int i = 0; i < nPlats; i++) {
         Platform *p = &plats[i];
-        if (nx >= p->x - p->w * 0.5f + 0.35f && nx <= p->x + p->w * 0.5f - 0.35f &&
-            nz >= p->z - p->d * 0.5f + 0.35f && nz <= p->z + p->d * 0.5f - 0.35f) {
-            if (p->y > *outY || i == 0 || *outY < -5.0f) *outY = p->y;
-            return 1;
+        if (nx >= p->x - p->w * 0.5f && nx <= p->x + p->w * 0.5f &&
+            nz >= p->z - p->d * 0.5f && nz <= p->z + p->d * 0.5f) {
+            if (!found || p->y > bestY) { bestY = p->y; found = 1; }
         }
     }
-    return 0;
+    if (found) *outY = bestY;
+    return found;
 }
 
 /* Dynamic vertex lighting from Hero Wisp + Active Obelisks */
