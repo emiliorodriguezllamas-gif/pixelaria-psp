@@ -543,7 +543,7 @@ static float ghMult = 1.5f;
 static char ghJudge[32] = "";
 static int ghJudgeT = 0;
 static int heroGold = 25, heroCoins = 30, heroPotions = 2, heroFood = 2, heroWater = 2, heroElixirs = 1, heroCampfires = 0, heroLv = 1, heroXp = 0;
-static float heroHunger = 100.0f, heroThirst = 100.0f, gameHourOffset = 0.0f;
+static float heroHunger = 100.0f, heroThirst = 100.0f, heroSleep = 100.0f, gameClockHour = 8.0f;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
 typedef struct {
     float x, y, z, vy;
@@ -573,7 +573,7 @@ static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, hungerTic
 typedef struct {
     unsigned int magic;
     int lv, xp, gold, coins, potions, food, water, elixirs, campfires, wood, stone, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
-    float hunger, thirst, hourOffset;
+    float hunger, thirst, sleep, clockHour;
     int chests[16], obelisks[12], dngs[3], clueArr[6], qSt[4], qF, qL, qC;
 } SaveData;
 
@@ -583,7 +583,7 @@ static void save_game(void) {
     sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.coins = heroCoins;
     sd.potions = heroPotions; sd.food = heroFood; sd.water = heroWater; sd.elixirs = heroElixirs;
     sd.campfires = heroCampfires; sd.wood = heroWood; sd.stone = heroStone; sd.qG = qGather;
-    sd.hunger = heroHunger; sd.thirst = heroThirst; sd.hourOffset = gameHourOffset;
+    sd.hunger = heroHunger; sd.thirst = heroThirst; sd.sleep = heroSleep; sd.clockHour = gameClockHour;
     sd.atk = heroAtk; sd.maxHp = heroMaxHp; sd.forge = forgeCount; sd.furor = furorCharge;
     sd.clues = cluesCount; sd.runes = runesLit; sd.keys = keysFound; sd.relics = heroRelics;
     sd.ending = trueEnding;
@@ -607,7 +607,7 @@ static int load_game(void) {
     heroLv = sd.lv; heroXp = sd.xp; heroGold = sd.gold; heroCoins = sd.coins;
     heroPotions = sd.potions; heroFood = sd.food; heroWater = sd.water; heroElixirs = sd.elixirs;
     heroCampfires = sd.campfires; heroWood = sd.wood; heroStone = sd.stone; qGather = sd.qG;
-    heroHunger = sd.hunger; heroThirst = sd.thirst; gameHourOffset = sd.hourOffset;
+    heroHunger = sd.hunger; heroThirst = sd.thirst; heroSleep = sd.sleep; gameClockHour = sd.clockHour;
     heroAtk = sd.atk; heroMaxHp = sd.maxHp; heroHp = heroMaxHp; forgeCount = sd.forge;
     furorCharge = sd.furor; cluesCount = sd.clues; runesLit = sd.runes; keysFound = sd.keys;
     heroRelics = sd.relics; trueEnding = sd.ending;
@@ -1349,7 +1349,7 @@ int main(void) {
                 inTitle = 0;
                 heroLv = 1; heroXp = 0; heroGold = 25; heroCoins = 30;
                 heroPotions = 2; heroFood = 2; heroWater = 2; heroElixirs = 1; heroCampfires = 0;
-                heroHunger = 100.0f; heroThirst = 100.0f; gameHourOffset = 0.0f;
+                heroHunger = 100.0f; heroThirst = 100.0f; heroSleep = 100.0f; gameClockHour = 8.0f;
                 heroWood = 0; heroStone = 0; qGather = 0;
                 shopOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
@@ -1615,20 +1615,26 @@ int main(void) {
             if (heroFlash > 0) heroFlash--;
             if (stamDelay > 0) stamDelay--;
             else if (heroStam < heroMaxStam) {
-                float stamRegen = (heroHunger < 25.0f || heroThirst < 25.0f) ? 0.40f : 0.85f;
+                float stamRegen = (heroHunger < 25.0f || heroThirst < 25.0f || heroSleep < 25.0f) ? 0.40f : 0.85f;
                 heroStam += stamRegen;
                 if (heroStam > heroMaxStam) heroStam = heroMaxStam;
             }
-            /* Manual survival hunger & thirst drain (consume from START inventory!) */
-            heroHunger -= (dashT > 0 || atkT > 0 || heavyT > 0) ? 0.024f : 0.013f;
-            heroThirst -= (dashT > 0 || atkT > 0 || heavyT > 0) ? 0.028f : 0.016f;
+            /* Reloj del juego (1h = 45s = 1350 frames a 30fps): Comida 6h, Sed 9h, Sueno 16h */
+            gameClockHour += 1.0f / 1350.0f;
+            if (gameClockHour >= 24.0f) gameClockHour -= 24.0f;
+            int activeMove = (dashT > 0 || atkT > 0 || heavyT > 0);
+            heroHunger -= activeMove ? 0.0155f : 0.01235f; /* ~6h */
+            heroThirst -= activeMove ? 0.0105f : 0.00823f; /* ~9h */
+            heroSleep  -= activeMove ? 0.0056f : 0.00463f; /* ~16h */
             if (heroHunger < 0.0f) heroHunger = 0.0f;
             if (heroThirst < 0.0f) heroThirst = 0.0f;
-            if ((heroHunger <= 20.0f || heroThirst <= 20.0f) && dialogT == 0 && (animFrame % 240) == 0) {
-                snprintf(dialogMsg, sizeof(dialogMsg), "TIENES HAMBRE/SED! Pulsa START para comer o beber.");
-                dialogT = 90;
+            if (heroSleep  < 0.0f) heroSleep  = 0.0f;
+            if ((heroHunger <= 20.0f || heroThirst <= 20.0f || heroSleep <= 20.0f) && dialogT == 0 && (animFrame % 270) == 0) {
+                if (heroSleep <= 20.0f) snprintf(dialogMsg, sizeof(dialogMsg), "TIENES SUENO! Crea una Hoguera (START) para dormir y guardar.");
+                else snprintf(dialogMsg, sizeof(dialogMsg), "TIENES HAMBRE/SED! Pulsa START para comer o beber.");
+                dialogT = 100;
             }
-            if (heroHunger <= 0.0f || heroThirst <= 0.0f) {
+            if (heroHunger <= 0.0f || heroThirst <= 0.0f || heroSleep <= 0.0f) {
                 hungerTick++;
                 if (hungerTick >= 120) {
                     hungerTick = 0;
@@ -2034,16 +2040,13 @@ int main(void) {
                             snprintf(dialogMsg, sizeof(dialogMsg), "VIDA Y ESTAMINA RESTAURADAS! (Pon una Hoguera para guardar)");
                             dialogT = 150; play_sfx(880.0f, 1400); acted = 1;
                         } else if (props[i].kind == 15) {
-                            ScePspDateTime rtNow;
-                            float rawH = 12.0f;
-                            if (sceRtcGetCurrentClockLocalTime(&rtNow) >= 0)
-                                rawH = (float)rtNow.hour + (float)rtNow.minute / 60.0f;
-                            gameHourOffset = 7.0f - rawH;
+                            gameClockHour = 7.0f;
+                            heroSleep = 100.0f;
                             heroHp = heroMaxHp; heroStam = heroMaxStam;
                             for (int s = 0; s < 14; s++)
                                 spawn_part(props[i].x, props[i].y + 0.6f, props[i].z, frand(-0.08f, 0.08f), frand(0.06f, 0.16f), frand(-0.08f, 0.08f), 30.0f, 0.45f, ABGR(255, 195, 70, 255));
                             save_game();
-                            snprintf(dialogMsg, sizeof(dialogMsg), "DESCANSAS Y PERNOCTAS EN LA HOGUERA (07:00) - PARTIDA GUARDADA!");
+                            snprintf(dialogMsg, sizeof(dialogMsg), "DESCANSAS Y PERNOCTAS (07:00) - SUENO 100%% - PARTIDA GUARDADA!");
                             dialogT = 170; play_sfx(1040.0f, 1800); acted = 1;
                         } else if (props[i].kind == 9) {
                             if (heroGold >= 25) {
@@ -2239,12 +2242,7 @@ int main(void) {
 
         /* ==================== HARDWARE GU 3D RENDER ==================== */
         int curZone = get_current_zone();
-        ScePspDateTime pspNow;
-        float rawHour = 12.0f;
-        if (sceRtcGetCurrentClockLocalTime(&pspNow) >= 0) {
-            rawHour = (float)pspNow.hour + (float)pspNow.minute / 60.0f;
-        }
-        float dayHour = fmodf(rawHour + gameHourOffset + 24.0f, 24.0f);
+        float dayHour = gameClockHour;
         int curHour = (int)dayHour;
         int curMin = (int)((dayHour - (float)curHour) * 60.0f);
 
@@ -2758,12 +2756,12 @@ int main(void) {
             }
         } else {
             /* Compact Vertical Left-Edge HUD (unobstructed center view!) */
-            gu_window2d(6, 6, 84, 162);
+            gu_window2d(6, 6, 98, 162);
             char buf[80];
             snprintf(buf, sizeof(buf), "NV.%d", heroLv);
             gu_text2d(14, 10, buf, ABGR(140, 255, 175, 255), 1);
 
-            /* 5 Vertical Bars: HP, Stamina, Furor, Food, Water */
+            /* 6 Vertical Bars: HP, Stamina, Furor, Food (6h), Water (9h), Sleep (16h) */
             const int barY = 22, barH = 60, barW = 8;
             int hpFill = (heroHp * barH) / (heroMaxHp > 0 ? heroMaxHp : 1);
             if (hpFill < 0) hpFill = 0; if (hpFill > barH) hpFill = barH;
@@ -2795,6 +2793,12 @@ int main(void) {
             gu_rect2d(68, barY, barW, barH, ABGR(20, 24, 40, 255));
             gu_rect2d(69, barY + barH - agFill, barW - 2, agFill, (heroThirst < 25.0f) ? ABGR(255, 85, 85, 255) : ABGR(80, 195, 255, 255));
             gu_text2d(66, barY + barH + 3, "AG", (heroThirst < 25.0f) ? ABGR(255, 95, 95, 255) : ABGR(120, 220, 255, 255), 1);
+
+            int snFill = (int)((heroSleep * (float)barH) / 100.0f);
+            if (snFill < 0) snFill = 0; if (snFill > barH) snFill = barH;
+            gu_rect2d(82, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(83, barY + barH - snFill, barW - 2, snFill, (heroSleep < 25.0f) ? ABGR(255, 85, 85, 255) : ABGR(185, 150, 255, 255));
+            gu_text2d(80, barY + barH + 3, "SN", (heroSleep < 25.0f) ? ABGR(255, 95, 95, 255) : ABGR(200, 170, 255, 255), 1);
 
             snprintf(buf, sizeof(buf), "O:%d", heroGold);
             gu_text2d(12, 98, buf, ABGR(255, 225, 110, 255), 1);
@@ -2880,8 +2884,8 @@ int main(void) {
             gu_text2d(12, 252, "X:ATACAR/TALAR []:DASH /\\:PULSO O:INTERACT SELECT:DIARIO START:INV/GUARDAR", ABGR(200, 225, 255, 255), 1);
 
             if (bannerT > 0) {
-                gu_window2d(84, 8, 246, 24);
-                gu_text2d(94, 16, bannerMsg, ABGR(255, 230, 110, 255), 1);
+                gu_window2d(108, 8, 224, 24);
+                gu_text2d(116, 16, bannerMsg, ABGR(255, 230, 110, 255), 1);
             }
             if (dialogT > 0 && !storyOpen) {
                 gu_window2d(24, 204, 432, 34);
@@ -2922,7 +2926,7 @@ int main(void) {
                 gu_text2d(38, 42, buf, ABGR(255, 225, 95, 255), 1);
                 snprintf(buf, sizeof(buf), "ORO:%d MON:%d MADERA:%d PIEDRA:%d HOGUERAS:%d", heroGold, heroCoins, heroWood, heroStone, heroCampfires);
                 gu_text2d(38, 55, buf, ABGR(145, 245, 255, 255), 1);
-                snprintf(buf, sizeof(buf), "LLAVES:%d/3 PISTAS:%d/6 COM:%d%% SED:%d%%", keysFound, cluesCount, (int)heroHunger, (int)heroThirst);
+                snprintf(buf, sizeof(buf), "LLAVES:%d/3 PISTAS:%d/6 COM:%d%% SED:%d%% SUENO:%d%%", keysFound, cluesCount, (int)heroHunger, (int)heroThirst, (int)heroSleep);
                 gu_text2d(38, 67, buf, ABGR(200, 230, 255, 255), 1);
                 char mItems[6][64];
                 snprintf(mItems[0], 64, "USAR POCION CURATIVA (+60 HP)      [Tienes: %d]", heroPotions);
