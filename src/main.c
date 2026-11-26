@@ -874,16 +874,16 @@ static void draw_box3d(float cx, float cy, float cz, float w, float h, float d, 
     unsigned int cSide = ABGR(((col & 0xFF) * 7) / 10, (((col >> 8) & 0xFF) * 7) / 10, (((col >> 16) & 0xFF) * 7) / 10, 255);
     unsigned int cDark = ABGR(((col & 0xFF) * 5) / 10, (((col >> 8) & 0xFF) * 5) / 10, (((col >> 16) & 0xFF) * 5) / 10, 255);
 
-    int nx = (w > 12.0f) ? ((int)(w / 12.0f) + 1) : 1;
-    int nz = (d > 12.0f) ? ((int)(d / 12.0f) + 1) : 1;
+    int nx = (w > 6.0f) ? ((int)(w / 6.0f) + 1) : 1;
+    int nz = (d > 6.0f) ? ((int)(d / 6.0f) + 1) : 1;
     float stepX = w / (float)nx, stepZ = d / (float)nz;
     float xStart = cx - hw, zStart = cz - hd;
     float uH = h * uvScale;
 
-    int ix0 = (int)((heroX - 62.0f - xStart) / stepX); if (ix0 < 0) ix0 = 0;
-    int ix1 = (int)((heroX + 62.0f - xStart) / stepX); if (ix1 >= nx) ix1 = nx - 1;
-    int iz0 = (int)((heroZ - 62.0f - zStart) / stepZ); if (iz0 < 0) iz0 = 0;
-    int iz1 = (int)((heroZ + 62.0f - zStart) / stepZ); if (iz1 >= nz) iz1 = nz - 1;
+    int ix0 = (int)((heroX - 54.0f - xStart) / stepX); if (ix0 < 0) ix0 = 0;
+    int ix1 = (int)((heroX + 54.0f - xStart) / stepX); if (ix1 >= nx) ix1 = nx - 1;
+    int iz0 = (int)((heroZ - 54.0f - zStart) / stepZ); if (iz0 < 0) iz0 = 0;
+    int iz1 = (int)((heroZ + 54.0f - zStart) / stepZ); if (iz1 >= nz) iz1 = nz - 1;
     if (ix0 > ix1 || iz0 > iz1) {
         sceGuEnable(GU_BLEND);
         sceGuEnable(GU_ALPHA_TEST);
@@ -1852,7 +1852,7 @@ int main(void) {
 
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
-        sceGumPerspective(52.0f, 16.0f / 9.0f, 1.0f, 95.0f);
+        sceGumPerspective(52.0f, 16.0f / 9.0f, 1.5f, 95.0f);
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
@@ -1954,7 +1954,7 @@ int main(void) {
         sceGuEnable(GU_DEPTH_TEST);
         sceGuEnable(GU_CLIP_PLANES);
         sceGuEnable(GU_FOG);
-        sceGuFog(22.0f, 72.0f, worldMode == 1 ? 0xFF180A0Cu : skyHor);
+        sceGuFog(18.0f, 54.0f, worldMode == 1 ? 0xFF180A0Cu : skyHor);
 
         /* Sky-Sea below Islands (Overworld outer edges only) */
         if (worldMode == 0 && (fabsf(heroX) > 470.0f || fabsf(heroZ) > 410.0f)) {
@@ -1984,7 +1984,7 @@ int main(void) {
         /* Platforms (AABB Distance culled for 30 FPS) */
         for (int i = 0; i < nPlats; i++) {
             Platform *p = &plats[i];
-            if (fabsf(p->x - heroX) > p->w * 0.5f + 64.0f || fabsf(p->z - heroZ) > p->d * 0.5f + 64.0f) continue;
+            if (fabsf(p->x - heroX) > p->w * 0.5f + 56.0f || fabsf(p->z - heroZ) > p->d * 0.5f + 56.0f) continue;
             const unsigned int *ptex = (p->texType == 0) ? texGrass : (p->texType == 1 ? texStone : (p->texType == 2 ? texObsidian : (p->texType == 3 ? texWood : texCrystal)));
             draw_box3d(p->x, p->y, p->z, p->w, p->h, p->d, ptex, ABGR(255, 255, 255, 255), 0.25f);
         }
