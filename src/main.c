@@ -822,6 +822,20 @@ static int is_walkable(float nx, float nz, float *outY) {
     return found;
 }
 
+static int get_ground_info(float nx, float nz, float *outY, int *outTex) {
+    int found = 0, bestTex = 0;
+    float bestY = -100.0f;
+    for (int i = 0; i < nPlats; i++) {
+        Platform *p = &plats[i];
+        if (nx >= p->x - p->w * 0.5f && nx <= p->x + p->w * 0.5f &&
+            nz >= p->z - p->d * 0.5f && nz <= p->z + p->d * 0.5f) {
+            if (!found || p->y > bestY) { bestY = p->y; bestTex = p->texType; found = 1; }
+        }
+    }
+    if (found) { *outY = bestY; *outTex = bestTex; }
+    return found;
+}
+
 static unsigned int lerp_abgr(unsigned int a, unsigned int b, float t) {
     int ar = a & 0xFF, ag = (a >> 8) & 0xFF, ab = (a >> 16) & 0xFF;
     int br = b & 0xFF, bg = (b >> 8) & 0xFF, bb = (b >> 16) & 0xFF;
@@ -2043,6 +2057,63 @@ int main(void) {
                 draw_box3d(pr->x - 0.9f, pr->y + 2.6f, pr->z, 0.45f, 2.6f, 0.45f, texCrystal, wc, 0.5f);
                 draw_box3d(pr->x + 0.9f, pr->y + 2.6f, pr->z, 0.45f, 2.6f, 0.45f, texCrystal, wc, 0.5f);
                 draw_box3d(pr->x, pr->y + 2.9f, pr->z, 2.2f, 0.4f, 0.5f, texCrystal, ABGR(140, 240, 255, 255), 0.5f);
+            }
+        }
+
+        /* Procedural Dense Open-World Vegetation & Rocks (O(1) 13x13 grid around hero) */
+        if (worldMode == 0) {
+            const float cSz = 7.0f;
+            int hgx = (int)floorf(heroX / cSz), hgz = (int)floorf(heroZ / cSz);
+            /* Pass 1: Grass tufts, bushes, and trees (single texTree bind!) */
+            for (int iz = hgz - 6; iz <= hgz + 6; iz++) {
+                for (int ix = hgx - 6; ix <= hgx + 6; ix++) {
+                    unsigned int h = ((unsigned int)ix * 73856093u) ^ ((unsigned int)iz * 19349663u);
+                    h ^= (h >> 13); h *= 0x5bd1e995u; h ^= (h >> 15);
+                    float ox = ((float)(h & 255) / 255.0f - 0.5f) * 4.8f;
+                    float oz = ((float)((h >> 8) & 255) / 255.0f - 0.5f) * 4.8f;
+                    float wx = ((float)ix + 0.5f) * cSz + ox;
+                    float wz = ((float)iz + 0.5f) * cSz + oz;
+                    if (wx * wx + wz * wz < 529.0f) continue; /* Keep Pueblo del Alba town plaza clear */
+                    if (fabsf(wx) < 32.0f && fabsf(wz + 305.0f) < 32.0f) continue; /* Keep Aldea Lacustre clear */
+                    float dx = wx - heroX, dz = wz - heroZ;
+                    float d2 = dx * dx + dz * dz;
+                    if (d2 > 1850.0f) continue;
+                    float gy = 0.0f; int gtex = 0;
+                    if (!get_ground_info(wx, wz, &gy, &gtex) || gtex != 0) continue;
+                    int kindRoll = (h >> 16) & 31;
+                    int isForest = (wx < -220.0f);
+                    if (kindRoll < (isForest ? 10 : 5)) {
+                        float th = 3.2f + (float)((h >> 21) & 3) * 0.45f;
+                        draw_billboard(wx, gy, wz, th, th * 1.15f, texTree, ABGR(255, 255, 255, 255), (h & 1), camYaw);
+                    } else if (kindRoll < 16 && d2 < 1100.0f) {
+                        draw_billboard(wx, gy, wz, 1.95f, 1.45f, texTree, ABGR(205, 255, 185, 255), (h & 1), camYaw);
+                    } else if (d2 < 850.0f) {
+                        draw_billboard(wx, gy, wz, 1.15f, 0.85f, texTree, ABGR(145, 255, 125, 255), (h & 1), camYaw);
+                        if ((h & 3) == 0)
+                            draw_billboard(wx + 1.4f, gy, wz - 1.1f, 0.95f, 0.72f, texTree, ABGR(160, 255, 140, 255), !(h & 1), camYaw);
+                    }
+                }
+            }
+            /* Pass 2: Rocks & Wildflowers / Mushrooms close to hero */
+            for (int iz = hgz - 4; iz <= hgz + 4; iz++) {
+                for (int ix = hgx - 4; ix <= hgx + 4; ix++) {
+                    unsigned int h = ((unsigned int)ix * 19349663u) ^ ((unsigned int)iz * 83492791u);
+                    h ^= (h >> 13); h *= 0x5bd1e995u; h ^= (h >> 15);
+                    if ((h & 7) > 2) continue;
+                    float wx = ((float)ix + 0.5f) * cSz + (((float)((h >> 4) & 255) / 255.0f - 0.5f) * 4.5f);
+                    float wz = ((float)iz + 0.5f) * cSz + (((float)((h >> 12) & 255) / 255.0f - 0.5f) * 4.5f);
+                    if (wx * wx + wz * wz < 529.0f) continue;
+                    float dx = wx - heroX, dz = wz - heroZ;
+                    if (dx * dx + dz * dz > 750.0f) continue;
+                    float gy = 0.0f; int gtex = 0;
+                    if (!get_ground_info(wx, wz, &gy, &gtex)) continue;
+                    if (gtex == 0 && (h & 3) != 0) {
+                        draw_ground_decal(wx, gy, wz, 1.7f, (wx < -220.0f && (h & 8)) ? 2 : 0);
+                    } else if ((gtex == 0 || gtex == 2) && (h & 3) == 0) {
+                        float rs = 0.5f + (float)((h >> 20) & 3) * 0.18f;
+                        draw_box3d(wx, gy + rs, wz, rs * 2.1f, rs, rs * 1.8f, texStone, ABGR(185, 195, 200, 255), 0.7f);
+                    }
+                }
             }
         }
 
