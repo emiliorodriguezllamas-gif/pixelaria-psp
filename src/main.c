@@ -833,24 +833,32 @@ static void draw_box3d(float cx, float cy, float cz, float w, float h, float d, 
     unsigned int cSide = ABGR(((col & 0xFF) * 7) / 10, (((col >> 8) & 0xFF) * 7) / 10, (((col >> 16) & 0xFF) * 7) / 10, 255);
     unsigned int cDark = ABGR(((col & 0xFF) * 5) / 10, (((col >> 8) & 0xFF) * 5) / 10, (((col >> 16) & 0xFF) * 5) / 10, 255);
 
-    int nx = (w > 14.0f) ? ((int)(w / 14.0f) + 1) : 1;
-    int nz = (d > 14.0f) ? ((int)(d / 14.0f) + 1) : 1;
+    int nx = (w > 8.0f) ? ((int)(w / 8.0f) + 1) : 1;
+    int nz = (d > 8.0f) ? ((int)(d / 8.0f) + 1) : 1;
     float stepX = w / (float)nx, stepZ = d / (float)nz;
     float xStart = cx - hw, zStart = cz - hd;
     float uH = h * uvScale;
 
-    /* Count visible tiles & boundary edges to allocate exact GU memory */
-    int maxTris = nx * nz * 2 + (nx + nz) * 4;
+    int ix0 = (int)((heroX - 72.0f - xStart) / stepX); if (ix0 < 0) ix0 = 0;
+    int ix1 = (int)((heroX + 72.0f - xStart) / stepX); if (ix1 >= nx) ix1 = nx - 1;
+    int iz0 = (int)((heroZ - 72.0f - zStart) / stepZ); if (iz0 < 0) iz0 = 0;
+    int iz1 = (int)((heroZ + 72.0f - zStart) / stepZ); if (iz1 >= nz) iz1 = nz - 1;
+    if (ix0 > ix1 || iz0 > iz1) {
+        sceGuEnable(GU_BLEND);
+        sceGuEnable(GU_ALPHA_TEST);
+        return;
+    }
+
+    int visX = ix1 - ix0 + 1, visZ = iz1 - iz0 + 1;
+    int maxTris = visX * visZ * 2 + (visX + visZ) * 4;
     Vtx3D *v = (Vtx3D *)sceGuGetMemory(maxTris * 3 * sizeof(Vtx3D));
     int k = 0;
 
-    for (int iz = 0; iz < nz; iz++) {
+    for (int iz = iz0; iz <= iz1; iz++) {
         float tz0 = zStart + (float)iz * stepZ, tz1 = tz0 + stepZ;
-        if (tz1 < heroZ - 78.0f || tz0 > heroZ + 78.0f) continue;
         float v0 = (float)iz * stepZ * uvScale, v1 = (float)(iz + 1) * stepZ * uvScale;
-        for (int ix = 0; ix < nx; ix++) {
+        for (int ix = ix0; ix <= ix1; ix++) {
             float tx0 = xStart + (float)ix * stepX, tx1 = tx0 + stepX;
-            if (tx1 < heroX - 78.0f || tx0 > heroX + 78.0f) continue;
             float u0 = (float)ix * stepX * uvScale, u1 = (float)(ix + 1) * stepX * uvScale;
             unsigned int c00 = shade_vtx(tx0, y1, tz0, col);
             unsigned int c10 = shade_vtx(tx1, y1, tz0, col);
@@ -2071,31 +2079,49 @@ int main(void) {
                 gu_text2d(124, 224, "3 MAZMORRAS + PUEBLOS + 60 FPS", ABGR(140, 255, 175, 255), 1);
             }
         } else {
-            gu_window2d(6, 6, 326, 56);
+            /* Compact Vertical Left-Edge HUD (unobstructed center view!) */
+            gu_window2d(6, 6, 72, 152);
             char buf[80];
-            snprintf(buf, sizeof(buf), "NV.%d  HP %d/%d", heroLv, heroHp, heroMaxHp);
-            gu_text2d(14, 10, buf, ABGR(120, 255, 155, 255), 1);
-            gu_rect2d(124, 10, 112, 7, ABGR(20, 24, 40, 255));
-            int hpw = (heroHp * 110) / heroMaxHp;
-            gu_rect2d(125, 11, hpw, 5, ABGR(70, 235, 125, 255));
+            snprintf(buf, sizeof(buf), "NV.%d", heroLv);
+            gu_text2d(14, 10, buf, ABGR(140, 255, 175, 255), 1);
 
-            gu_text2d(14, 21, "ESTAMINA", ABGR(190, 255, 130, 255), 1);
-            gu_rect2d(74, 21, 90, 6, ABGR(20, 24, 40, 255));
-            int stw = (int)((heroStam * 88.0f) / heroMaxStam);
-            gu_rect2d(75, 22, stw, 4, ABGR(215, 235, 75, 255));
+            /* 4 Vertical Bars: HP, Stamina, Furor, Food */
+            const int barY = 22, barH = 60, barW = 8;
+            int hpFill = (heroHp * barH) / (heroMaxHp > 0 ? heroMaxHp : 1);
+            if (hpFill < 0) hpFill = 0; if (hpFill > barH) hpFill = barH;
+            gu_rect2d(13, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(14, barY + barH - hpFill, barW - 2, hpFill, ABGR(70, 235, 125, 255));
+            gu_text2d(11, barY + barH + 3, "HP", ABGR(120, 255, 155, 255), 1);
 
-            snprintf(buf, sizeof(buf), "FUROR:%d%%", furorCharge);
-            gu_text2d(170, 21, buf, furorCharge >= 100 ? ABGR(255, 110, 235, 255) : ABGR(160, 210, 255, 255), 1);
-            if (furorCharge >= 100 && !ghActive && (animFrame & 16)) {
-                gu_text2d(244, 21, "L+R!", ABGR(255, 235, 80, 255), 1);
-            }
+            int stFill = (int)((heroStam * (float)barH) / heroMaxStam);
+            if (stFill < 0) stFill = 0; if (stFill > barH) stFill = barH;
+            gu_rect2d(27, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(28, barY + barH - stFill, barW - 2, stFill, ABGR(215, 235, 75, 255));
+            gu_text2d(25, barY + barH + 3, "ST", ABGR(215, 235, 110, 255), 1);
 
-            snprintf(buf, sizeof(buf), "ORO:%d  MON:%d  COM:%d%%", heroGold, heroCoins, (int)heroHunger);
-            unsigned int comCol = (heroHunger < 25.0f) ? ABGR(255, 95, 95, 255) : ABGR(255, 225, 110, 255);
-            gu_text2d(14, 34, buf, comCol, 1);
+            int frFill = (furorCharge * barH) / 100;
+            if (frFill < 0) frFill = 0; if (frFill > barH) frFill = barH;
+            gu_rect2d(41, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(42, barY + barH - frFill, barW - 2, frFill, furorCharge >= 100 ? ABGR(255, 110, 235, 255) : ABGR(120, 195, 255, 255));
+            gu_text2d(39, barY + barH + 3, (furorCharge >= 100 && !ghActive && (animFrame & 16)) ? "LR" : "FR",
+                      furorCharge >= 100 ? ABGR(255, 235, 80, 255) : ABGR(160, 210, 255, 255), 1);
 
-            snprintf(buf, sizeof(buf), "POC:%d RAC:%d ELX:%d LL:%d/3 P:%d/6", heroPotions, heroFood, heroElixirs, keysFound, cluesCount);
-            gu_text2d(14, 46, buf, ABGR(185, 235, 255, 255), 1);
+            int cmFill = (int)((heroHunger * (float)barH) / 100.0f);
+            if (cmFill < 0) cmFill = 0; if (cmFill > barH) cmFill = barH;
+            gu_rect2d(55, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(56, barY + barH - cmFill, barW - 2, cmFill, (heroHunger < 25.0f) ? ABGR(255, 85, 85, 255) : ABGR(255, 195, 80, 255));
+            gu_text2d(53, barY + barH + 3, "CM", (heroHunger < 25.0f) ? ABGR(255, 95, 95, 255) : ABGR(255, 220, 120, 255), 1);
+
+            snprintf(buf, sizeof(buf), "O:%d", heroGold);
+            gu_text2d(12, 98, buf, ABGR(255, 225, 110, 255), 1);
+            snprintf(buf, sizeof(buf), "M:%d", heroCoins);
+            gu_text2d(12, 108, buf, ABGR(255, 200, 120, 255), 1);
+            snprintf(buf, sizeof(buf), "P:%d R:%d", heroPotions, heroFood);
+            gu_text2d(12, 118, buf, ABGR(185, 235, 255, 255), 1);
+            snprintf(buf, sizeof(buf), "E:%d L:%d", heroElixirs, keysFound);
+            gu_text2d(12, 128, buf, ABGR(185, 235, 255, 255), 1);
+            snprintf(buf, sizeof(buf), "PS:%d/6", cluesCount);
+            gu_text2d(12, 138, buf, ABGR(145, 245, 255, 255), 1);
 
             /* Hero-Centered Open-World Radar Minimap + FPS + Clock */
             gu_window2d(406, 6, 68, 68);
@@ -2140,8 +2166,8 @@ int main(void) {
             gu_text2d(12, 252, "X:ESPADA []:DASH /\\:PULSO O:TIENDA/ENTRAR SELECT:DIARIO START:USAR", ABGR(200, 225, 255, 255), 1);
 
             if (bannerT > 0) {
-                gu_window2d(78, 66, 324, 26);
-                gu_text2d(96, 75, bannerMsg, ABGR(255, 230, 110, 255), 1);
+                gu_window2d(84, 8, 246, 24);
+                gu_text2d(94, 16, bannerMsg, ABGR(255, 230, 110, 255), 1);
             }
             if (dialogT > 0 && !storyOpen) {
                 gu_window2d(24, 204, 432, 34);
