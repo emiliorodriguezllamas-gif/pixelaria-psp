@@ -1256,7 +1256,7 @@ int main(void) {
             float mag = sqrtf(ax * ax + ay * ay);
             if (mag > 1.0f) { ax /= mag; ay /= mag; }
 
-            float spd = 0.22f;
+            float spd = 0.34f;
             float fwdX = -sinf(camYaw), fwdZ = -cosf(camYaw);
             float rgtX =  cosf(camYaw), rgtZ = -sinf(camYaw);
             float mvX = (rgtX * ax + fwdX * (-ay));
@@ -2136,7 +2136,7 @@ int main(void) {
 
             gu_window2d(336, 6, 64, 20);
             snprintf(buf, sizeof(buf), "FPS:%2d", curFps);
-            gu_text2d(344, 12, buf, curFps >= 55 ? ABGR(110, 255, 140, 255) : ABGR(255, 225, 90, 255), 1);
+            gu_text2d(344, 12, buf, curFps >= 28 ? ABGR(110, 255, 140, 255) : ABGR(255, 225, 90, 255), 1);
 
             gu_window2d(336, 28, 64, 20);
             snprintf(buf, sizeof(buf), "%02d:%02d", curHour, curMin);
@@ -2218,6 +2218,7 @@ int main(void) {
             fpsLastT = now;
         }
 
+        sceDisplayWaitVblankStart();
         sceDisplayWaitVblankStart();
         sceGuSwapBuffers();
     }
