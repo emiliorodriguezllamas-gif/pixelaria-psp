@@ -573,7 +573,7 @@ static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, fireOpen 
 typedef struct {
     unsigned int magic;
     int lv, xp, gold, coins, potions, food, water, elixirs, campfires, wood, stone, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
-    float hunger, thirst, sleep, clockHour;
+    float hunger, thirst, sleep, clockHour, maxStam;
     int chests[16], obelisks[12], dngs[3], clueArr[6], qSt[4], qF, qL, qC;
 } SaveData;
 
@@ -583,7 +583,7 @@ static void save_game(void) {
     sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.coins = heroCoins;
     sd.potions = heroPotions; sd.food = heroFood; sd.water = heroWater; sd.elixirs = heroElixirs;
     sd.campfires = heroCampfires; sd.wood = heroWood; sd.stone = heroStone; sd.qG = qGather;
-    sd.hunger = heroHunger; sd.thirst = heroThirst; sd.sleep = heroSleep; sd.clockHour = gameClockHour;
+    sd.hunger = heroHunger; sd.thirst = heroThirst; sd.sleep = heroSleep; sd.clockHour = gameClockHour; sd.maxStam = heroMaxStam;
     sd.atk = heroAtk; sd.maxHp = heroMaxHp; sd.forge = forgeCount; sd.furor = furorCharge;
     sd.clues = cluesCount; sd.runes = runesLit; sd.keys = keysFound; sd.relics = heroRelics;
     sd.ending = trueEnding;
@@ -608,6 +608,8 @@ static int load_game(void) {
     heroPotions = sd.potions; heroFood = sd.food; heroWater = sd.water; heroElixirs = sd.elixirs;
     heroCampfires = sd.campfires; heroWood = sd.wood; heroStone = sd.stone; qGather = sd.qG;
     heroHunger = sd.hunger; heroThirst = sd.thirst; heroSleep = sd.sleep; gameClockHour = sd.clockHour;
+    heroMaxStam = (sd.maxStam >= 35.0f && sd.maxStam <= 100.0f) ? sd.maxStam : 100.0f;
+    heroStam = heroMaxStam;
     heroAtk = sd.atk; heroMaxHp = sd.maxHp; heroHp = heroMaxHp; forgeCount = sd.forge;
     furorCharge = sd.furor; cluesCount = sd.clues; runesLit = sd.runes; keysFound = sd.keys;
     heroRelics = sd.relics; trueEnding = sd.ending;
@@ -1350,6 +1352,7 @@ int main(void) {
                 heroLv = 1; heroXp = 0; heroGold = 25; heroCoins = 15;
                 heroPotions = 2; heroFood = 1; heroWater = 1; heroElixirs = 1; heroCampfires = 0;
                 heroHunger = 100.0f; heroThirst = 100.0f; heroSleep = 100.0f; gameClockHour = 8.0f;
+                heroMaxStam = 100.0f; heroStam = 100.0f;
                 heroWood = 0; heroStone = 0; qGather = 0;
                 shopOpen = 0; menuOpen = 0; fireOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
@@ -1418,8 +1421,9 @@ int main(void) {
                     if (heroFood > 0) {
                         heroFood--;
                         heroHunger += 50.0f; if (heroHunger > 100.0f) heroHunger = 100.0f;
+                        heroMaxStam += 25.0f; if (heroMaxStam > 100.0f) heroMaxStam = 100.0f;
                         heroHp += 20; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                        snprintf(dialogMsg, sizeof(dialogMsg), "RACION COMIDA! +50%% Comida +20 HP (Quedan %d)", heroFood);
+                        snprintf(dialogMsg, sizeof(dialogMsg), "RACION COMIDA! +50%% Com, +25 MaxEst, +20 HP (%d)", heroFood);
                         play_sfx(780.0f, 1000);
                     } else {
                         snprintf(dialogMsg, sizeof(dialogMsg), "No tienes Raciones!");
@@ -1430,8 +1434,9 @@ int main(void) {
                     if (heroWater > 0) {
                         heroWater--;
                         heroThirst += 50.0f; if (heroThirst > 100.0f) heroThirst = 100.0f;
+                        heroMaxStam += 20.0f; if (heroMaxStam > 100.0f) heroMaxStam = 100.0f;
                         heroHp += 15; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                        snprintf(dialogMsg, sizeof(dialogMsg), "AGUA BEBIDA! +50%% Sed +15 HP (Quedan %d)", heroWater);
+                        snprintf(dialogMsg, sizeof(dialogMsg), "AGUA BEBIDA! +50%% Sed, +20 MaxEst, +15 HP (%d)", heroWater);
                         play_sfx(820.0f, 1000);
                     } else {
                         snprintf(dialogMsg, sizeof(dialogMsg), "No tienes Agua!");
@@ -1491,11 +1496,12 @@ int main(void) {
                 if (fireCursor == 0) {
                     gameClockHour = 7.0f;
                     heroSleep = 100.0f;
+                    heroMaxStam = 100.0f;
                     heroHp = heroMaxHp; heroStam = heroMaxStam;
                     for (int s = 0; s < 14; s++)
                         spawn_part(heroX, heroY + 0.6f, heroZ, frand(-0.08f, 0.08f), frand(0.06f, 0.16f), frand(-0.08f, 0.08f), 30.0f, 0.45f, ABGR(255, 195, 70, 255));
                     fireOpen = 0;
-                    snprintf(dialogMsg, sizeof(dialogMsg), "HAS DORMIDO HASTA LAS 07:00! Sueno, HP y Estamina al 100%%.");
+                    snprintf(dialogMsg, sizeof(dialogMsg), "HAS DORMIDO HASTA LAS 07:00! Sueno, HP y Estamina Max 100%%.");
                     dialogT = 150; play_sfx(960.0f, 1500);
                 } else {
                     save_game();
@@ -1752,6 +1758,8 @@ int main(void) {
             /* Square: Souls Dodge Roll (22 Stamina, 16 i-frames) */
             if ((pressed & PSP_CTRL_SQUARE) && dashT == 0 && heroStam >= 22.0f) {
                 heroStam -= 22.0f; stamDelay = 24;
+                heroMaxStam -= 1.2f; if (heroMaxStam < 35.0f) heroMaxStam = 35.0f;
+                if (heroStam > heroMaxStam) heroStam = heroMaxStam;
                 float dl = sqrtf(mvX * mvX + mvZ * mvZ);
                 if (dl > 0.01f) { dashDx = mvX / dl; dashDz = mvZ / dl; }
                 else { dashDx = sinf(heroYaw); dashDz = cosf(heroYaw); }
@@ -1762,6 +1770,8 @@ int main(void) {
             /* Cross: Directional Light-Blade Slash (18 Stamina, hits where hero aims) */
             if ((pressed & PSP_CTRL_CROSS) && atkT == 0 && heavyT == 0 && heroStam >= 18.0f) {
                 heroStam -= 18.0f; stamDelay = 20;
+                heroMaxStam -= 1.0f; if (heroMaxStam < 35.0f) heroMaxStam = 35.0f;
+                if (heroStam > heroMaxStam) heroStam = heroMaxStam;
                 atkT = 14;
                 play_guitar_chord(15000);
                 float lx = heroX + sinf(heroYaw) * 0.35f, lz = heroZ + cosf(heroYaw) * 0.35f, ly = heroY;
@@ -1856,6 +1866,8 @@ int main(void) {
             /* Triangle: Heavy Resonance Strike (32 Stamina, 2.2x ATK + Stagger + Obelisks + Purify) */
             if ((pressed & PSP_CTRL_TRIANGLE) && pulseT == 0 && heroStam >= 32.0f) {
                 heroStam -= 32.0f; stamDelay = 28;
+                heroMaxStam -= 1.8f; if (heroMaxStam < 35.0f) heroMaxStam = 35.0f;
+                if (heroStam > heroMaxStam) heroStam = heroMaxStam;
                 pulseT = 28; heavyT = 18;
                 play_guitar_chord(24000);
                 for (int i = 0; i < nEnemies; i++) {
@@ -2783,9 +2795,12 @@ int main(void) {
             gu_rect2d(13, barY + barH - hpFill, barW - 2, hpFill, ABGR(70, 235, 125, 255));
             gu_text2d(10, barY + barH + 3, "HP", ABGR(120, 255, 155, 255), 1);
 
-            int stFill = (int)((heroStam * (float)barH) / heroMaxStam);
+            int stFill = (int)((heroStam * (float)barH) / 100.0f);
+            int stMaxFill = (int)((heroMaxStam * (float)barH) / 100.0f);
             if (stFill < 0) stFill = 0; if (stFill > barH) stFill = barH;
+            if (stMaxFill < 0) stMaxFill = 0; if (stMaxFill > barH) stMaxFill = barH;
             gu_rect2d(26, barY, barW, barH, ABGR(20, 24, 40, 255));
+            if (stMaxFill < barH) gu_rect2d(27, barY, barW - 2, barH - stMaxFill, ABGR(95, 40, 45, 255));
             gu_rect2d(27, barY + barH - stFill, barW - 2, stFill, ABGR(215, 235, 75, 255));
             gu_text2d(24, barY + barH + 3, "ST", ABGR(215, 235, 110, 255), 1);
 
