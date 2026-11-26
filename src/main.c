@@ -419,23 +419,28 @@ static int ghActive = 0, ghSpawned = 0, ghSpawnT = 0, ghHits = 0;
 static float ghMult = 1.5f;
 static char ghJudge[32] = "";
 static int ghJudgeT = 0;
-static int heroGold = 25, heroPotions = 2, heroLv = 1, heroXp = 0;
+static int heroGold = 25, heroCoins = 30, heroPotions = 2, heroFood = 2, heroElixirs = 1, heroLv = 1, heroXp = 0;
+static float heroHunger = 100.0f;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
 static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
 static float dashDx = 0.0f, dashDz = 0.0f;
 static int worldMode = 0; /* 0=Overworld, 1=Dungeon */
 static int curDungeon = 0, dngRunes = 0, hasSave = 0;
+static int shopOpen = 0, shopCursor = 0, hungerTick = 0;
 
 typedef struct {
     unsigned int magic;
-    int lv, xp, gold, potions, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
+    int lv, xp, gold, coins, potions, food, elixirs, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
+    float hunger;
     int chests[16], obelisks[12], dngs[3], clueArr[6], qSt[4], qF, qL, qC;
 } SaveData;
 
 static void save_game(void) {
     SaveData sd;
     sd.magic = 0xAE7E2026u;
-    sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.potions = heroPotions;
+    sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.coins = heroCoins;
+    sd.potions = heroPotions; sd.food = heroFood; sd.elixirs = heroElixirs;
+    sd.hunger = heroHunger;
     sd.atk = heroAtk; sd.maxHp = heroMaxHp; sd.forge = forgeCount; sd.furor = furorCharge;
     sd.clues = cluesCount; sd.runes = runesLit; sd.keys = keysFound; sd.relics = heroRelics;
     sd.ending = trueEnding;
@@ -456,7 +461,9 @@ static int load_game(void) {
     int rd = sceIoRead(fd, &sd, sizeof(sd));
     sceIoClose(fd);
     if (rd != (int)sizeof(sd) || sd.magic != 0xAE7E2026u) return 0;
-    heroLv = sd.lv; heroXp = sd.xp; heroGold = sd.gold; heroPotions = sd.potions;
+    heroLv = sd.lv; heroXp = sd.xp; heroGold = sd.gold; heroCoins = sd.coins;
+    heroPotions = sd.potions; heroFood = sd.food; heroElixirs = sd.elixirs;
+    heroHunger = sd.hunger;
     heroAtk = sd.atk; heroMaxHp = sd.maxHp; heroHp = heroMaxHp; forgeCount = sd.forge;
     furorCharge = sd.furor; cluesCount = sd.clues; runesLit = sd.runes; keysFound = sd.keys;
     heroRelics = sd.relics; trueEnding = sd.ending;
@@ -816,7 +823,9 @@ int main(void) {
                 }
             } else if (pressed & PSP_CTRL_START) {
                 inTitle = 0;
-                heroLv = 1; heroXp = 0; heroGold = 25; heroPotions = 2;
+                heroLv = 1; heroXp = 0; heroGold = 25; heroCoins = 30;
+                heroPotions = 2; heroFood = 2; heroElixirs = 1; heroHunger = 100.0f;
+                shopOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
                 furorCharge = 40; cluesCount = 0; runesLit = 0; keysFound = 0;
                 heroRelics = 0; trueEnding = 0;
@@ -837,6 +846,31 @@ int main(void) {
             if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_CIRCLE | PSP_CTRL_SELECT)) {
                 storyOpen = 0;
                 play_sfx(520.0f, 600);
+            }
+        } else if (shopOpen) {
+            if (pressed & PSP_CTRL_UP) { shopCursor = (shopCursor + 3) & 3; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { shopCursor = (shopCursor + 1) & 3; play_sfx(520.0f, 400); }
+            if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { shopOpen = 0; play_sfx(420.0f, 500); }
+            if (pressed & PSP_CTRL_CROSS) {
+                static const int sPrices[4] = { 10, 18, 22, 35 };
+                int p = sPrices[shopCursor];
+                if (heroCoins >= p) {
+                    heroCoins -= p;
+                    if (shopCursor == 0) { heroFood++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: RACION DE VIAJE (Tienes %d)", heroFood); }
+                    else if (shopCursor == 1) { heroPotions++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: POCION CURATIVA (Tienes %d)", heroPotions); }
+                    else if (shopCursor == 2) { heroElixirs++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: ELIXIR ESTAMINA (Tienes %d)", heroElixirs); }
+                    else {
+                        heroFood += 2; heroPotions++; heroHunger += 25.0f;
+                        if (heroHunger > 100.0f) heroHunger = 100.0f;
+                        snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: PACK SUPERVIVENCIA (+2 Raciones, +1 Pocion)");
+                    }
+                    dialogT = 120;
+                    play_sfx(960.0f, 1300);
+                } else {
+                    snprintf(dialogMsg, sizeof(dialogMsg), "MONEDAS INSUFICIENTES! Necesitas %d Monedas.", p);
+                    dialogT = 100;
+                    play_sfx(180.0f, 800);
+                }
             }
         } else if (ghActive) {
             /* GUITAR HERO CRITICAL SOLO: Power up massive AoE damage! */
@@ -916,6 +950,7 @@ int main(void) {
                             if (enemies[i].z < -18.0f && enemies[i].x > -18.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
                             if (enemies[i].x > 18.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
                             heroGold += enemies[i].isBoss ? 50 : 18;
+                            heroCoins += enemies[i].isBoss ? 40 : 12;
                             heroXp += enemies[i].isBoss ? 80 : 25;
                             if (enemies[i].isBoss && worldMode == 1 && !dngCleared[curDungeon]) {
                                 dngCleared[curDungeon] = 1; keysFound++;
@@ -957,8 +992,29 @@ int main(void) {
             if (heroFlash > 0) heroFlash--;
             if (stamDelay > 0) stamDelay--;
             else if (heroStam < heroMaxStam) {
-                heroStam += 0.85f;
+                float stamRegen = (heroHunger < 25.0f) ? 0.40f : 0.85f;
+                heroStam += stamRegen;
                 if (heroStam > heroMaxStam) heroStam = heroMaxStam;
+            }
+            /* Survival hunger drain + auto-ration + starvation */
+            heroHunger -= (dashT > 0 || atkT > 0 || heavyT > 0) ? 0.025f : 0.014f;
+            if (heroHunger <= 25.0f && heroFood > 0) {
+                heroFood--;
+                heroHunger += 50.0f; if (heroHunger > 100.0f) heroHunger = 100.0f;
+                heroHp += 20; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                snprintf(dialogMsg, sizeof(dialogMsg), "RACION AUTOMATICA! +50%% Comida +20 HP (Quedan %d)", heroFood);
+                dialogT = 110;
+                play_sfx(780.0f, 900);
+            }
+            if (heroHunger < 0.0f) heroHunger = 0.0f;
+            if (heroHunger <= 0.0f) {
+                hungerTick++;
+                if (hungerTick >= 120) {
+                    hungerTick = 0;
+                    if (heroHp > 1) heroHp--;
+                }
+            } else {
+                hungerTick = 0;
             }
 
             /* L + R together: Activate Guitar Hero Critical Special when Furor = 100% */
@@ -1033,13 +1089,38 @@ int main(void) {
                 play_sfx(680.0f, 900);
             }
 
-            /* START: Use Potion */
-            if ((pressed & PSP_CTRL_START) && heroPotions > 0 && heroHp < heroMaxHp) {
-                heroPotions--;
-                heroHp += 60; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                snprintf(dialogMsg, sizeof(dialogMsg), "POCION USADA! +60 HP (Quedan %d)", heroPotions);
-                dialogT = 100;
-                play_sfx(860.0f, 1200);
+            /* START: Use Elixir / Ration / Potion */
+            if (pressed & PSP_CTRL_START) {
+                if (heroStam < 30.0f && heroElixirs > 0) {
+                    heroElixirs--;
+                    heroStam = heroMaxStam;
+                    heroHp += 40; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                    snprintf(dialogMsg, sizeof(dialogMsg), "ELIXIR USADO! Estamina 100%% +40 HP (Quedan %d)", heroElixirs);
+                    dialogT = 100; play_sfx(920.0f, 1200);
+                } else if (heroHunger < 75.0f && heroFood > 0 && heroHp >= (heroMaxHp * 85) / 100) {
+                    heroFood--;
+                    heroHunger += 50.0f; if (heroHunger > 100.0f) heroHunger = 100.0f;
+                    heroHp += 20; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                    snprintf(dialogMsg, sizeof(dialogMsg), "RACION COMIDA! +50%% Comida +20 HP (Quedan %d)", heroFood);
+                    dialogT = 100; play_sfx(780.0f, 1000);
+                } else if (heroPotions > 0 && heroHp < heroMaxHp) {
+                    heroPotions--;
+                    heroHp += 60; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                    snprintf(dialogMsg, sizeof(dialogMsg), "POCION USADA! +60 HP (Quedan %d)", heroPotions);
+                    dialogT = 100; play_sfx(860.0f, 1200);
+                } else if (heroFood > 0 && heroHunger < 95.0f) {
+                    heroFood--;
+                    heroHunger += 50.0f; if (heroHunger > 100.0f) heroHunger = 100.0f;
+                    heroHp += 20; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                    snprintf(dialogMsg, sizeof(dialogMsg), "RACION COMIDA! +50%% Comida +20 HP (Quedan %d)", heroFood);
+                    dialogT = 100; play_sfx(780.0f, 1000);
+                } else if (heroElixirs > 0 && (heroStam < heroMaxStam || heroHp < heroMaxHp)) {
+                    heroElixirs--;
+                    heroStam = heroMaxStam;
+                    heroHp += 40; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                    snprintf(dialogMsg, sizeof(dialogMsg), "ELIXIR USADO! Estamina 100%% +40 HP (Quedan %d)", heroElixirs);
+                    dialogT = 100; play_sfx(920.0f, 1200);
+                }
             }
 
             /* Square: Souls Dodge Roll (22 Stamina, 16 i-frames) */
@@ -1091,11 +1172,14 @@ int main(void) {
                             if (enemies[i].x < -18.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
                             if (enemies[i].z < -18.0f && enemies[i].x > -18.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
                             if (enemies[i].x > 18.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
-                            static const int mobGold[3] = { 10, 22, 40 };
-                            static const int mobXp[3]   = { 14, 30, 55 };
+                            static const int mobGold[3]  = { 10, 22, 40 };
+                            static const int mobCoins[3] = {  6, 12, 22 };
+                            static const int mobXp[3]    = { 14, 30, 55 };
                             int goldDrop = enemies[i].isBoss ? (80 + enemies[i].bossId * 50) : mobGold[enemies[i].kind % 3];
+                            int coinDrop = enemies[i].isBoss ? 40 : mobCoins[enemies[i].kind % 3];
                             int xpGain = enemies[i].isBoss ? (160 + enemies[i].bossId * 120) : mobXp[enemies[i].kind % 3];
                             heroGold += goldDrop;
+                            heroCoins += coinDrop;
                             heroXp += xpGain;
                             if (!enemies[i].isBoss && (xr() % 5) == 0) { heroPotions++; }
                             int xpNeed = 80 * heroLv * heroLv;
@@ -1163,7 +1247,7 @@ int main(void) {
                                 spawn_part(enemies[i].x, enemies[i].y + 0.8f, enemies[i].z,
                                            frand(-0.10f, 0.10f), frand(0.05f, 0.15f), frand(-0.10f, 0.10f),
                                            24.0f, 0.40f, ABGR(120, 240, 255, 255));
-                            if (enemies[i].hp <= 0) { enemies[i].alive = 0; heroGold += 20; heroXp += 35; }
+                            if (enemies[i].hp <= 0) { enemies[i].alive = 0; heroGold += 20; heroCoins += 12; heroXp += 35; }
                         }
                     }
                 }
@@ -1207,27 +1291,23 @@ int main(void) {
                             play_sfx(780.0f, 1100);
                         } else if (nid == 4) { /* Mercader Nilo (Aldea Lacustre) */
                             if (qState[0] == 1) {
-                                qState[0] = 2; heroGold += 45; heroXp += 40;
+                                qState[0] = 2; heroGold += 45; heroCoins += 20; heroXp += 40;
                                 if (qKillsLake >= 2) qState[0] = 3;
                                 show_story("NILO - MISION: LIMPIEZA DEL LAGO",
-                                    "Eldon te envia? Gracias por el Sello! (+45 Oro)",
+                                    "Eldon te envia? Gracias! (+45 Oro, +20 Monedas)",
                                     "Los monstruos del Lago robaron nuestras medicinas.",
                                     "Derrota 2 enemigos aqui en el Lago y vuelve conmigo!");
                                 play_sfx(960.0f, 1400);
                             } else if (qState[0] == 3) {
-                                qState[0] = 4; heroMaxHp += 25; heroHp = heroMaxHp; heroPotions += 2;
+                                qState[0] = 4; heroMaxHp += 25; heroHp = heroMaxHp; heroPotions += 2; heroFood += 2;
                                 show_story("MISION COMPLETADA: ELIXIR LACUSTRE",
-                                    "Has salvado la Aldea Lacustre! (+25 MaxHP, +2 Pociones)",
+                                    "Has salvado la Aldea! (+25 HP, +2 Poc, +2 Raciones)",
                                     "Escuche un latido triste bajo el templo... Vaelen",
                                     "no nos traiciono por odio. Investiga las ruinas!");
                                 play_sfx(1100.0f, 1800);
-                            } else if (heroGold >= 20) {
-                                heroGold -= 20; heroPotions++;
-                                snprintf(dialogMsg, sizeof(dialogMsg), "NILO: Compras 1 Pocion! (Tienes %d)", heroPotions);
-                                play_sfx(920.0f, 1400);
                             } else {
-                                snprintf(dialogMsg, sizeof(dialogMsg), "NILO: Pociones (+60 HP) a 20 Oro! (%d/2 enemigos)", qKillsLake);
-                                play_sfx(740.0f, 900);
+                                shopOpen = 1; shopCursor = 0;
+                                play_sfx(780.0f, 800);
                             }
                         } else if (nid == 1) { /* Herrero Kael */
                             if (qState[1] == 0) {
@@ -1275,22 +1355,18 @@ int main(void) {
                                 show_story("MISION: ESENCIA DEL BOSQUE (Lyra)",
                                     "Las luciernagas del Bosque del Oeste estan mutando!",
                                     "Derrota 2 monstruos alli e ilumina el Obelisco (/\\)",
-                                    "para devolver la calma al bosque. (+3 Pociones, +15 HP)");
+                                    "para devolver la calma al bosque. (+3 Poc, +2 Rac)");
                                 play_sfx(780.0f, 1100);
                             } else if (qState[2] == 2) {
-                                qState[2] = 3; heroPotions += 3; heroMaxHp += 15; heroHp = heroMaxHp;
+                                qState[2] = 3; heroPotions += 3; heroFood += 2; heroCoins += 25; heroMaxHp += 15; heroHp = heroMaxHp;
                                 show_story("MISION COMPLETADA: PAZ EN EL BOSQUE",
-                                    "La niebla del Bosque se ha disipado! (+3 Pociones, +15 HP)",
-                                    "Toma mis mejores elixires para tu viaje a las",
-                                    "mazmorras. Siempre tendre pociones a 20 Oro.");
+                                    "La niebla se disipo! (+3 Poc, +2 Rac, +25 Mon, +15 HP)",
+                                    "Toma mis provisiones para tu viaje a las mazmorras.",
+                                    "Vuelve cuando necesites comida, pociones o elixires!");
                                 play_sfx(1100.0f, 1800);
-                            } else if (heroGold >= 20) {
-                                heroGold -= 20; heroPotions++;
-                                snprintf(dialogMsg, sizeof(dialogMsg), "LYRA: Compras 1 Pocion! (Tienes %d)", heroPotions);
-                                play_sfx(920.0f, 1400);
                             } else {
-                                snprintf(dialogMsg, sizeof(dialogMsg), "LYRA: Pociones a 20 Oro | Bosque: %d/2 y Obelisco:%s", qKillsForest, obeliskLit[0]?"OK":"NO");
-                                play_sfx(740.0f, 900);
+                                shopOpen = 1; shopCursor = 0;
+                                play_sfx(780.0f, 800);
                             }
                         } else if (nid == 3) { /* Sabio Orin */
                             if (qState[3] == 0) {
@@ -1324,8 +1400,8 @@ int main(void) {
                         if (props[i].kind == 3 && !props[i].active) {
                             props[i].active = 1;
                             if (props[i].id >= 0 && props[i].id < 16) chestOpened[props[i].id] = 1;
-                            heroRelics++; heroGold += 35; heroAtk += 4; heroMaxHp += 10; heroHp = heroMaxHp;
-                            snprintf(dialogMsg, sizeof(dialogMsg), "COFRE %d: +35 Oro, +4 ATK y +10 HP!", heroRelics);
+                            heroRelics++; heroGold += 35; heroCoins += 20; heroAtk += 4; heroMaxHp += 10; heroHp = heroMaxHp;
+                            snprintf(dialogMsg, sizeof(dialogMsg), "COFRE %d: +35 Oro, +20 Monedas, +4 ATK y +10 HP!", heroRelics);
                             dialogT = 150; play_sfx(1100.0f, 1800); acted = 1;
                         } else if (props[i].kind == 4) {
                             heroHp = heroMaxHp; heroStam = heroMaxStam;
@@ -1650,8 +1726,8 @@ int main(void) {
                 gu_text2d(124, 224, "3 MAZMORRAS + PUEBLOS + 60 FPS", ABGR(140, 255, 175, 255), 1);
             }
         } else {
-            gu_window2d(6, 6, 304, 50);
-            char buf[72];
+            gu_window2d(6, 6, 326, 56);
+            char buf[80];
             snprintf(buf, sizeof(buf), "NV.%d  HP %d/%d", heroLv, heroHp, heroMaxHp);
             gu_text2d(14, 10, buf, ABGR(120, 255, 155, 255), 1);
             gu_rect2d(124, 10, 112, 7, ABGR(20, 24, 40, 255));
@@ -1669,8 +1745,12 @@ int main(void) {
                 gu_text2d(244, 21, "L+R!", ABGR(255, 235, 80, 255), 1);
             }
 
-            snprintf(buf, sizeof(buf), "ORO:%d POC:%d LLAVES:%d/3 PISTAS:%d/6", heroGold, heroPotions, keysFound, cluesCount);
-            gu_text2d(14, 34, buf, ABGR(255, 225, 110, 255), 1);
+            snprintf(buf, sizeof(buf), "ORO:%d  MON:%d  COM:%d%%", heroGold, heroCoins, (int)heroHunger);
+            unsigned int comCol = (heroHunger < 25.0f) ? ABGR(255, 95, 95, 255) : ABGR(255, 225, 110, 255);
+            gu_text2d(14, 34, buf, comCol, 1);
+
+            snprintf(buf, sizeof(buf), "POC:%d RAC:%d ELX:%d LL:%d/3 P:%d/6", heroPotions, heroFood, heroElixirs, keysFound, cluesCount);
+            gu_text2d(14, 46, buf, ABGR(185, 235, 255, 255), 1);
 
             /* Minimap + FPS */
             gu_window2d(406, 6, 68, 68);
@@ -1691,11 +1771,11 @@ int main(void) {
             gu_text2d(344, 12, buf, curFps >= 55 ? ABGR(110, 255, 140, 255) : ABGR(255, 225, 90, 255), 1);
 
             gu_window2d(6, 246, 468, 20);
-            gu_text2d(12, 252, "X:ESPADA []:DASH /\\:PULSO O:LEER/ENTRAR SELECT:DIARIO START:POCION", ABGR(200, 225, 255, 255), 1);
+            gu_text2d(12, 252, "X:ESPADA []:DASH /\\:PULSO O:TIENDA/ENTRAR SELECT:DIARIO START:USAR", ABGR(200, 225, 255, 255), 1);
 
             if (bannerT > 0) {
-                gu_window2d(78, 56, 324, 26);
-                gu_text2d(96, 65, bannerMsg, ABGR(255, 230, 110, 255), 1);
+                gu_window2d(78, 66, 324, 26);
+                gu_text2d(96, 75, bannerMsg, ABGR(255, 230, 110, 255), 1);
             }
             if (dialogT > 0 && !storyOpen) {
                 gu_window2d(24, 204, 432, 34);
@@ -1708,6 +1788,26 @@ int main(void) {
                 gu_text2d(44, 132, storyL2, ABGR(240, 245, 255, 255), 1);
                 gu_text2d(44, 150, storyL3, ABGR(145, 240, 255, 255), 1);
                 gu_text2d(150, 176, "[ PULSA X o O PARA CONTINUAR ]", ABGR(255, 225, 110, 255), 1);
+            }
+            if (shopOpen) {
+                static const char *sNames[4] = {
+                    "RACION DE VIAJE   (+50% Comida, +20 HP)",
+                    "POCION CURATIVA   (+60 HP)",
+                    "ELIXIR ESTAMINA   (Estamina 100%, +40 HP)",
+                    "PACK SUPERVIVENCIA(+2 Rac, +1 Poc, +25% Com)"
+                };
+                static const int sPrices[4] = { 10, 18, 22, 35 };
+                gu_window2d(34, 68, 412, 130);
+                snprintf(buf, sizeof(buf), "TIENDA DE SUPERVIVENCIA   |   MONEDAS: %d", heroCoins);
+                gu_text2d(48, 80, buf, ABGR(255, 225, 95, 255), 1);
+                for (int s = 0; s < 4; s++) {
+                    int ry = 102 + s * 19;
+                    if (s == shopCursor) gu_rect2d(44, ry - 3, 392, 15, ABGR(55, 85, 145, 210));
+                    snprintf(buf, sizeof(buf), "%s %-40s %2dM", (s == shopCursor) ? ">" : " ", sNames[s], sPrices[s]);
+                    unsigned int col = (heroCoins >= sPrices[s]) ? ABGR(235, 250, 255, 255) : ABGR(160, 120, 120, 255);
+                    gu_text2d(48, ry, buf, col, 1);
+                }
+                gu_text2d(92, 182, "[ARRIBA/ABAJO] ELEGIR   [X] COMPRAR   [O] SALIR", ABGR(145, 240, 255, 255), 1);
             }
             if (ghActive) {
                 static const unsigned int lCols[4] = {
