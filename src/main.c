@@ -484,6 +484,25 @@ static int ghJudgeT = 0;
 static int heroGold = 25, heroCoins = 30, heroPotions = 2, heroFood = 2, heroElixirs = 1, heroLv = 1, heroXp = 0;
 static float heroHunger = 100.0f;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
+typedef struct {
+    float x, y, z, vy;
+    int dmg, life, mode; /* mode: 0=hit(white/gold), 1=crit(yellow!), 2=heroDmg(red) */
+} DmgPop;
+
+#define MAX_POPS 10
+static DmgPop pops[MAX_POPS];
+static int hitStopT = 0, dmgFlashT = 0;
+static float camShake = 0.0f;
+
+static void spawn_pop(float x, float y, float z, int dmg, int mode) {
+    for (int i = 0; i < MAX_POPS; i++) {
+        if (pops[i].life <= 0) {
+            pops[i] = (DmgPop){ x, y, z, 0.07f, dmg, 26, mode };
+            return;
+        }
+    }
+}
+
 static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
 static float dashDx = 0.0f, dashDz = 0.0f;
 static int worldMode = 0; /* 0=Overworld, 1=Dungeon */
@@ -1278,6 +1297,8 @@ int main(void) {
                         enemies[i].flash = 16;
                         enemies[i].state = 2; enemies[i].timer = 50;
                         hitsLanded++;
+                        spawn_pop(enemies[i].x, enemies[i].y + 1.8f, enemies[i].z, totalDmg, 1);
+                        hitStopT = 5; camShake = 0.85f;
                         if (enemies[i].hp <= 0) {
                             enemies[i].alive = 0;
                             furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
@@ -1304,6 +1325,8 @@ int main(void) {
                 dialogT = 160;
                 play_sfx(1046.5f, 3000);
             }
+        } else if (hitStopT > 0) {
+            hitStopT--;
         } else {
             int zone = get_current_zone();
             curZoneAudio = zone;
@@ -1486,6 +1509,8 @@ int main(void) {
                 heroStam -= 18.0f; stamDelay = 20;
                 atkT = 14;
                 play_sfx(740.0f, 1000);
+                float lx = heroX + sinf(heroYaw) * 0.35f, lz = heroZ + cosf(heroYaw) * 0.35f, ly = heroY;
+                if (is_walkable(lx, lz, &ly)) { heroX = lx; heroZ = lz; heroY = ly; }
                 float hitX = heroX + sinf(heroYaw) * 1.85f;
                 float hitZ = heroZ + cosf(heroYaw) * 1.85f;
                 for (int p = -3; p <= 3; p++) {
@@ -1502,6 +1527,8 @@ int main(void) {
                         enemies[i].hp -= heroAtk;
                         enemies[i].flash = 8;
                         furorCharge += 8; if (furorCharge > 100) furorCharge = 100;
+                        spawn_pop(enemies[i].x, enemies[i].y + 1.5f, enemies[i].z, heroAtk, 0);
+                        hitStopT = 2; camShake = 0.28f;
                         float kdx = enemies[i].x - heroX, kdz = enemies[i].z - heroZ;
                         float kd = sqrtf(kdx * kdx + kdz * kdz);
                         if (kd > 0.05f) {
@@ -1515,6 +1542,7 @@ int main(void) {
                                        22.0f, 0.35f, ABGR(255, 120, 80, 255));
                         if (enemies[i].hp <= 0) {
                             enemies[i].alive = 0;
+                            hitStopT = 4; camShake = 0.48f;
                             if (!enemies[i].isBoss) enemies[i].respawnT = 600;
                             furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
                             if (enemies[i].x < -250.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
@@ -1590,6 +1618,8 @@ int main(void) {
                         } else {
                             enemies[i].hp -= (heroAtk * 2);
                             enemies[i].flash = 12;
+                            spawn_pop(enemies[i].x, enemies[i].y + 1.6f, enemies[i].z, heroAtk * 2, 1);
+                            hitStopT = 3; camShake = 0.55f;
                             if (enemies[i].state == 1) { enemies[i].state = 2; enemies[i].timer = 40; } /* Stagger! */
                             for (int s = 0; s < 10; s++)
                                 spawn_part(enemies[i].x, enemies[i].y + 0.8f, enemies[i].z,
@@ -1847,7 +1877,8 @@ int main(void) {
                             static const int bossDmg[3] = { 48, 70, 105 };
                             int dmg = e->isBoss ? bossDmg[e->bossId % 3] : mobDmg[e->kind % 3];
                             heroHp -= dmg;
-                            heroFlash = 10; invulnT = 28;
+                            heroFlash = 10; invulnT = 28; dmgFlashT = 6; camShake = 0.65f;
+                            spawn_pop(heroX, heroY + 1.9f, heroZ, dmg, 2);
                             play_sfx(150.0f, 1200);
                             if (heroHp <= 0) {
                                 if (worldMode == 1) build_overworld();
@@ -1876,6 +1907,12 @@ int main(void) {
                 parts[i].life -= 1.0f;
             }
         }
+        for (int i = 0; i < MAX_POPS; i++) {
+            if (pops[i].life > 0) { pops[i].y += pops[i].vy; pops[i].vy *= 0.90f; pops[i].life--; }
+        }
+        if (dmgFlashT > 0) dmgFlashT--;
+        camShake *= 0.76f;
+        if (camShake < 0.01f) camShake = 0.0f;
 
         /* Ambient Open-World Wildlife AI (Rabbits, Foxes, Deer, Flying Birds) */
         if (worldMode == 0 && !inTitle && !storyOpen && !shopOpen && !ghActive) {
@@ -2017,8 +2054,10 @@ int main(void) {
         smoothCamY += (heroY - smoothCamY) * 0.18f;
         float camDist = inTitle ? 12.5f : 10.2f;
         float camH    = inTitle ? 5.8f  : 6.0f;
-        ScePspFVector3 eye = { heroX + sinf(camYaw) * camDist, smoothCamY + camH, heroZ + cosf(camYaw) * camDist };
-        ScePspFVector3 at  = { heroX, smoothCamY + 1.1f, heroZ };
+        float shkX = sinf((float)animFrame * 2.3f) * camShake;
+        float shkY = cosf((float)animFrame * 2.9f) * camShake * 0.6f;
+        ScePspFVector3 eye = { heroX + sinf(camYaw) * camDist + shkX, smoothCamY + camH + shkY, heroZ + cosf(camYaw) * camDist };
+        ScePspFVector3 at  = { heroX + shkX * 0.5f, smoothCamY + 1.1f + shkY * 0.5f, heroZ };
         ScePspFVector3 up  = { 0.0f, 1.0f, 0.0f };
         sceGumLookAt(&eye, &at, &up);
 
@@ -2341,6 +2380,40 @@ int main(void) {
         sceGuDisable(GU_DEPTH_TEST);
         sceGuDisable(GU_CLIP_PLANES);
         sceGuDisable(GU_FOG);
+
+        /* 3D-to-2D Floating Damage Numbers + Red Damage Vignette */
+        if (dmgFlashT > 0) {
+            unsigned int vc = ABGR(220, 35, 35, dmgFlashT * 28);
+            gu_rect2d(0, 0, SCR_W, 5, vc); gu_rect2d(0, SCR_H - 5, SCR_W, 5, vc);
+            gu_rect2d(0, 0, 5, SCR_H, vc); gu_rect2d(SCR_W - 5, 0, 5, SCR_H, vc);
+        }
+        {
+            float fx = at.x - eye.x, fy = at.y - eye.y, fz = at.z - eye.z;
+            float fl = sqrtf(fx * fx + fy * fy + fz * fz);
+            if (fl > 0.01f) {
+                fx /= fl; fy /= fl; fz /= fl;
+                float rx = -fz, rz = fx;
+                float rl = sqrtf(rx * rx + rz * rz);
+                if (rl > 0.01f) { rx /= rl; rz /= rl; }
+                float ux = -fy * rz, uy = fz * rx - fx * rz, uz = fy * rx;
+                for (int i = 0; i < MAX_POPS; i++) {
+                    if (pops[i].life <= 0) continue;
+                    float dx = pops[i].x - eye.x, dy = pops[i].y - eye.y, dz = pops[i].z - eye.z;
+                    float zc = dx * fx + dy * fy + dz * fz;
+                    if (zc < 2.0f) continue;
+                    float xc = dx * rx + dz * rz;
+                    float yc = dx * ux + dy * uy + dz * uz;
+                    int sx = 240 + (int)((xc / zc) * 280.0f);
+                    int sy = 136 - (int)((yc / zc) * 280.0f);
+                    if (sx >= 10 && sx <= 445 && sy >= 10 && sy <= 255) {
+                        char pb[16];
+                        snprintf(pb, sizeof(pb), pops[i].mode == 1 ? "-%d!" : "-%d", pops[i].dmg);
+                        unsigned int pc = (pops[i].mode == 2) ? ABGR(255, 75, 75, 255) : ((pops[i].mode == 1) ? ABGR(255, 235, 80, 255) : ABGR(255, 255, 255, 255));
+                        gu_text2d(sx, sy, pb, pc, 1);
+                    }
+                }
+            }
+        }
 
         if (inTitle) {
             gu_window2d(54, 34, 372, 82);
