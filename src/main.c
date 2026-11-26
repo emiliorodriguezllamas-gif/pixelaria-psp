@@ -333,7 +333,7 @@ typedef struct {
 } Particle3D;
 
 #define MAX_PLATS 160
-#define MAX_PROPS 1400
+#define MAX_PROPS 2600
 #define MAX_ENEMIES 120
 #define MAX_NPCS 12
 #define MAX_PARTS 140
@@ -588,9 +588,9 @@ static void build_overworld(void) {
     add_plat(   0.0f, 0.35f,  180.0f, 48.0f, 48.0f, 3.0f, 0, 0); /* Torre del Sur */
     add_camp(   0.0f, 0.35f,  180.0f, 1, 4, 1, 15);
 
-    for (int i = 0; i < 95; i++) {
-        float px = -205.0f + (float)((i * 67) % 410);
-        float pz = -205.0f + (float)((i * 113) % 410);
+    for (int i = 0; i < 260; i++) {
+        float px = -210.0f + (float)((i * 67 + 17) % 420);
+        float pz = -210.0f + (float)((i * 113 + 31) % 420);
         if (fabsf(px) < 38.0f && fabsf(pz) < 38.0f) px += (px >= 0 ? 52.0f : -52.0f);
         if (fabsf(px + 110.0f) < 34.0f && fabsf(pz + 110.0f) < 34.0f) continue;
         if (fabsf(px - 110.0f) < 34.0f && fabsf(pz + 110.0f) < 34.0f) continue;
@@ -598,9 +598,12 @@ static void build_overworld(void) {
         if (fabsf(px - 110.0f) < 34.0f && fabsf(pz - 110.0f) < 34.0f) continue;
         if (fabsf(px + 180.0f) < 26.0f && fabsf(pz) < 26.0f) continue;
         if (fabsf(px) < 26.0f && fabsf(pz - 180.0f) < 26.0f) continue;
-        if ((i % 3) != 0) add_prop(px, 0.0f, pz, 1.2f, 3.4f + (float)(i % 3) * 0.5f, 1, 0);
-        else add_prop(px, 0.0f, pz, 0.9f, 1.45f, 12, 0); /* Bush */
-        add_prop(px + 2.0f, 0.0f, pz + 1.5f, 1.9f, 0.0f, 10, (i % 3 == 0) ? 2 : 0);
+        int m = i % 5;
+        if (m < 2) add_prop(px, 0.0f, pz, 1.2f, 3.3f + (float)(i % 3) * 0.5f, 1, 0); /* Tree */
+        else if (m == 2) add_prop(px, 0.0f, pz, 0.9f, 1.45f, 12, 0); /* Bush */
+        else if (m == 3) add_prop(px, 0.0f, pz, 0.7f, 0.85f, 14, 0); /* Grass tuft */
+        else add_prop(px, 0.0f, pz, 0.55f + (float)(i % 3) * 0.15f, 0.75f + (float)(i % 2) * 0.4f, 13, 0); /* Rock */
+        if ((i % 2) == 0) add_prop(px + 1.8f, 0.0f, pz + 1.4f, 1.8f, 0.0f, 10, (i % 4 == 0) ? 2 : 0);
     }
     add_camp(-110.0f, 0.35f, -110.0f, 0, 3, 0, -1);
     add_camp( 110.0f, 0.35f, -110.0f, 0, 3, 0, -1);
@@ -611,14 +614,17 @@ static void build_overworld(void) {
 
     /* 2. GRAN BOSQUE ESMERALDA (West: x=-560..-220, z=-220..+220, 340x440) */
     add_plat(-390.0f, 0.00f, 0.0f, 340.0f, 440.0f, 4.0f, 0, 1);
-    for (int i = 0; i < 150; i++) {
-        float tx = -232.0f - (float)((i * 53) % 315);
-        float tz = -208.0f + (float)((i * 89) % 416);
+    for (int i = 0; i < 340; i++) {
+        float tx = -228.0f - (float)((i * 53 + 11) % 324);
+        float tz = -212.0f + (float)((i * 89 + 23) % 424);
         if (fabsf(tx + 390.0f) < 12.0f && fabsf(tz) < 12.0f) tz += 18.0f;
         if (fabsf(tx + 468.0f) < 14.0f && fabsf(tz) < 14.0f) tz += 18.0f;
-        if ((i % 4) != 0) add_prop(tx, 0.0f, tz, 1.25f, 3.7f + (float)(i % 3) * 0.5f, 1, 0);
-        else add_prop(tx, 0.0f, tz, 0.9f, 1.55f, 12, 0); /* Forest Bush */
-        if ((i & 1) == 0) add_prop(tx + 1.9f, 0.0f, tz + 1.7f, 1.9f, 0.0f, 10, (i % 4 == 0) ? 2 : 0);
+        int m = i % 6;
+        if (m < 3) add_prop(tx, 0.0f, tz, 1.25f, 3.6f + (float)(i % 3) * 0.55f, 1, 0); /* Tree */
+        else if (m == 3) add_prop(tx, 0.0f, tz, 0.9f, 1.55f, 12, 0); /* Bush */
+        else if (m == 4) add_prop(tx, 0.0f, tz, 0.7f, 0.85f, 14, 0); /* Grass */
+        else add_prop(tx, 0.0f, tz, 0.6f, 0.9f, 13, 0); /* Mossy Rock */
+        if ((i % 2) == 0) add_prop(tx + 1.8f, 0.0f, tz + 1.6f, 1.9f, 0.0f, 10, (i % 4 == 0) ? 2 : 0);
     }
     add_prop(-390.0f, 0.0f,   0.0f, 0.7f, 3.2f, 2, 0); /* Obelisk 0 */
     add_prop(-390.0f, 0.0f,   0.0f, 3.2f, 0.0f, 10, 3);
@@ -648,13 +654,16 @@ static void build_overworld(void) {
     add_prop( 26.0f, 0.35f, -335.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
     add_prop(  0.0f, 0.35f, -410.0f, 1.2f, 3.6f, 6, 1); /* DUNGEON 1 PORTAL */
     add_npc(-14.0f, 0.35f, -298.0f, 2, 4, "Mercader Nilo", "NILO: Tienda de Supervivencia!");
-    for (int i = 0; i < 48; i++) {
-        float lx = -205.0f + (float)((i * 71) % 410);
-        float lz = -465.0f + (float)((i * 59) % 225);
+    for (int i = 0; i < 120; i++) {
+        float lx = -210.0f + (float)((i * 71 + 13) % 420);
+        float lz = -470.0f + (float)((i * 59 + 19) % 235);
         if (fabsf(lx) < 42.0f && fabsf(lz + 330.0f) < 65.0f) lx += (lx >= 0 ? 60.0f : -60.0f);
-        if ((i % 3) != 0) add_prop(lx, 0.35f, lz, 1.2f, 3.7f, 1, 0);
-        else add_prop(lx, 0.35f, lz, 0.9f, 1.45f, 12, 0);
-        if ((i & 1) == 0) add_prop(lx + 1.8f, 0.35f, lz + 1.5f, 1.8f, 0.0f, 10, 0);
+        int m = i % 4;
+        if (m == 0) add_prop(lx, 0.35f, lz, 1.2f, 3.7f, 1, 0);
+        else if (m == 1) add_prop(lx, 0.35f, lz, 0.9f, 1.45f, 12, 0);
+        else if (m == 2) add_prop(lx, 0.35f, lz, 0.7f, 0.85f, 14, 0);
+        else add_prop(lx, 0.35f, lz, 0.65f, 0.95f, 13, 0);
+        if ((i % 3) == 0) add_prop(lx + 1.8f, 0.35f, lz + 1.5f, 1.8f, 0.0f, 10, 0);
     }
     add_camp(-115.0f, 0.35f, -345.0f, 1, 4, 1, 13);
     add_camp( 115.0f, 0.35f, -355.0f, 2, 4, 0, -1);
@@ -670,11 +679,12 @@ static void build_overworld(void) {
     add_prop(462.0f, 0.35f,  -5.0f, 0.4f, 1.8f, 11, 2);
     add_prop(462.0f, 0.35f,   5.0f, 0.4f, 1.8f, 11, 2);
     add_npc(325.0f, 0.35f, -12.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada!");
-    for (int i = 0; i < 16; i++) {
-        float rx = 250.0f + (float)((i * 53) % 280);
-        float rz = -190.0f + (float)((i * 89) % 380);
+    for (int i = 0; i < 95; i++) {
+        float rx = 240.0f + (float)((i * 53 + 7) % 300);
+        float rz = -205.0f + (float)((i * 89 + 13) % 410);
         if (fabsf(rx - 325.0f) < 30.0f && fabsf(rz + 12.0f) < 30.0f) continue;
-        add_prop(rx, 0.35f, rz, 0.7f, 4.0f, 0, 0);
+        if ((i % 4) == 0) add_prop(rx, 0.35f, rz, 0.75f, 4.0f, 0, 0);
+        else add_prop(rx, 0.35f, rz, 0.7f + (float)(i % 3) * 0.2f, 0.9f + (float)(i % 2) * 0.5f, 13, 0);
     }
     add_camp(395.0f, 0.35f, -120.0f, 2, 4, 1, 14);
     add_camp(410.0f, 0.35f,  120.0f, 2, 4, 1, -1);
@@ -686,36 +696,49 @@ static void build_overworld(void) {
     add_prop(0.0f, 0.35f, 375.0f, 0.7f, 3.4f, 2, 5); /* Obelisk 5 */
     add_prop(0.0f, 0.35f, 375.0f, 3.2f, 0.0f, 10, 3);
     add_prop(24.0f, 0.35f, 340.0f, 1.0f, 3.0f, 9, 2); /* Paid Return Portal */
-    for (int i = 0; i < 55; i++) {
-        float sx = -205.0f + (float)((i * 61) % 410);
-        float sz =  235.0f + (float)((i * 47) % 225);
+    for (int i = 0; i < 140; i++) {
+        float sx = -210.0f + (float)((i * 61 + 9) % 420);
+        float sz =  230.0f + (float)((i * 47 + 17) % 235);
         if (fabsf(sx) < 70.0f && fabsf(sz - 375.0f) < 60.0f) continue;
-        if ((i % 3) != 0) add_prop(sx, 0.0f, sz, 1.2f, 3.6f, 1, 0);
-        else add_prop(sx, 0.0f, sz, 0.9f, 1.45f, 12, 0);
-        add_prop(sx + 2.0f, 0.0f, sz + 1.5f, 1.8f, 0.0f, 10, (i & 1) ? 0 : 2);
+        int m = i % 4;
+        if (m == 0) add_prop(sx, 0.0f, sz, 1.2f, 3.6f, 1, 0);
+        else if (m == 1) add_prop(sx, 0.0f, sz, 0.9f, 1.45f, 12, 0);
+        else if (m == 2) add_prop(sx, 0.0f, sz, 0.7f, 0.85f, 14, 0);
+        else add_prop(sx, 0.0f, sz, 0.65f, 0.9f, 13, 0);
+        if ((i % 2) == 0) add_prop(sx + 1.8f, 0.0f, sz + 1.5f, 1.8f, 0.0f, 10, (i & 1) ? 0 : 2);
     }
     add_camp(-120.0f, 0.00f, 350.0f, 1, 4, 1, -1);
     add_camp( 120.0f, 0.00f, 350.0f, 2, 4, 1, -1);
 
     /* 6. CUATRO REGIONES DIAGONALES (Cero vacio en todo el continente!) */
     add_plat(-390.0f, 0.35f, -350.0f, 340.0f, 260.0f, 4.5f, 0, 1); /* Bosque Brumoso NW */
-    for (int i = 0; i < 52; i++) {
-        float bx = -235.0f - (float)((i * 43) % 300);
-        float bz = -235.0f - (float)((i * 61) % 225);
-        if ((i % 4) != 0) add_prop(bx, 0.35f, bz, 1.25f, 3.9f, 1, 0);
-        else add_prop(bx, 0.35f, bz, 0.9f, 1.55f, 12, 0);
-        if ((i & 1) == 0) add_prop(bx + 1.8f, 0.35f, bz + 1.6f, 1.8f, 0.0f, 10, 2);
+    for (int i = 0; i < 130; i++) {
+        float bx = -230.0f - (float)((i * 43 + 5) % 315);
+        float bz = -230.0f - (float)((i * 61 + 11) % 235);
+        int m = i % 4;
+        if (m < 2) add_prop(bx, 0.35f, bz, 1.25f, 3.9f, 1, 0);
+        else if (m == 2) add_prop(bx, 0.35f, bz, 0.9f, 1.55f, 12, 0);
+        else add_prop(bx, 0.35f, bz, 0.65f, 0.85f, 14, 0);
+        if ((i % 2) == 0) add_prop(bx + 1.8f, 0.35f, bz + 1.6f, 1.8f, 0.0f, 10, 2);
     }
     add_camp(-380.0f, 0.35f, -340.0f, 1, 4, 1, -1);
     add_plat( 390.0f, 0.35f, -350.0f, 340.0f, 260.0f, 4.5f, 2, 2); /* Paramos de Obsidiana NE */
+    for (int i = 0; i < 45; i++) {
+        float nx = 240.0f + (float)((i * 47) % 300);
+        float nz = -240.0f - (float)((i * 53) % 220);
+        add_prop(nx, 0.35f, nz, 0.7f, 1.1f, 13, 0);
+    }
     add_camp( 380.0f, 0.35f, -340.0f, 2, 4, 0, -1);
     add_plat(-390.0f, 0.00f,  350.0f, 340.0f, 260.0f, 4.0f, 0, 0); /* Praderas SW */
-    for (int i = 0; i < 46; i++) {
-        float wx = -235.0f - (float)((i * 59) % 300);
-        float wz =  235.0f + (float)((i * 47) % 225);
-        if ((i % 3) != 0) add_prop(wx, 0.0f, wz, 1.2f, 3.7f, 1, 0);
-        else add_prop(wx, 0.0f, wz, 0.9f, 1.45f, 12, 0);
-        if ((i & 1) == 0) add_prop(wx + 1.8f, 0.0f, wz + 1.6f, 1.8f, 0.0f, 10, 0);
+    for (int i = 0; i < 120; i++) {
+        float wx = -230.0f - (float)((i * 59 + 7) % 315);
+        float wz =  230.0f + (float)((i * 47 + 13) % 235);
+        int m = i % 4;
+        if (m == 0) add_prop(wx, 0.0f, wz, 1.2f, 3.7f, 1, 0);
+        else if (m == 1) add_prop(wx, 0.0f, wz, 0.9f, 1.45f, 12, 0);
+        else if (m == 2) add_prop(wx, 0.0f, wz, 0.7f, 0.85f, 14, 0);
+        else add_prop(wx, 0.0f, wz, 0.6f, 0.9f, 13, 0);
+        if ((i % 2) == 0) add_prop(wx + 1.8f, 0.0f, wz + 1.6f, 1.8f, 0.0f, 10, 0);
     }
     add_camp(-380.0f, 0.0f, 340.0f, 1, 4, 1, -1);
     add_plat( 390.0f, 0.35f,  350.0f, 340.0f, 260.0f, 4.5f, 2, 2); /* Tierras Aridas SE */
@@ -1967,6 +1990,7 @@ int main(void) {
             float d2 = dx * dx + dz * dz;
             if (d2 > 2200.0f) continue;
             if ((pr->kind == 10 || pr->kind == 12) && d2 > 1150.0f) continue;
+            if ((pr->kind == 13 || pr->kind == 14) && d2 > 900.0f) continue;
             if (pr->kind == 0) {
                 draw_box3d(pr->x, pr->y + pr->h, pr->z, pr->rad * 2, pr->h, pr->rad * 2, texStone, ABGR(220, 220, 235, 255), 0.5f);
             } else if (pr->kind == 1) {
@@ -1999,6 +2023,10 @@ int main(void) {
                 draw_billboard(pr->x, pr->y + 1.85f + bob, pr->z, 1.35f, 1.35f, texSoftGlow, lc, 0, camYaw);
             } else if (pr->kind == 12) {
                 draw_billboard(pr->x, pr->y, pr->z, pr->h * 1.35f, pr->h, texTree, ABGR(210, 255, 195, 255), 0, camYaw);
+            } else if (pr->kind == 13) {
+                draw_box3d(pr->x, pr->y + pr->h, pr->z, pr->rad * 2.0f, pr->h, pr->rad * 1.8f, texStone, ABGR(185, 195, 200, 255), 0.7f);
+            } else if (pr->kind == 14) {
+                draw_billboard(pr->x, pr->y, pr->z, 1.15f, pr->h, texTree, ABGR(150, 255, 130, 255), 0, camYaw);
             } else if (pr->kind == 8) {
                 unsigned int lc = pr->active ? ABGR(140, 235, 255, 255) : ABGR(255, 215, 95, 255);
                 draw_ground_disc(pr->x, pr->y, pr->z, 1.0f, lc);
