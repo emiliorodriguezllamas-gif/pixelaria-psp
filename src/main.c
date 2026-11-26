@@ -268,12 +268,30 @@ static void gu_text2d(int x, int y, const char *s, unsigned int col, int scale) 
 static int ach = -1, ath = -1;
 static volatile int arun = 0, sfx_t = 0, sfx_max = 2000, curZoneAudio = 0;
 static float sfx_f = 440.0f, sfx_p = 0.0f;
+static volatile int g_chord = 0, g_t = 0, g_dur = 0;
+static float g_ph[4] = { 0, 0, 0, 0 };
 static short abuf[2][1024 * 2];
 static float echoL[4096], echoR[4096];
 static int echoIdx = 0;
 
 static void play_sfx(float f, int dur) {
     sfx_f = f; sfx_t = dur; sfx_max = dur > 0 ? dur : 1; sfx_p = 0.0f;
+}
+
+static const float gChords[6][4] = {
+    { 164.81f, 246.94f, 329.63f, 392.00f }, /* Em */
+    { 130.81f, 196.00f, 261.63f, 329.63f }, /* C */
+    { 196.00f, 246.94f, 293.66f, 392.00f }, /* G */
+    { 146.83f, 220.00f, 293.66f, 369.99f }, /* D */
+    { 220.00f, 261.63f, 329.63f, 440.00f }, /* Am */
+    { 164.81f, 207.65f, 246.94f, 392.00f }  /* E7 */
+};
+
+static void play_guitar_chord(int dur) {
+    g_chord = (int)(xr() % 6);
+    g_ph[0] = g_ph[1] = g_ph[2] = g_ph[3] = 0.0f;
+    g_dur = dur;
+    g_t = 0;
 }
 
 static const float arpNotes[4][16] = {
@@ -326,8 +344,24 @@ static int audio_th(SceSize a, void *p) {
                 sfx_t--;
             }
 
-            float L = sPad + sArp * 0.85f + sfx;
-            float R = sPad + sArp * 1.15f + sfx;
+            float gtr = 0.0f;
+            if (g_t < g_dur) {
+                int gc = g_chord;
+                for (int s = 0; s < 4; s++) {
+                    int st = g_t - s * 850;
+                    if (st > 0) {
+                        float se = FEXP((float)st / (float)(g_dur > 0 ? g_dur : 1));
+                        g_ph[s] += 6.2831853f * gChords[gc][s] * invSr;
+                        if (g_ph[s] > 6.2831853f) g_ph[s] -= 6.2831853f;
+                        float plk = FSIN(g_ph[s]) * 0.65f + FSIN(g_ph[s] * 2.0f) * 0.25f + FSIN(g_ph[s] * 3.0f) * 0.10f;
+                        gtr += plk * se * 0.14f;
+                    }
+                }
+                g_t++;
+            }
+
+            float L = sPad + sArp * 0.85f + sfx + gtr;
+            float R = sPad + sArp * 1.15f + sfx + gtr;
             int rIdx = (echoIdx - 3200) & 4095;
             L += echoR[rIdx] * 0.24f;
             R += echoL[rIdx] * 0.24f;
@@ -1508,7 +1542,7 @@ int main(void) {
             if ((pressed & PSP_CTRL_CROSS) && atkT == 0 && heavyT == 0 && heroStam >= 18.0f) {
                 heroStam -= 18.0f; stamDelay = 20;
                 atkT = 14;
-                play_sfx(740.0f, 1000);
+                play_guitar_chord(15000);
                 float lx = heroX + sinf(heroYaw) * 0.35f, lz = heroZ + cosf(heroYaw) * 0.35f, ly = heroY;
                 if (is_walkable(lx, lz, &ly)) { heroX = lx; heroZ = lz; heroY = ly; }
                 float hitX = heroX + sinf(heroYaw) * 1.85f;
@@ -1535,7 +1569,7 @@ int main(void) {
                             float kx = enemies[i].x + (kdx / kd) * 0.6f, kz = enemies[i].z + (kdz / kd) * 0.6f, ky = enemies[i].y;
                             if (is_walkable(kx, kz, &ky)) { enemies[i].x = kx; enemies[i].z = kz; enemies[i].y = ky; }
                         }
-                        play_sfx(920.0f, 1200);
+                        play_guitar_chord(22000);
                         for (int s = 0; s < 8; s++)
                             spawn_part(enemies[i].x, enemies[i].y + 0.8f, enemies[i].z,
                                        frand(-0.08f, 0.08f), frand(0.04f, 0.12f), frand(-0.08f, 0.08f),
@@ -1599,7 +1633,7 @@ int main(void) {
             if ((pressed & PSP_CTRL_TRIANGLE) && pulseT == 0 && heroStam >= 32.0f) {
                 heroStam -= 32.0f; stamDelay = 28;
                 pulseT = 28; heavyT = 18;
-                play_sfx(660.0f, 1800);
+                play_guitar_chord(24000);
                 for (int i = 0; i < nEnemies; i++) {
                     if (!enemies[i].alive) continue;
                     float dx = enemies[i].x - heroX, dz = enemies[i].z - heroZ;
