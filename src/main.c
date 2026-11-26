@@ -1049,6 +1049,54 @@ static int get_current_zone(void) {
     return 0;
 }
 
+static int get_ground_info(float nx, float nz, float *outY, int *outTex);
+
+static int collides_objects(float nx, float nz) {
+    for (int i = 0; i < nProps; i++) {
+        Prop3D *pr = &props[i];
+        float dx = nx - pr->x, dz = nz - pr->z;
+        if (fabsf(dx) > 3.6f || fabsf(dz) > 3.6f) continue;
+        int k = pr->kind;
+        if (k == 5) {
+            if (fabsf(dx) < 2.25f && fabsf(dz) < 2.25f) return 1;
+            continue;
+        }
+        float r = 0.0f;
+        if (k == 0 || k == 2) r = pr->rad * 0.85f + 0.35f;
+        else if (k == 1 && !pr->active) r = 0.65f;
+        else if (k == 3 || k == 15) r = 0.72f;
+        else if (k == 4) r = 0.82f;
+        else if (k == 8) r = 0.65f;
+        else if (k == 11) r = 0.42f;
+        else if (k == 13 && !pr->active) r = pr->rad * 0.85f + 0.30f;
+        if (r > 0.0f && (dx * dx + dz * dz) < (r * r)) return 1;
+    }
+    if (worldMode == 0) {
+        const float cSz = 8.0f;
+        int gx = (int)floorf(nx / cSz), gz = (int)floorf(nz / cSz);
+        for (int iz = gz - 1; iz <= gz + 1; iz++) {
+            for (int ix = gx - 1; ix <= gx + 1; ix++) {
+                unsigned int h = ((unsigned int)ix * 73856093u) ^ ((unsigned int)iz * 19349663u);
+                h ^= (h >> 13); h *= 0x5bd1e995u; h ^= (h >> 15);
+                float ox = ((float)(h & 255) / 255.0f - 0.5f) * 5.2f;
+                float oz = ((float)((h >> 8) & 255) / 255.0f - 0.5f) * 5.2f;
+                float wx = ((float)ix + 0.5f) * cSz + ox;
+                float wz = ((float)iz + 0.5f) * cSz + oz;
+                if (wx * wx + wz * wz < 529.0f) continue;
+                if (fabsf(wx) < 32.0f && fabsf(wz + 305.0f) < 32.0f) continue;
+                int kindRoll = (h >> 16) & 31;
+                if (kindRoll >= ((wx < -220.0f) ? 10 : 5)) continue;
+                float dx = nx - wx, dz = nz - wz;
+                if (dx * dx + dz * dz < 0.42f) {
+                    float gy = 0.0f; int gtex = 0;
+                    if (get_ground_info(wx, wz, &gy, &gtex) && gtex == 0) return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 static int is_walkable(float nx, float nz, float *outY) {
     int found = 0, bestTex = 0;
     float bestY = -100.0f;
@@ -1061,6 +1109,7 @@ static int is_walkable(float nx, float nz, float *outY) {
     }
     if (!found) return 0;
     if (bestTex != 3 && is_in_water_m(nx, nz, 0.35f)) return 0;
+    if (collides_objects(nx, nz)) return 0;
     *outY = bestY;
     return 1;
 }
