@@ -432,12 +432,18 @@ typedef struct {
     int kind, active, state, timer, flip; /* 0=Rabbit, 1=Fox, 2=Deer, 3=Bird */
 } Animal3D;
 
+typedef struct {
+    float x, y, z, hw, hd;
+    int isCircle; /* 0 = river rect (hw, hd), 1 = circular lake (rad = hw) */
+} WaterBody;
+
 #define MAX_PLATS 160
 #define MAX_PROPS 2600
 #define MAX_ENEMIES 120
 #define MAX_NPCS 12
 #define MAX_PARTS 140
 #define MAX_ANIMALS 24
+#define MAX_WATER 24
 
 static Platform plats[MAX_PLATS];
 static int nPlats = 0;
@@ -449,6 +455,8 @@ static Npc3D npcs[MAX_NPCS];
 static int nNpcs = 0;
 static Particle3D parts[MAX_PARTS];
 static Animal3D animals[MAX_ANIMALS];
+static WaterBody waters[MAX_WATER];
+static int nWater = 0;
 
 /* Persistent Adventure State */
 static int chestOpened[16];
@@ -621,13 +629,45 @@ static void add_plat(float x, float y, float z, float w, float d, float h, int t
     plats[nPlats++] = (Platform){ x, y, z, w, d, h, tex, zone };
 }
 
+static void add_water(float x, float y, float z, float hw, float hd, int isCircle) {
+    if (nWater >= MAX_WATER) return;
+    waters[nWater++] = (WaterBody){ x, y, z, hw, hd, isCircle };
+}
+
+static int is_in_water_m(float nx, float nz, float margin) {
+    for (int i = 0; i < nWater; i++) {
+        WaterBody *w = &waters[i];
+        if (w->isCircle) {
+            float r = w->hw + margin;
+            float dx = nx - w->x, dz = nz - w->z;
+            if (dx * dx + dz * dz < r * r) return 1;
+        } else {
+            if (fabsf(nx - w->x) < w->hw + margin && fabsf(nz - w->z) < w->hd + margin) return 1;
+        }
+    }
+    return 0;
+}
+
 static void add_prop(float x, float y, float z, float rad, float h, int kind, int id) {
     if (nProps >= MAX_PROPS) return;
+    if (worldMode == 0 && (kind == 1 || kind == 10 || kind == 12 || kind == 13 || kind == 14) && is_in_water_m(x, z, 1.4f)) return;
     int act = 0;
     if (kind == 2 && id >= 0 && id < 12) act = obeliskLit[id];
     if (kind == 3 && id >= 0 && id < 16) act = chestOpened[id];
     if (kind == 8 && id >= 0 && id < 6)  act = clueFound[id];
     props[nProps++] = (Prop3D){ x, y, z, rad, h, kind, act, id };
+}
+
+static void add_bridge(float x, float z, int alongX, float len, int zone) {
+    float w = alongX ? len : 7.2f;
+    float d = alongX ? 7.2f : len;
+    add_plat(x, 0.65f, z, w, d, 0.55f, 3, zone);
+    float ox = alongX ? (len * 0.44f) : 3.2f;
+    float oz = alongX ? 3.2f : (len * 0.44f);
+    add_prop(x - ox, 0.65f, z - oz, 0.35f, 1.6f, 11, 0);
+    add_prop(x + ox, 0.65f, z - oz, 0.35f, 1.6f, 11, 0);
+    add_prop(x - ox, 0.65f, z + oz, 0.35f, 1.6f, 11, 0);
+    add_prop(x + ox, 0.65f, z + oz, 0.35f, 1.6f, 11, 0);
 }
 
 static void add_npc(float x, float y, float z, int role, int nid, const char *name, const char *msg) {
@@ -668,8 +708,46 @@ static void add_camp(float cx, float cy, float cz, int tier, int count, int hasH
 }
 
 static void build_overworld(void) {
-    nPlats = 0; nProps = 0; nEnemies = 0; nNpcs = 0;
+    nPlats = 0; nProps = 0; nEnemies = 0; nNpcs = 0; nWater = 0;
     worldMode = 0;
+
+    /* RIOS Y LAGOS (se definen primero para evitar vegetacion en el agua y exigir puentes) */
+    /* Rio del Alba (Oeste, x = -150) */
+    add_water(-150.0f, 0.08f,  -10.0f, 6.0f, 200.0f, 0);
+    add_water(-150.0f, 0.42f, -345.0f, 6.0f, 125.0f, 0);
+    add_water(-150.0f, 0.08f,  345.0f, 6.0f, 125.0f, 0);
+    /* Rio Carmesi (Este, x = +150) */
+    add_water( 150.0f, 0.08f,    0.0f, 6.0f, 210.0f, 0);
+    add_water( 150.0f, 0.42f, -345.0f, 6.0f, 125.0f, 0);
+    add_water( 150.0f, 0.08f,  345.0f, 6.0f, 125.0f, 0);
+    /* Rio de los Ecos (Norte, z = -213) */
+    add_water(-160.0f, 0.08f, -213.0f, 380.0f, 6.0f, 0);
+    add_water( 380.0f, 0.42f, -213.0f, 160.0f, 6.0f, 0);
+    /* Rio del Sur (Sur, z = +213) */
+    add_water(-160.0f, 0.08f,  213.0f, 380.0f, 6.0f, 0);
+    add_water( 380.0f, 0.42f,  213.0f, 160.0f, 6.0f, 0);
+    /* 5 Lagos Naturales */
+    add_water( -52.0f, 0.08f,   52.0f, 18.0f, 18.0f, 1); /* Laguna Esmeralda */
+    add_water(  54.0f, 0.08f,  -54.0f, 18.0f, 18.0f, 1); /* Lago del Alba */
+    add_water(  82.0f, 0.42f, -305.0f, 24.0f, 24.0f, 1); /* Lago de los Ecos */
+    add_water(-305.0f, 0.08f,   62.0f, 26.0f, 26.0f, 1); /* Lago del Bosque */
+    add_water(  95.0f, 0.08f,  315.0f, 24.0f, 24.0f, 1); /* Laguna del Sur */
+
+    /* Puentes de madera para cruzar los rios */
+    add_bridge(-150.0f,   28.0f, 1, 18.0f, 1);
+    add_bridge(-150.0f, -155.0f, 1, 18.0f, 1);
+    add_bridge(-150.0f, -310.0f, 1, 18.0f, 1);
+    add_bridge(-150.0f,  315.0f, 1, 18.0f, 0);
+    add_bridge( 150.0f,  -36.0f, 1, 18.0f, 2);
+    add_bridge( 150.0f,  155.0f, 1, 18.0f, 2);
+    add_bridge( 150.0f, -310.0f, 1, 18.0f, 2);
+    add_bridge( 150.0f,  315.0f, 1, 18.0f, 2);
+    add_bridge(  34.0f, -215.0f, 0, 20.0f, 1);
+    add_bridge(-340.0f, -215.0f, 0, 20.0f, 1);
+    add_bridge( 340.0f, -215.0f, 0, 20.0f, 2);
+    add_bridge( -34.0f,  215.0f, 0, 20.0f, 0);
+    add_bridge(-320.0f,  215.0f, 0, 20.0f, 0);
+    add_bridge( 320.0f,  215.0f, 0, 20.0f, 2);
 
     /* 1. GRANDES LLANURAS CENTRALES (x=-220..+220, z=-220..+220, 440x440 continuas!) */
     add_plat(0.0f, 0.00f, 0.0f, 440.0f, 440.0f, 4.0f, 0, 0);
@@ -887,7 +965,7 @@ static void build_overworld(void) {
 }
 
 static void build_dungeon(int dId) {
-    nPlats = 0; nProps = 0; nEnemies = 0; nNpcs = 0;
+    nPlats = 0; nProps = 0; nEnemies = 0; nNpcs = 0; nWater = 0;
     worldMode = 1;
     curDungeon = dId;
     dngRunes = 0;
@@ -970,17 +1048,19 @@ static int get_current_zone(void) {
 }
 
 static int is_walkable(float nx, float nz, float *outY) {
-    int found = 0;
+    int found = 0, bestTex = 0;
     float bestY = -100.0f;
     for (int i = 0; i < nPlats; i++) {
         Platform *p = &plats[i];
         if (nx >= p->x - p->w * 0.5f - 0.15f && nx <= p->x + p->w * 0.5f + 0.15f &&
             nz >= p->z - p->d * 0.5f - 0.15f && nz <= p->z + p->d * 0.5f + 0.15f) {
-            if (!found || p->y > bestY) { bestY = p->y; found = 1; }
+            if (!found || p->y > bestY) { bestY = p->y; bestTex = p->texType; found = 1; }
         }
     }
-    if (found) *outY = bestY;
-    return found;
+    if (!found) return 0;
+    if (bestTex != 3 && is_in_water_m(nx, nz, 0.35f)) return 0;
+    *outY = bestY;
+    return 1;
 }
 
 static int get_ground_info(float nx, float nz, float *outY, int *outTex) {
@@ -993,8 +1073,10 @@ static int get_ground_info(float nx, float nz, float *outY, int *outTex) {
             if (!found || p->y > bestY) { bestY = p->y; bestTex = p->texType; found = 1; }
         }
     }
-    if (found) { *outY = bestY; *outTex = bestTex; }
-    return found;
+    if (!found) return 0;
+    if (bestTex != 3 && is_in_water_m(nx, nz, 1.0f)) return 0;
+    *outY = bestY; *outTex = bestTex;
+    return 1;
 }
 
 static unsigned int lerp_abgr(unsigned int a, unsigned int b, float t) {
@@ -2326,6 +2408,65 @@ int main(void) {
             draw_box3d(p->x, p->y, p->z, p->w, p->h, p->d, ptex, ABGR(255, 255, 255, 255), 0.25f);
         }
 
+        /* Rivers & Lakes (Clipped & culled for locked 30 FPS) */
+        if (worldMode == 0 && nWater > 0) {
+            float wOff = (float)(animFrame % 256) / 256.0f;
+            sceGuEnable(GU_BLEND);
+            sceGuDisable(GU_ALPHA_TEST);
+            bind_tex64(texWater, 1, 0);
+            unsigned int wc = lerp_abgr(ABGR(175, 230, 255, 255), skyHor, 0.22f);
+            wc = (wc & 0x00FFFFFFu) | (218u << 24);
+            for (int wi = 0; wi < nWater; wi++) {
+                WaterBody *wb = &waters[wi];
+                if (wb->isCircle) {
+                    if (fabsf(wb->x - heroX) > wb->hw + 48.0f || fabsf(wb->z - heroZ) > wb->hw + 48.0f) continue;
+                    const int segs = 16;
+                    Vtx3D *wv = (Vtx3D *)sceGuGetMemory(segs * 3 * sizeof(Vtx3D));
+                    int wk = 0;
+                    float rad = wb->hw;
+                    for (int s = 0; s < segs; s++) {
+                        float a0 = ((float)s / (float)segs) * 6.283185f;
+                        float a1 = ((float)(s + 1) / (float)segs) * 6.283185f;
+                        float x0 = wb->x + cosf(a0) * rad, z0 = wb->z + sinf(a0) * rad;
+                        float x1 = wb->x + cosf(a1) * rad, z1 = wb->z + sinf(a1) * rad;
+                        wv[wk++] = (Vtx3D){ 0.0f + wOff, 0.0f + wOff, wc, wb->x, wb->y, wb->z };
+                        wv[wk++] = (Vtx3D){ cosf(a1) * 4.0f + wOff, sinf(a1) * 4.0f + wOff, wc, x1, wb->y, z1 };
+                        wv[wk++] = (Vtx3D){ cosf(a0) * 4.0f + wOff, sinf(a0) * 4.0f + wOff, wc, x0, wb->y, z0 };
+                    }
+                    sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, wk, 0, wv);
+                } else {
+                    float rx0 = wb->x - wb->hw, rx1 = wb->x + wb->hw;
+                    float rz0 = wb->z - wb->hd, rz1 = wb->z + wb->hd;
+                    if (rx0 < heroX - 48.0f) rx0 = heroX - 48.0f;
+                    if (rx1 > heroX + 48.0f) rx1 = heroX + 48.0f;
+                    if (rz0 < heroZ - 48.0f) rz0 = heroZ - 48.0f;
+                    if (rz1 > heroZ + 48.0f) rz1 = heroZ + 48.0f;
+                    if (rx0 >= rx1 || rz0 >= rz1) continue;
+                    int nx = (int)((rx1 - rx0) / 12.0f) + 1;
+                    int nz = (int)((rz1 - rz0) / 12.0f) + 1;
+                    float sx = (rx1 - rx0) / (float)nx, sz = (rz1 - rz0) / (float)nz;
+                    Vtx3D *wv = (Vtx3D *)sceGuGetMemory(nx * nz * 6 * sizeof(Vtx3D));
+                    int wk = 0;
+                    for (int iz = 0; iz < nz; iz++) {
+                        float z0 = rz0 + (float)iz * sz, z1 = z0 + sz;
+                        float v0 = z0 * 0.14f + wOff, v1 = z1 * 0.14f + wOff;
+                        for (int ix = 0; ix < nx; ix++) {
+                            float x0 = rx0 + (float)ix * sx, x1 = x0 + sx;
+                            float u0 = x0 * 0.14f + wOff * 0.5f, u1 = x1 * 0.14f + wOff * 0.5f;
+                            wv[wk++] = (Vtx3D){ u0, v0, wc, x0, wb->y, z0 };
+                            wv[wk++] = (Vtx3D){ u1, v0, wc, x1, wb->y, z0 };
+                            wv[wk++] = (Vtx3D){ u1, v1, wc, x1, wb->y, z1 };
+                            wv[wk++] = (Vtx3D){ u0, v0, wc, x0, wb->y, z0 };
+                            wv[wk++] = (Vtx3D){ u1, v1, wc, x1, wb->y, z1 };
+                            wv[wk++] = (Vtx3D){ u0, v1, wc, x0, wb->y, z1 };
+                        }
+                    }
+                    sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, wk, 0, wv);
+                }
+            }
+            sceGuEnable(GU_ALPHA_TEST);
+        }
+
         /* 3D Props (Fast fabsf early-out + tight LOD for locked 30 FPS) */
         for (int i = 0; i < nProps; i++) {
             Prop3D *pr = &props[i];
@@ -2631,6 +2772,7 @@ int main(void) {
             gu_window2d(406, 6, 68, 68);
             const float mScale = 0.14f;
             for (int i = 0; i < nPlats; i++) {
+                if (plats[i].texType == 3) continue; /* Bridges drawn after water */
                 int mx = 440 + (int)((plats[i].x - heroX) * mScale);
                 int mz = 40  + (int)((plats[i].z - heroZ) * mScale);
                 int mw = (int)(plats[i].w * mScale); if (mw < 2) mw = 2;
@@ -2641,7 +2783,34 @@ int main(void) {
                 if (x1 > 472) x1 = 472;
                 if (y0 < 8) y0 = 8;
                 if (y1 > 72) y1 = 72;
-                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(90, 140, 210, 170));
+                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(80, 145, 95, 175));
+            }
+            for (int i = 0; i < nWater; i++) {
+                int mx = 440 + (int)((waters[i].x - heroX) * mScale);
+                int mz = 40  + (int)((waters[i].z - heroZ) * mScale);
+                int mw = (int)(waters[i].hw * 2.0f * mScale); if (mw < 2) mw = 2;
+                int md = (int)(waters[i].hd * 2.0f * mScale); if (md < 2) md = 2;
+                int x0 = mx - mw/2, y0 = mz - md/2, x1 = mx + mw/2, y1 = mz + md/2;
+                if (x1 < 408 || x0 > 472 || y1 < 8 || y0 > 72) continue;
+                if (x0 < 408) x0 = 408;
+                if (x1 > 472) x1 = 472;
+                if (y0 < 8) y0 = 8;
+                if (y1 > 72) y1 = 72;
+                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(45, 150, 245, 230));
+            }
+            for (int i = 0; i < nPlats; i++) {
+                if (plats[i].texType != 3) continue; /* Wooden Bridges */
+                int mx = 440 + (int)((plats[i].x - heroX) * mScale);
+                int mz = 40  + (int)((plats[i].z - heroZ) * mScale);
+                int mw = (int)(plats[i].w * mScale); if (mw < 3) mw = 3;
+                int md = (int)(plats[i].d * mScale); if (md < 3) md = 3;
+                int x0 = mx - mw/2, y0 = mz - md/2, x1 = mx + mw/2, y1 = mz + md/2;
+                if (x1 < 408 || x0 > 472 || y1 < 8 || y0 > 72) continue;
+                if (x0 < 408) x0 = 408;
+                if (x1 > 472) x1 = 472;
+                if (y0 < 8) y0 = 8;
+                if (y1 > 72) y1 = 72;
+                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(225, 175, 95, 255));
             }
             for (int i = 0; i < nNpcs; i++) {
                 int nx = 440 + (int)((npcs[i].x - heroX) * mScale);
