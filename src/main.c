@@ -306,8 +306,8 @@ typedef struct {
 } Prop3D;
 
 typedef struct {
-    float x, y, z;
-    int role; /* 0=mayor, 1=blacksmith(+ATK for 30g), 2=alchemist(potion 20g), 3=sage */
+    float x, y, z, homeX, homeZ;
+    int role, npcId; /* 0=Eldon, 1=Kael, 2=Lyra, 3=Orin, 4=Nilo, 5=Vulcan */
     const char *name;
     const char *msg;
 } Npc3D;
@@ -346,6 +346,32 @@ static int obeliskLit[12];
 static int dngCleared[3];
 static int clueFound[6];
 static int cluesCount = 0, trueEnding = 0;
+static int qState[4] = { 0, 0, 0, 0 }; /* 0:Eldon->Nilo, 1:Kael->Vulcan, 2:Lyra, 3:Orin */
+static int qKillsForest = 0, qKillsLake = 0, qKillsCanyon = 0;
+
+static int get_npc_marker(int nid) {
+    /* 1=Yellow ! (New), 2=Silver ? (Active), 3=Gold ? (Turn-in Ready) */
+    if (nid == 0) return (qState[0] == 0) ? 1 : 0; /* Eldon */
+    if (nid == 4) { /* Nilo */
+        if (qState[0] == 1 || qState[0] == 3) return 3;
+        if (qState[0] == 2) return 2;
+    }
+    if (nid == 1) return (qState[1] == 0) ? 1 : 0; /* Kael */
+    if (nid == 5) { /* Vulcan */
+        if (qState[1] == 1 || qState[1] == 3) return 3;
+        if (qState[1] == 2) return 2;
+    }
+    if (nid == 2) { /* Lyra */
+        if (qState[2] == 0) return 1;
+        if (qState[2] == 1) return 2;
+        if (qState[2] == 2) return 3;
+    }
+    if (nid == 3) { /* Orin */
+        if (qState[3] == 0) return 1;
+        if (qState[3] == 1) return (cluesCount >= 6 || (qState[0] >= 4 && qState[1] >= 4 && qState[2] >= 3)) ? 3 : 2;
+    }
+    return 0;
+}
 
 static int storyOpen = 0;
 static char storyTitle[48] = "", storyL1[72] = "", storyL2[72] = "", storyL3[72] = "";
@@ -416,9 +442,9 @@ static void add_prop(float x, float y, float z, float rad, float h, int kind, in
     props[nProps++] = (Prop3D){ x, y, z, rad, h, kind, act, id };
 }
 
-static void add_npc(float x, float y, float z, int role, const char *name, const char *msg) {
+static void add_npc(float x, float y, float z, int role, int nid, const char *name, const char *msg) {
     if (nNpcs >= MAX_NPCS) return;
-    npcs[nNpcs++] = (Npc3D){ x, y, z, role, name, msg };
+    npcs[nNpcs++] = (Npc3D){ x, y, z, x, z, role, nid, name, msg };
 }
 
 static void add_enemy(float x, float y, float z, int kind, int isBoss, int bossId) {
@@ -452,10 +478,10 @@ static void build_overworld(void) {
     add_prop( 11.5f, 0.0f, 0.0f, 1.1f, 3.2f, 1, 0);
     add_prop( 11.0f, 0.0f, 11.0f, 0.6f, 0.9f, 3, 0); /* Starter Chest */
     add_prop(-5.5f, 0.0f,  5.5f, 0.55f, 1.8f, 8, 0); /* Clue 0 */
-    add_npc(-3.2f, 0.20f,  2.8f, 0, "Alcalde Eldon", "ALCALDE: Encuentra las 3 Llaves en los Templos del Norte, Oeste y Este!");
-    add_npc(-6.2f, 0.0f,  -6.5f, 1, "Herrero Kael",  "KAEL: Forjar Espada (+6 ATK) por 30 Oro!");
-    add_npc( 6.2f, 0.0f,  -6.5f, 2, "Alquimista Lyra","LYRA: Pocion (+60 HP) por 20 Oro!");
-    add_npc( 3.2f, 0.20f,  2.8f, 3, "Sabio Orin",    "ORIN: Usa /\\ cerca de los Obeliscos para iluminarlos y ganar vida!");
+    add_npc(-3.2f, 0.20f,  2.8f, 0, 0, "Alcalde Eldon", "ALCALDE: Encuentra las 3 Llaves en los Templos del Norte, Oeste y Este!");
+    add_npc(-6.2f, 0.0f,  -6.5f, 1, 1, "Herrero Kael",  "KAEL: Forjar Espada (+6 ATK) por 30 Oro!");
+    add_npc( 6.2f, 0.0f,  -6.5f, 2, 2, "Alquimista Lyra","LYRA: Pocion (+60 HP) por 20 Oro!");
+    add_npc( 3.2f, 0.20f,  2.8f, 3, 3, "Sabio Orin",    "ORIN: Usa /\\ cerca de los Obeliscos para iluminarlos y ganar vida!");
 
     /* 2. BOSQUE ESMERALDA (West: x=-48..-22, z=-12..12) */
     add_plat(-18.0f, -0.04f, 0.0f, 8.0f, 4.5f, 0.6f, 3, 1); /* West Bridge */
@@ -483,7 +509,7 @@ static void build_overworld(void) {
     add_prop( 9.5f, 0.0f, -42.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
     add_prop( 8.5f, 0.0f, -34.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
     add_prop( 0.0f, 0.0f, -46.5f, 1.1f, 3.4f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
-    add_npc(-6.0f, 0.0f, -25.0f, 2, "Mercader Nilo", "NILO: Pocion (+60 HP) por 20 Oro!");
+    add_npc(-6.0f, 0.0f, -25.0f, 2, 4, "Mercader Nilo", "NILO: Pocion (+60 HP) por 20 Oro!");
     add_enemy(-5.0f, 0.0f, -36.0f, 1, 0, 0);
     add_enemy( 5.5f, 0.0f, -38.0f, 1, 0, 0);
 
@@ -497,7 +523,7 @@ static void build_overworld(void) {
     add_prop(35.0f, 0.0f, -9.0f, 0.7f, 3.0f, 2, 2); /* Obelisk 2 */
     add_prop(44.0f, 0.0f,  9.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
     add_prop(46.5f, 0.0f,  0.0f, 1.1f, 3.4f, 6, 2); /* DUNGEON 2 PORTAL: Forja de Obsidiana */
-    add_npc(27.0f, 0.0f, -5.0f, 1, "Forjador Vulcan", "VULCAN: Forjar Espada (+6 ATK) por 30 Oro!");
+    add_npc(27.0f, 0.0f, -5.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada (+6 ATK) por 30 Oro!");
     add_enemy(34.0f, 0.0f,  4.0f, 2, 0, 0);
     add_enemy(40.0f, 0.0f, -3.5f, 2, 0, 0);
     add_enemy(41.0f, 0.0f,  5.0f, 1, 0, 0);
@@ -813,6 +839,9 @@ int main(void) {
                         if (enemies[i].hp <= 0) {
                             enemies[i].alive = 0;
                             furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
+                            if (enemies[i].x < -18.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
+                            if (enemies[i].z < -18.0f && enemies[i].x > -18.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
+                            if (enemies[i].x > 18.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
                             heroGold += enemies[i].isBoss ? 50 : 18;
                             heroXp += enemies[i].isBoss ? 80 : 25;
                             if (enemies[i].isBoss && worldMode == 1 && !dngCleared[curDungeon]) {
@@ -985,6 +1014,9 @@ int main(void) {
                         if (enemies[i].hp <= 0) {
                             enemies[i].alive = 0;
                             furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
+                            if (enemies[i].x < -18.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
+                            if (enemies[i].z < -18.0f && enemies[i].x > -18.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
+                            if (enemies[i].x > 18.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
                             int goldDrop = enemies[i].isBoss ? 50 : (12 + enemies[i].kind * 6);
                             int xpGain = enemies[i].isBoss ? 80 : (20 + enemies[i].kind * 10);
                             heroGold += goldDrop;
@@ -1063,6 +1095,7 @@ int main(void) {
                         if (dx * dx + dz * dz < 20.0f) {
                             props[i].active = 1;
                             if (props[i].id >= 0 && props[i].id < 12) obeliskLit[props[i].id] = 1;
+                            if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2;
                             runesLit++;
                             heroMaxHp += 12; heroHp = heroMaxHp;
                             snprintf(dialogMsg, sizeof(dialogMsg), "OBELISCO ILUMINADO (%d)! +12 MAX HP", runesLit);
@@ -1080,29 +1113,129 @@ int main(void) {
                     float dx = npcs[i].x - heroX, dz = npcs[i].z - heroZ;
                     if (dx * dx + dz * dz < 10.0f) {
                         acted = 1;
-                        if (npcs[i].role == 1) {
-                            if (heroGold >= 30) {
-                                heroGold -= 30; heroAtk += 6;
-                                snprintf(dialogMsg, sizeof(dialogMsg), "%s: Espada mejorada! (+6 ATK, Total %d)", npcs[i].name, heroAtk);
-                                play_sfx(1050.0f, 1600);
-                            } else snprintf(dialogMsg, sizeof(dialogMsg), "%s", npcs[i].msg);
-                        } else if (npcs[i].role == 2) {
-                            if (heroGold >= 20) {
+                        int nid = npcs[i].npcId;
+                        if (nid == 0) { /* Alcalde Eldon */
+                            if (qState[0] == 0) {
+                                qState[0] = 1;
+                                show_story("MISION: SUMINISTROS DEL LAGO (Eldon)",
+                                    "Mi hermano desaparecio cuando el Lago se oscurecio...",
+                                    "Lleva mi Sello al Mercader NILO en la Aldea del Norte.",
+                                    "El sabe que paso bajo las aguas. (Recompensa: 45 Oro)");
+                            } else if (cluesCount >= 4) {
+                                show_story("ALCALDE ELDON", "Vimos a Vaelen llevar un diapason negro al Templo...", "Si lo que dicen las tablillas es cierto, el Dragon", "es nuestro protector. Ten cuidado en la cima!");
+                            } else {
+                                show_story("ALCALDE ELDON", "Las islas se hunden desde que la Campana callo.", "Lleva mi Sello a NILO al Norte y busca las 3 Llaves.", "Lee tambien las 6 Tablillas antiguas!");
+                            }
+                            play_sfx(780.0f, 1100);
+                        } else if (nid == 4) { /* Mercader Nilo (Aldea Lacustre) */
+                            if (qState[0] == 1) {
+                                qState[0] = 2; heroGold += 45; heroXp += 40;
+                                if (qKillsLake >= 2) qState[0] = 3;
+                                show_story("NILO - MISION: LIMPIEZA DEL LAGO",
+                                    "Eldon te envia? Gracias por el Sello! (+45 Oro)",
+                                    "Los monstruos del Lago robaron nuestras medicinas.",
+                                    "Derrota 2 enemigos aqui en el Lago y vuelve conmigo!");
+                                play_sfx(960.0f, 1400);
+                            } else if (qState[0] == 3) {
+                                qState[0] = 4; heroMaxHp += 25; heroHp = heroMaxHp; heroPotions += 2;
+                                show_story("MISION COMPLETADA: ELIXIR LACUSTRE",
+                                    "Has salvado la Aldea Lacustre! (+25 MaxHP, +2 Pociones)",
+                                    "Escuche un latido triste bajo el templo... Vaelen",
+                                    "no nos traiciono por odio. Investiga las ruinas!");
+                                play_sfx(1100.0f, 1800);
+                            } else if (heroGold >= 20) {
                                 heroGold -= 20; heroPotions++;
-                                snprintf(dialogMsg, sizeof(dialogMsg), "%s: Compras 1 Pocion! (Tienes %d)", npcs[i].name, heroPotions);
+                                snprintf(dialogMsg, sizeof(dialogMsg), "NILO: Compras 1 Pocion! (Tienes %d)", heroPotions);
                                 play_sfx(920.0f, 1400);
-                            } else snprintf(dialogMsg, sizeof(dialogMsg), "%s", npcs[i].msg);
-                        } else if (npcs[i].role == 0) {
-                            if (cluesCount >= 4) show_story("ALCALDE ELDON", "Vimos a Vaelen llevar un diapason negro al Templo...", "Si lo que dicen las tablillas es cierto, el Dragon", "es nuestro protector. Ten cuidado en la cima!");
-                            else show_story("ALCALDE ELDON", "Las islas se hunden desde que la Campana callo.", "Busca las 3 Llaves en los Templos del Oeste, Norte", "y Este. Habla con las tablillas antiguas!");
-                            play_sfx(740.0f, 900);
-                        } else if (npcs[i].role == 3) {
-                            if (cluesCount >= 6) show_story("SABIO ORIN", "Has descifrado toda la verdad de Vaelen!", "Con las 3 Llaves, acercate al Dragon de la Cima", "y pulsa /\\ (Resonancia) para salvarlo!");
-                            else show_story("SABIO ORIN", "Las ruinas guardan 6 Tablillas con la verdad.", "No creas todo lo que temen en el pueblo...", "Pulsa SELECT en cualquier momento para ver tu Diario.");
-                            play_sfx(780.0f, 900);
-                        } else {
-                            snprintf(dialogMsg, sizeof(dialogMsg), "%s", npcs[i].msg);
-                            play_sfx(740.0f, 900);
+                            } else {
+                                snprintf(dialogMsg, sizeof(dialogMsg), "NILO: Pociones (+60 HP) a 20 Oro! (%d/2 enemigos)", qKillsLake);
+                                play_sfx(740.0f, 900);
+                            }
+                        } else if (nid == 1) { /* Herrero Kael */
+                            if (qState[1] == 0) {
+                                qState[1] = 1;
+                                show_story("MISION: LA CARTA DEL APRENDIZ (Kael)",
+                                    "Mi maestro VULCAN marcho al Canon Carmesi del Este",
+                                    "buscando Acero Estelar, y no hemos vuelto a verlo.",
+                                    "Llevale esta carta! (Pasa el puente del Este)");
+                                play_sfx(780.0f, 1100);
+                            } else if (heroGold >= 30) {
+                                heroGold -= 30; heroAtk += 6;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "KAEL: Espada forjada! (+6 ATK, Total %d)", heroAtk);
+                                play_sfx(1050.0f, 1600);
+                            } else {
+                                snprintf(dialogMsg, sizeof(dialogMsg), "KAEL: Lleva mi carta a VULCAN al Este, o forja (+6 ATK, 30g).");
+                                play_sfx(740.0f, 900);
+                            }
+                        } else if (nid == 5) { /* Forjador Vulcan (Canon Carmesi) */
+                            if (qState[1] == 1) {
+                                qState[1] = 2; heroGold += 50; heroXp += 40;
+                                if (qKillsCanyon >= 2) qState[1] = 3;
+                                show_story("VULCAN - MISION: CORAZON DE LA FORJA",
+                                    "Kael aun recuerda nuestras lecciones? (+50 Oro)",
+                                    "La sombra corrompio mi yunque. Derrota 2 monstruos",
+                                    "del Canon Carmesi y te forjare Acero Estelar!");
+                                play_sfx(960.0f, 1400);
+                            } else if (qState[1] == 3) {
+                                qState[1] = 4; heroAtk += 12;
+                                show_story("MISION COMPLETADA: ACERO ESTELAR",
+                                    "Toma esta hoja forjada con fuego celeste! (+12 ATK)",
+                                    "Vi a Vaelen entrar en la Forja de Obsidiana...",
+                                    "Si consigues las 3 Llaves, busca la verdad!");
+                                play_sfx(1150.0f, 2000);
+                            } else if (heroGold >= 30) {
+                                heroGold -= 30; heroAtk += 6;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "VULCAN: Filo templado! (+6 ATK, Total %d)", heroAtk);
+                                play_sfx(1050.0f, 1600);
+                            } else {
+                                snprintf(dialogMsg, sizeof(dialogMsg), "VULCAN: Forjar (+6 ATK, 30g) | Canon: %d/2 enemigos", qKillsCanyon);
+                                play_sfx(740.0f, 900);
+                            }
+                        } else if (nid == 2) { /* Alquimista Lyra */
+                            if (qState[2] == 0) {
+                                qState[2] = 1;
+                                show_story("MISION: ESENCIA DEL BOSQUE (Lyra)",
+                                    "Las luciernagas del Bosque del Oeste estan mutando!",
+                                    "Derrota 2 monstruos alli e ilumina el Obelisco (/\\)",
+                                    "para devolver la calma al bosque. (+3 Pociones, +15 HP)");
+                                play_sfx(780.0f, 1100);
+                            } else if (qState[2] == 2) {
+                                qState[2] = 3; heroPotions += 3; heroMaxHp += 15; heroHp = heroMaxHp;
+                                show_story("MISION COMPLETADA: PAZ EN EL BOSQUE",
+                                    "La niebla del Bosque se ha disipado! (+3 Pociones, +15 HP)",
+                                    "Toma mis mejores elixires para tu viaje a las",
+                                    "mazmorras. Siempre tendre pociones a 20 Oro.");
+                                play_sfx(1100.0f, 1800);
+                            } else if (heroGold >= 20) {
+                                heroGold -= 20; heroPotions++;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "LYRA: Compras 1 Pocion! (Tienes %d)", heroPotions);
+                                play_sfx(920.0f, 1400);
+                            } else {
+                                snprintf(dialogMsg, sizeof(dialogMsg), "LYRA: Pociones a 20 Oro | Bosque: %d/2 y Obelisco:%s", qKillsForest, obeliskLit[0]?"OK":"NO");
+                                play_sfx(740.0f, 900);
+                            }
+                        } else if (nid == 3) { /* Sabio Orin */
+                            if (qState[3] == 0) {
+                                qState[3] = 1;
+                                show_story("MISION: EL PACTO DE AETHERIA (Orin)",
+                                    "Eldon, Kael y Lyra ven solo las heridas del mundo.",
+                                    "Ayuda a los 3 pueblos o descubre las 6 Tablillas",
+                                    "para recibir la Bendicion del Wisp!");
+                                play_sfx(780.0f, 1100);
+                            } else if (qState[3] == 1 && (cluesCount >= 6 || (qState[0] >= 4 && qState[1] >= 4 && qState[2] >= 3))) {
+                                qState[3] = 2; heroAtk += 15; heroMaxHp += 30; heroHp = heroMaxHp;
+                                show_story("BENDICION DEL WISP (+15 ATK, +30 HP)",
+                                    "Has unido los corazones de Aetheria y su verdad!",
+                                    "Con las 3 Llaves, sube al Norte y pulsa /\\",
+                                    "ante el Dragon para PURIFICARLO y salvar el cielo!");
+                                play_sfx(1180.0f, 2400);
+                            } else {
+                                show_story("SABIO ORIN",
+                                    "Las ruinas guardan 6 Tablillas y los pueblos piden ayuda.",
+                                    "Conecta las historias de Eldon, Kael y Lyra.",
+                                    "Pulsa SELECT para consultar tu Diario de Misiones.");
+                                play_sfx(780.0f, 900);
+                            }
                         }
                         dialogT = 160;
                     }
@@ -1316,13 +1449,22 @@ int main(void) {
             }
         }
 
-        /* NPCs */
+        /* Living NPCs (gentle wandering + WoW Quest Markers ! / ?) */
         for (int i = 0; i < nNpcs; i++) {
             Npc3D *n = &npcs[i];
+            n->x = n->homeX + sinf((float)animFrame * 0.018f + (float)i * 1.7f) * 0.9f;
+            n->z = n->homeZ + cosf((float)animFrame * 0.015f + (float)i * 2.1f) * 0.6f;
             float dx = n->x - heroX, dz = n->z - heroZ;
             if (dx * dx + dz * dz > 2500.0f) continue;
             draw_ground_disc(n->x, n->y, n->z, 0.8f, ABGR(10, 15, 25, 170));
             draw_billboard(n->x, n->y, n->z, 1.5f, 1.75f, texNpc, ABGR(255, 255, 255, 255), (n->x > heroX) ? 1 : 0, camYaw);
+            int mk = get_npc_marker(n->npcId);
+            if (mk > 0) {
+                float bobQ = sinf((float)animFrame * 0.12f + (float)i) * 0.12f;
+                unsigned int mc = (mk == 1) ? ABGR(255, 235, 65, 255) : (mk == 3 ? ABGR(120, 255, 145, 255) : ABGR(190, 205, 230, 220));
+                draw_box3d(n->x, n->y + 2.35f + bobQ, n->z, 0.28f, 0.36f, 0.28f, texCrystal, mc, 1.0f);
+                draw_billboard(n->x, n->y + 2.1f + bobQ, n->z, 0.55f, 0.55f, texSoftGlow, mc, 0, camYaw);
+            }
         }
 
         /* Enemies & Bosses */
