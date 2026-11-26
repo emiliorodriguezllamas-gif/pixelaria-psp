@@ -808,16 +808,30 @@ static unsigned int lerp_abgr(unsigned int a, unsigned int b, float t) {
     return ABGR(rr, rg, rb, 255);
 }
 
+static const void *curTex = NULL;
+static float curCamCos = 1.0f, curCamSin = 0.0f;
+
+static void bind_tex64(const unsigned int *tex, int wrapRepeat, int linear) {
+    sceGuEnable(GU_TEXTURE_2D);
+    if (curTex == tex) return;
+    curTex = tex;
+    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+    sceGuTexImage(0, 64, 64, 64, tex);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuTexFilter(linear ? GU_LINEAR : GU_NEAREST, linear ? GU_LINEAR : GU_NEAREST);
+    sceGuTexWrap(wrapRepeat ? GU_REPEAT : GU_CLAMP, wrapRepeat ? GU_REPEAT : GU_CLAMP);
+}
+
 static unsigned int shade_vtx(float vx, float vy, float vz, unsigned int baseCol) {
     int br = baseCol & 0xFF, bg = (baseCol >> 8) & 0xFF, bb = (baseCol >> 16) & 0xFF;
     float dx = vx - heroX, dz = vz - heroZ;
     float d2 = dx * dx + dz * dz;
     int addR = 0, addG = 0, addB = 0;
     if (d2 < 36.0f) {
-        float w = (36.0f - d2) / 36.0f;
+        float w = (36.0f - d2) * 0.027778f;
         addR += (int)(w * 54.0f); addG += (int)(w * 48.0f); addB += (int)(w * 30.0f);
     }
-    if (pulseT > 0) {
+    if (pulseT > 0 && d2 < 256.0f) {
         float pr = (float)(28 - pulseT) * 0.45f;
         float pd = fabsf(sqrtf(d2) - pr);
         if (pd < 2.0f) { int pw = (int)((2.0f - pd) * 60.0f); addG += pw; addB += pw; }
@@ -831,27 +845,22 @@ static unsigned int shade_vtx(float vx, float vy, float vz, unsigned int baseCol
 static void draw_box3d(float cx, float cy, float cz, float w, float h, float d, const unsigned int *tex, unsigned int col, float uvScale) {
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_ALPHA_TEST);
-    sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-    sceGuTexImage(0, 64, 64, 64, tex);
-    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-    sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+    bind_tex64(tex, 1, 0);
 
     float hw = w * 0.5f, hd = d * 0.5f, y0 = cy - h, y1 = cy;
     unsigned int cSide = ABGR(((col & 0xFF) * 7) / 10, (((col >> 8) & 0xFF) * 7) / 10, (((col >> 16) & 0xFF) * 7) / 10, 255);
     unsigned int cDark = ABGR(((col & 0xFF) * 5) / 10, (((col >> 8) & 0xFF) * 5) / 10, (((col >> 16) & 0xFF) * 5) / 10, 255);
 
-    int nx = (w > 8.0f) ? ((int)(w / 8.0f) + 1) : 1;
-    int nz = (d > 8.0f) ? ((int)(d / 8.0f) + 1) : 1;
+    int nx = (w > 12.0f) ? ((int)(w / 12.0f) + 1) : 1;
+    int nz = (d > 12.0f) ? ((int)(d / 12.0f) + 1) : 1;
     float stepX = w / (float)nx, stepZ = d / (float)nz;
     float xStart = cx - hw, zStart = cz - hd;
     float uH = h * uvScale;
 
-    int ix0 = (int)((heroX - 72.0f - xStart) / stepX); if (ix0 < 0) ix0 = 0;
-    int ix1 = (int)((heroX + 72.0f - xStart) / stepX); if (ix1 >= nx) ix1 = nx - 1;
-    int iz0 = (int)((heroZ - 72.0f - zStart) / stepZ); if (iz0 < 0) iz0 = 0;
-    int iz1 = (int)((heroZ + 72.0f - zStart) / stepZ); if (iz1 >= nz) iz1 = nz - 1;
+    int ix0 = (int)((heroX - 62.0f - xStart) / stepX); if (ix0 < 0) ix0 = 0;
+    int ix1 = (int)((heroX + 62.0f - xStart) / stepX); if (ix1 >= nx) ix1 = nx - 1;
+    int iz0 = (int)((heroZ - 62.0f - zStart) / stepZ); if (iz0 < 0) iz0 = 0;
+    int iz1 = (int)((heroZ + 62.0f - zStart) / stepZ); if (iz1 >= nz) iz1 = nz - 1;
     if (ix0 > ix1 || iz0 > iz1) {
         sceGuEnable(GU_BLEND);
         sceGuEnable(GU_ALPHA_TEST);
@@ -912,14 +921,10 @@ static void draw_house3d(float cx, float cy, float cz) {
 }
 
 static void draw_billboard(float x, float y, float z, float w, float h, const unsigned int *tex, unsigned int col, int flipX, float camAngle) {
-    sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-    sceGuTexImage(0, 64, 64, 64, tex);
-    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    (void)camAngle;
+    bind_tex64(tex, 0, 0);
 
-    float rx = cosf(camAngle) * (w * 0.5f), rz = -sinf(camAngle) * (w * 0.5f);
+    float rx = curCamCos * (w * 0.5f), rz = -curCamSin * (w * 0.5f);
     float u0 = flipX ? 1.0f : 0.0f, u1 = flipX ? 0.0f : 1.0f;
     Vtx3D *v = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
     v[0] = (Vtx3D){ u0, 0.0f, col, x - rx, y + h, z - rz };
@@ -932,12 +937,7 @@ static void draw_billboard(float x, float y, float z, float w, float h, const un
 }
 
 static void draw_ground_disc(float x, float y, float z, float r, unsigned int col) {
-    sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-    sceGuTexImage(0, 64, 64, 64, texSoftGlow);
-    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    bind_tex64(texSoftGlow, 0, 1);
 
     Vtx3D *v = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
     v[0] = (Vtx3D){ 0, 0, col, x - r, y + 0.03f, z - r };
@@ -950,12 +950,16 @@ static void draw_ground_disc(float x, float y, float z, float r, unsigned int co
 }
 
 static void draw_ground_decal(float x, float y, float z, float r, int decoId) {
+    const unsigned int *dtex = texDeco[decoId & 3];
     sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-    sceGuTexImage(0, 32, 32, 32, texDeco[decoId & 3]);
-    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    if (curTex != dtex) {
+        curTex = dtex;
+        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+        sceGuTexImage(0, 32, 32, 32, dtex);
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    }
 
     sceGuDepthMask(GU_TRUE);
     Vtx3D *v = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
@@ -1019,6 +1023,7 @@ int main(void) {
     int prevZone = -1;
 
     while (running) {
+        SceInt64 frameStart = sceKernelGetSystemTimeWide();
         sceCtrlPeekBufferPositive(&pad, 1);
         unsigned int pressed = pad.Buttons & ~oldPad.Buttons;
         oldPad = pad;
@@ -1809,6 +1814,9 @@ int main(void) {
         else if (dayHour >= 18.0f) nightFactor = (dayHour - 18.0f) / 2.5f;
 
         sceGuStart(GU_DIRECT, gulist);
+        curTex = NULL;
+        curCamCos = cosf(camYaw);
+        curCamSin = sinf(camYaw);
         sceGuClearColor(worldMode == 1 ? ABGR(12, 10, 24, 255) : skyHor);
         sceGuClearDepth(0);
         sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
@@ -1919,15 +1927,10 @@ int main(void) {
         sceGuEnable(GU_FOG);
         sceGuFog(22.0f, 72.0f, worldMode == 1 ? 0xFF180A0Cu : skyHor);
 
-        /* Sky-Sea below Islands (Overworld only) */
-        if (worldMode == 0) {
+        /* Sky-Sea below Islands (Overworld outer edges only) */
+        if (worldMode == 0 && (fabsf(heroX) > 470.0f || fabsf(heroZ) > 410.0f)) {
             float wOff = (float)(animFrame % 256) / 256.0f;
-            sceGuEnable(GU_TEXTURE_2D);
-            sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-            sceGuTexImage(0, 64, 64, 64, texWater);
-            sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-            sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-            sceGuTexWrap(GU_REPEAT, GU_REPEAT);
+            bind_tex64(texWater, 1, 0);
             Vtx3D *wv = (Vtx3D *)sceGuGetMemory(36 * 6 * sizeof(Vtx3D));
             unsigned int wc = lerp_abgr(ABGR(190, 225, 255, 255), skyHor, 0.35f);
             wc = (wc & 0x00FFFFFFu) | (190u << 24);
@@ -1949,23 +1952,25 @@ int main(void) {
             sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, wk, 0, wv);
         }
 
-        /* Platforms (AABB Distance culled for large Skyrim-scale biomes at 60 FPS) */
+        /* Platforms (AABB Distance culled for 30 FPS) */
         for (int i = 0; i < nPlats; i++) {
             Platform *p = &plats[i];
-            if (fabsf(p->x - heroX) > p->w * 0.5f + 76.0f || fabsf(p->z - heroZ) > p->d * 0.5f + 76.0f) continue;
+            if (fabsf(p->x - heroX) > p->w * 0.5f + 64.0f || fabsf(p->z - heroZ) > p->d * 0.5f + 64.0f) continue;
             const unsigned int *ptex = (p->texType == 0) ? texGrass : (p->texType == 1 ? texStone : (p->texType == 2 ? texObsidian : (p->texType == 3 ? texWood : texCrystal)));
             draw_box3d(p->x, p->y, p->z, p->w, p->h, p->d, ptex, ABGR(255, 255, 255, 255), 0.25f);
         }
 
-        /* 3D Props */
+        /* 3D Props (LOD culled for 30 FPS) */
         for (int i = 0; i < nProps; i++) {
             Prop3D *pr = &props[i];
             float dx = pr->x - heroX, dz = pr->z - heroZ;
-            if (dx * dx + dz * dz > 3600.0f) continue;
+            float d2 = dx * dx + dz * dz;
+            if (d2 > 2200.0f) continue;
+            if ((pr->kind == 10 || pr->kind == 12) && d2 > 1150.0f) continue;
             if (pr->kind == 0) {
                 draw_box3d(pr->x, pr->y + pr->h, pr->z, pr->rad * 2, pr->h, pr->rad * 2, texStone, ABGR(220, 220, 235, 255), 0.5f);
             } else if (pr->kind == 1) {
-                draw_ground_disc(pr->x, pr->y, pr->z, 1.4f, ABGR(10, 20, 15, 160));
+                if (d2 < 360.0f) draw_ground_disc(pr->x, pr->y, pr->z, 1.4f, ABGR(10, 20, 15, 160));
                 draw_billboard(pr->x, pr->y, pr->z, pr->h, pr->h * 1.15f, texTree, ABGR(255, 255, 255, 255), 0, camYaw);
             } else if (pr->kind == 2) {
                 unsigned int oc = pr->active ? ABGR(140, 255, 255, 255) : ABGR(130, 145, 180, 255);
@@ -1993,7 +1998,6 @@ int main(void) {
                 draw_box3d(pr->x, pr->y + 1.5f, pr->z, 0.45f, 1.5f, 0.45f, texStone, ABGR(210, 215, 230, 255), 0.6f);
                 draw_billboard(pr->x, pr->y + 1.85f + bob, pr->z, 1.35f, 1.35f, texSoftGlow, lc, 0, camYaw);
             } else if (pr->kind == 12) {
-                draw_ground_disc(pr->x, pr->y, pr->z, 0.85f, ABGR(10, 22, 14, 140));
                 draw_billboard(pr->x, pr->y, pr->z, pr->h * 1.35f, pr->h, texTree, ABGR(210, 255, 195, 255), 0, camYaw);
             } else if (pr->kind == 8) {
                 unsigned int lc = pr->active ? ABGR(140, 235, 255, 255) : ABGR(255, 215, 95, 255);
@@ -2251,7 +2255,7 @@ int main(void) {
         }
 
         sceDisplayWaitVblankStart();
-        sceDisplayWaitVblankStart();
+        if (sceKernelGetSystemTimeWide() - frameStart < 24000) sceDisplayWaitVblankStart();
         sceGuSwapBuffers();
     }
 
