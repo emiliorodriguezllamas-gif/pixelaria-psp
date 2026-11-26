@@ -2421,6 +2421,28 @@ int main(void) {
                 float rl = sqrtf(rx * rx + rz * rz);
                 if (rl > 0.01f) { rx /= rl; rz /= rl; }
                 float ux = -fy * rz, uy = fz * rx - fx * rz, uz = fy * rx;
+                for (int i = 0; i < nEnemies; i++) {
+                    if (!enemies[i].alive) continue;
+                    float ex = enemies[i].x - eye.x;
+                    float ey = (enemies[i].y + (enemies[i].isBoss ? 3.55f : 1.95f)) - eye.y;
+                    float ez = enemies[i].z - eye.z;
+                    float zc = ex * fx + ey * fy + ez * fz;
+                    if (zc < 2.0f || zc > 36.0f) continue;
+                    float xc = ex * rx + ez * rz;
+                    float yc = ex * ux + ey * uy + ez * uz;
+                    int sx = 240 + (int)((xc / zc) * 280.0f);
+                    int sy = 136 - (int)((yc / zc) * 280.0f);
+                    if (sx >= 24 && sx <= 456 && sy >= 12 && sy <= 250) {
+                        int bw = enemies[i].isBoss ? 56 : 28;
+                        int bh = enemies[i].isBoss ? 6 : 4;
+                        int fw = (enemies[i].hp * (bw - 2)) / (enemies[i].maxHp > 0 ? enemies[i].maxHp : 1);
+                        if (fw < 0) fw = 0;
+                        if (fw > bw - 2) fw = bw - 2;
+                        gu_rect2d(sx - bw / 2, sy, bw, bh, ABGR(16, 18, 28, 220));
+                        gu_rect2d(sx - bw / 2 + 1, sy + 1, fw, bh - 2,
+                                  enemies[i].isBoss ? ABGR(255, 110, 55, 255) : ABGR(235, 65, 75, 255));
+                    }
+                }
                 for (int i = 0; i < MAX_POPS; i++) {
                     if (pops[i].life <= 0) continue;
                     float dx = pops[i].x - eye.x, dy = pops[i].y - eye.y, dz = pops[i].z - eye.z;
