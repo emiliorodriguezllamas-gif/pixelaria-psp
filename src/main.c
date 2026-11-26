@@ -1732,13 +1732,13 @@ int main(void) {
 
                 if (e->state == 0) { /* Chase */
                     if (d < 12.0f && d > trigDist * 0.75f) {
-                        float es = e->isBoss ? 0.055f : 0.045f;
+                        float es = e->isBoss ? 0.085f : 0.070f;
                         float nx = e->x + (dx / d) * es, nz = e->z + (dz / d) * es, ey = e->y;
                         if (is_walkable(nx, nz, &ey)) { e->x = nx; e->z = nz; e->y = ey; }
                     }
                     if (d <= trigDist) {
                         e->state = 1;
-                        e->timer = e->isBoss ? 48 : 38;
+                        e->timer = e->isBoss ? 28 : 22;
                         e->atkX = heroX;
                         e->atkZ = heroZ;
                         e->atkRad = e->isBoss ? 3.3f : 2.0f;
@@ -1771,7 +1771,7 @@ int main(void) {
                             play_sfx(220.0f, 700);
                         }
                         e->state = 2;
-                        e->timer = e->isBoss ? 46 : 36;
+                        e->timer = e->isBoss ? 30 : 22;
                     }
                 } else { /* Recovery window */
                     e->timer--;
@@ -2073,7 +2073,7 @@ int main(void) {
             float sz = e->isBoss ? 3.4f : 1.7f;
             if (e->state == 1) {
                 /* Enemy Red Danger Telegraph Zone + Timing Ring! */
-                float prog = 1.0f - ((float)e->timer / (float)(e->isBoss ? 48 : 38));
+                float prog = 1.0f - ((float)e->timer / (float)(e->isBoss ? 28 : 22));
                 draw_ground_disc(e->atkX, e->y + 0.02f, e->atkZ, e->atkRad, ABGR(255, 40, 40, 185));
                 draw_ground_disc(e->atkX, e->y + 0.04f, e->atkZ, e->atkRad * prog, ABGR(255, 165, 45, 220));
             }
