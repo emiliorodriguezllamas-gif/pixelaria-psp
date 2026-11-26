@@ -1850,12 +1850,11 @@ int main(void) {
             } else if (pr->kind == 6 || pr->kind == 7) {
                 unsigned int pc = (pr->kind == 6) ? ABGR(190, 110, 255, 255) : ABGR(100, 255, 190, 255);
                 draw_ground_disc(pr->x, pr->y, pr->z, 1.8f, pc);
-            } else if (pr->kind == 10) {
-                draw_ground_decal(pr->x, pr->y, pr->z, pr->rad, pr->id);
-            }
                 draw_box3d(pr->x - 1.1f, pr->y + 3.2f, pr->z, 0.6f, 3.2f, 0.6f, texStone, pc, 0.5f);
                 draw_box3d(pr->x + 1.1f, pr->y + 3.2f, pr->z, 0.6f, 3.2f, 0.6f, texStone, pc, 0.5f);
                 draw_box3d(pr->x, pr->y + 3.6f, pr->z, 2.8f, 0.5f, 0.7f, texCrystal, pc, 0.5f);
+            } else if (pr->kind == 10) {
+                draw_ground_decal(pr->x, pr->y, pr->z, pr->rad, pr->id);
             } else if (pr->kind == 8) {
                 unsigned int lc = pr->active ? ABGR(140, 235, 255, 255) : ABGR(255, 215, 95, 255);
                 draw_ground_disc(pr->x, pr->y, pr->z, 1.0f, lc);
