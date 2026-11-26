@@ -342,6 +342,36 @@ static Particle3D parts[MAX_PARTS];
 static int chestOpened[16];
 static int obeliskLit[12];
 static int dngCleared[3];
+static int clueFound[6];
+static int cluesCount = 0, trueEnding = 0;
+
+static int storyOpen = 0;
+static char storyTitle[48] = "", storyL1[72] = "", storyL2[72] = "", storyL3[72] = "";
+
+static const char *clueTitles[6] = {
+    "PISTA 1/6: TABLILLA DEL ALBA",
+    "PISTA 2/6: DIARIO DEL GUARDABOSQUES",
+    "PISTA 3/6: INSCRIPCION SUMERGIDA",
+    "PISTA 4/6: CARTA DEL LAGO",
+    "PISTA 5/6: CRONICA DE OBSIDIANA",
+    "PISTA 6/6: VOLUNTAD DE VAELEN"
+};
+static const char *clueText[6][3] = {
+    { "Hace mil anos, Aetheria no flotaba por magia...", "Sino por el Canto de tres Corazones de Cristal.", "Busca los otros fragmentos por las islas." },
+    { "Vi al Arconte Vaelen llorar ante este templo.", "Me dijo: 'El Dragon no es un monstruo...", "Es el Guardian que sostiene el cielo sobre nosotros.'" },
+    { "La primera grieta no vino del abismo inferior.", "Alguien rompio los Sellos Astrales desde dentro", "intentando robar el poder de la inmortalidad." },
+    { "Los pescadores oyeron un latido bajo el agua.", "La corrupcion del Dragon no nace de la maldad,", "sino de una herida oscura que nadie ha curado." },
+    { "Vaelen intento fusionar su alma con la Forja", "para reescribir el pacto antiguo del cielo...", "Pero la Sombra devoro su mente y silencio el mundo." },
+    { "Si lees esto, Portador del Wisp, escuchame:", "NO mates al Dragon Astral con la espada.", "Con las 3 Llaves, pulsa /\\ ante el para PURIFICARLO!" }
+};
+
+static void show_story(const char *t, const char *l1, const char *l2, const char *l3) {
+    snprintf(storyTitle, sizeof(storyTitle), "%s", t);
+    snprintf(storyL1, sizeof(storyL1), "%s", l1);
+    snprintf(storyL2, sizeof(storyL2), "%s", l2);
+    snprintf(storyL3, sizeof(storyL3), "%s", l3);
+    storyOpen = 1;
+}
 
 static float heroX = 0.0f, heroY = 0.0f, heroZ = 6.0f;
 static float saveOvX = 0.0f, saveOvY = 0.0f, saveOvZ = 6.0f;
@@ -367,6 +397,7 @@ static void add_prop(float x, float y, float z, float rad, float h, int kind, in
     int act = 0;
     if (kind == 2 && id >= 0 && id < 12) act = obeliskLit[id];
     if (kind == 3 && id >= 0 && id < 16) act = chestOpened[id];
+    if (kind == 8 && id >= 0 && id < 6)  act = clueFound[id];
     props[nProps++] = (Prop3D){ x, y, z, rad, h, kind, act, id };
 }
 
@@ -405,6 +436,7 @@ static void build_overworld(void) {
     add_prop(-11.5f, 0.0f, 0.0f, 1.1f, 3.2f, 1, 0);
     add_prop( 11.5f, 0.0f, 0.0f, 1.1f, 3.2f, 1, 0);
     add_prop( 11.0f, 0.0f, 11.0f, 0.6f, 0.9f, 3, 0); /* Starter Chest */
+    add_prop(-5.5f, 0.0f,  5.5f, 0.55f, 1.8f, 8, 0); /* Clue 0 */
     add_npc(-3.2f, 0.20f,  2.8f, 0, "Alcalde Eldon", "ALCALDE: Encuentra las 3 Llaves en los Templos del Norte, Oeste y Este!");
     add_npc(-6.2f, 0.0f,  -6.5f, 1, "Herrero Kael",  "KAEL: Forjar Espada (+6 ATK) por 30 Oro!");
     add_npc( 6.2f, 0.0f,  -6.5f, 2, "Alquimista Lyra","LYRA: Pocion (+60 HP) por 20 Oro!");
@@ -420,6 +452,7 @@ static void build_overworld(void) {
     add_prop(-35.0f, 0.0f,  0.0f, 0.7f, 3.0f, 2, 0); /* Obelisk 0 */
     add_prop(-44.0f, 0.0f,  9.5f, 0.6f, 0.9f, 3, 1); /* Chest 1 */
     add_prop(-44.0f, 0.0f, -9.5f, 0.6f, 0.9f, 3, 2); /* Chest 2 */
+    add_prop(-30.0f, 0.0f,  9.5f, 0.55f, 1.8f, 8, 1); /* Clue 1 */
     add_prop(-46.5f, 0.0f,  0.0f, 1.1f, 3.4f, 6, 0); /* DUNGEON 0 PORTAL: Templo del Bosque */
     add_enemy(-30.0f, 0.0f, -4.0f, 0, 0, 0);
     add_enemy(-38.0f, 0.0f,  5.0f, 0, 0, 0);
@@ -433,6 +466,7 @@ static void build_overworld(void) {
     add_prop( 0.0f, 0.0f, -29.0f, 0.7f, 2.5f, 4, 0); /* Lake Crystal */
     add_prop(-9.0f, 0.0f, -41.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
     add_prop( 9.5f, 0.0f, -42.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
+    add_prop( 8.5f, 0.0f, -34.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
     add_prop( 0.0f, 0.0f, -46.5f, 1.1f, 3.4f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
     add_npc(-6.0f, 0.0f, -25.0f, 2, "Mercader Nilo", "NILO: Pocion (+60 HP) por 20 Oro!");
     add_enemy(-5.0f, 0.0f, -36.0f, 1, 0, 0);
@@ -484,6 +518,9 @@ static void build_dungeon(int dId) {
     add_prop( 6.5f, 0.0f, -26.0f, 0.7f, 3.0f, 2, 6 + dId * 2 + 1); /* Dungeon Rune 2 */
     add_prop(-7.5f, 0.0f, -31.0f, 0.6f, 0.9f, 3, 6 + dId * 2);     /* Dungeon Chest 1 */
     add_prop( 7.5f, 0.0f, -21.0f, 0.6f, 0.9f, 3, 6 + dId * 2 + 1); /* Dungeon Chest 2 */
+    if (dId == 0) add_prop(0.0f, 0.0f, -18.0f, 0.55f, 1.8f, 8, 2); /* Clue 2 */
+    if (dId == 1) add_prop(0.0f, 0.0f, -18.0f, 0.55f, 1.8f, 8, 4); /* Clue 4 */
+    if (dId == 2) add_prop(0.0f, 0.0f, -18.0f, 0.55f, 1.8f, 8, 5); /* Clue 5 */
 
     add_prop(-7.0f, 0.2f, -50.0f, 0.6f, 4.0f, 0, 0);
     add_prop( 7.0f, 0.2f, -50.0f, 0.6f, 4.0f, 0, 0);
@@ -677,8 +714,15 @@ int main(void) {
             if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_START)) {
                 inTitle = 0;
                 play_sfx(880.0f, 1800);
-                snprintf(bannerMsg, sizeof(bannerMsg), "PUEBLO DEL ALBA - ELIGE TU CAMINO");
-                bannerT = 150;
+                show_story("EL SILENCIO DE LA BOVEDA",
+                    "Hace 3 dias la Gran Campana del Cielo callo.",
+                    "Las islas se hunden y el Arconte Vaelen desaparecio.",
+                    "Investiga las 6 Pistas (O) y busca las 3 Llaves.");
+            }
+        } else if (storyOpen) {
+            if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_CIRCLE | PSP_CTRL_SELECT)) {
+                storyOpen = 0;
+                play_sfx(520.0f, 600);
             }
         } else {
             int zone = get_current_zone();
@@ -737,6 +781,27 @@ int main(void) {
                 if (is_walkable(heroX + mvX, heroZ, &ny)) { heroX += mvX; heroY = ny; }
                 ny = -10.0f;
                 if (is_walkable(heroX, heroZ + mvZ, &ny)) { heroZ += mvZ; heroY = ny; }
+            }
+
+            /* SELECT: Mission & Investigation Journal */
+            if (pressed & PSP_CTRL_SELECT) {
+                char jl1[72], jl2[72], jl3[72];
+                snprintf(jl1, sizeof(jl1), "Pistas descubiertas: %d/6  |  Llaves Astrales: %d/3", cluesCount, keysFound);
+                if (trueEnding) {
+                    snprintf(jl2, sizeof(jl2), "MISION CUMPLIDA: El Dragon ha sido purificado!");
+                    snprintf(jl3, sizeof(jl3), "Aetheria vuelve a elevarse libre por los cielos.");
+                } else if (keysFound < 3) {
+                    snprintf(jl2, sizeof(jl2), "Explora los portales (O) del Oeste, Norte y Este.");
+                    snprintf(jl3, sizeof(jl3), "Lee las Tablillas (O) para saber la verdad de Vaelen.");
+                } else if (cluesCount >= 6) {
+                    snprintf(jl2, sizeof(jl2), "VERDAD REVELADA: Sube a la Ciudadela del Norte.");
+                    snprintf(jl3, sizeof(jl3), "Pulsa /\\ ante el Dragon para PURIFICARLO!");
+                } else {
+                    snprintf(jl2, sizeof(jl2), "Tienes las 3 Llaves! Sube a la Ciudadela del Norte.");
+                    snprintf(jl3, sizeof(jl3), "O busca las pistas restantes (%d/6) antes de luchar.", cluesCount);
+                }
+                show_story("DIARIO DE INVESTIGACION", jl1, jl2, jl3);
+                play_sfx(680.0f, 900);
             }
 
             /* START: Use Potion */
@@ -805,8 +870,17 @@ int main(void) {
                                     dialogT = 200;
                                     play_sfx(1040.0f, 3200);
                                 } else if (worldMode == 0) {
-                                    snprintf(dialogMsg, sizeof(dialogMsg), "VICTORIA SUPREMA! DRAGON DEL ABISMO DERROTADO!");
-                                    dialogT = 260;
+                                    if (trueEnding) {
+                                        show_story("FINAL VERDADERO: AURORA CELESTE",
+                                            "El pulso de tu Wisp purifico la corrupcion del Dragon.",
+                                            "Vaelen descansa en paz y las islas ascienden al sol.",
+                                            "Gracias por jugar a Aetheria!");
+                                    } else {
+                                        show_story("FINAL TRAGICO: SILENCIO ETERNO",
+                                            "El Dragon ha caido bajo el filo de tu espada...",
+                                            "Pero sin su latido, las islas descienden lentamente.",
+                                            "(Tip: con 3 Llaves y Pista 6, usa /\\ para purificar!)");
+                                    }
                                     play_sfx(1040.0f, 3600);
                                 }
                             }
@@ -815,10 +889,29 @@ int main(void) {
                 }
             }
 
-            /* Triangle: Resonance Pulse (Lights Obelisks) */
+            /* Triangle: Resonance Pulse (Lights Obelisks & Purifies Final Boss) */
             if ((pressed & PSP_CTRL_TRIANGLE) && pulseT == 0) {
                 pulseT = 28;
                 play_sfx(660.0f, 1800);
+                if (worldMode == 0 && keysFound >= 3 && !trueEnding) {
+                    for (int i = 0; i < nEnemies; i++) {
+                        if (enemies[i].alive && enemies[i].isBoss) {
+                            float dx = enemies[i].x - heroX, dz = enemies[i].z - heroZ;
+                            if (dx * dx + dz * dz < 49.0f) {
+                                trueEnding = 1;
+                                enemies[i].alive = 0;
+                                for (int s = 0; s < 40; s++)
+                                    spawn_part(enemies[i].x + frand(-2.5f, 2.5f), enemies[i].y + frand(0.5f, 3.5f), enemies[i].z + frand(-2.5f, 2.5f),
+                                               frand(-0.06f, 0.06f), frand(0.04f, 0.14f), frand(-0.06f, 0.06f), 110.0f, 0.48f, ABGR(255, 235, 110, 255));
+                                show_story("FINAL VERDADERO: PURIFICACION",
+                                    "Las 3 Llaves resuenan y rompen la sombra de Vaelen!",
+                                    "El Dragon Astral despierta sano y eleva Aetheria al cielo.",
+                                    "Has salvado el mundo comprendiendo la verdad!");
+                                play_sfx(1180.0f, 3800);
+                            }
+                        }
+                    }
+                }
                 for (int i = 0; i < nProps; i++) {
                     if (props[i].kind == 2 && !props[i].active) {
                         float dx = props[i].x - heroX, dz = props[i].z - heroZ;
@@ -854,6 +947,14 @@ int main(void) {
                                 snprintf(dialogMsg, sizeof(dialogMsg), "%s: Compras 1 Pocion! (Tienes %d)", npcs[i].name, heroPotions);
                                 play_sfx(920.0f, 1400);
                             } else snprintf(dialogMsg, sizeof(dialogMsg), "%s", npcs[i].msg);
+                        } else if (npcs[i].role == 0) {
+                            if (cluesCount >= 4) show_story("ALCALDE ELDON", "Vimos a Vaelen llevar un diapason negro al Templo...", "Si lo que dicen las tablillas es cierto, el Dragon", "es nuestro protector. Ten cuidado en la cima!");
+                            else show_story("ALCALDE ELDON", "Las islas se hunden desde que la Campana callo.", "Busca las 3 Llaves en los Templos del Oeste, Norte", "y Este. Habla con las tablillas antiguas!");
+                            play_sfx(740.0f, 900);
+                        } else if (npcs[i].role == 3) {
+                            if (cluesCount >= 6) show_story("SABIO ORIN", "Has descifrado toda la verdad de Vaelen!", "Con las 3 Llaves, acercate al Dragon de la Cima", "y pulsa /\\ (Resonancia) para salvarlo!");
+                            else show_story("SABIO ORIN", "Las ruinas guardan 6 Tablillas con la verdad.", "No creas todo lo que temen en el pueblo...", "Pulsa SELECT en cualquier momento para ver tu Diario.");
+                            play_sfx(780.0f, 900);
                         } else {
                             snprintf(dialogMsg, sizeof(dialogMsg), "%s", npcs[i].msg);
                             play_sfx(740.0f, 900);
@@ -886,6 +987,14 @@ int main(void) {
                             heroX = saveOvX; heroY = saveOvY; heroZ = saveOvZ;
                             snprintf(bannerMsg, sizeof(bannerMsg), "REGRESO AL MUNDO EXTERIOR");
                             bannerT = 120; play_sfx(780.0f, 1800); acted = 1;
+                        } else if (props[i].kind == 8) {
+                            int cid = props[i].id;
+                            if (cid >= 0 && cid < 6) {
+                                if (!clueFound[cid]) { clueFound[cid] = 1; props[i].active = 1; cluesCount++; heroXp += 25; }
+                                show_story(clueTitles[cid], clueText[cid][0], clueText[cid][1], clueText[cid][2]);
+                                play_sfx(960.0f, 1600);
+                                acted = 1;
+                            }
                         }
                     }
                 }
@@ -1028,6 +1137,10 @@ int main(void) {
                 draw_box3d(pr->x - 1.1f, pr->y + 3.2f, pr->z, 0.6f, 3.2f, 0.6f, texStone, pc, 0.5f);
                 draw_box3d(pr->x + 1.1f, pr->y + 3.2f, pr->z, 0.6f, 3.2f, 0.6f, texStone, pc, 0.5f);
                 draw_box3d(pr->x, pr->y + 3.6f, pr->z, 2.8f, 0.5f, 0.7f, texCrystal, pc, 0.5f);
+            } else if (pr->kind == 8) {
+                unsigned int lc = pr->active ? ABGR(140, 235, 255, 255) : ABGR(255, 215, 95, 255);
+                draw_ground_disc(pr->x, pr->y, pr->z, 1.0f, lc);
+                draw_box3d(pr->x, pr->y + 1.8f, pr->z, 0.9f, 1.8f, 0.45f, texStone, lc, 0.7f);
             }
         }
 
@@ -1092,7 +1205,7 @@ int main(void) {
             int hpw = (heroHp * 110) / heroMaxHp;
             gu_rect2d(125, 13, hpw, 6, ABGR(70, 235, 125, 255));
 
-            snprintf(buf, sizeof(buf), "ORO:%d POC:%d LLAVES:%d/3 ATK:%d", heroGold, heroPotions, keysFound, heroAtk);
+            snprintf(buf, sizeof(buf), "ORO:%d POC:%d LLAVES:%d/3 PISTAS:%d/6", heroGold, heroPotions, keysFound, cluesCount);
             gu_text2d(14, 28, buf, ABGR(255, 225, 110, 255), 1);
 
             /* Minimap + FPS */
@@ -1114,15 +1227,23 @@ int main(void) {
             gu_text2d(344, 12, buf, curFps >= 55 ? ABGR(110, 255, 140, 255) : ABGR(255, 225, 90, 255), 1);
 
             gu_window2d(6, 246, 468, 20);
-            gu_text2d(12, 252, "STICK:MOV L/R:CAM X:ESPADA []:DASH /\\:OBELISCO O:HABLAR/ENTRAR START:POCION", ABGR(200, 225, 255, 255), 1);
+            gu_text2d(12, 252, "X:ESPADA []:DASH /\\:PULSO O:LEER/ENTRAR SELECT:DIARIO START:POCION", ABGR(200, 225, 255, 255), 1);
 
             if (bannerT > 0) {
                 gu_window2d(78, 56, 324, 26);
                 gu_text2d(96, 65, bannerMsg, ABGR(255, 230, 110, 255), 1);
             }
-            if (dialogT > 0) {
+            if (dialogT > 0 && !storyOpen) {
                 gu_window2d(24, 204, 432, 34);
                 gu_text2d(34, 217, dialogMsg, ABGR(255, 255, 255, 255), 1);
+            }
+            if (storyOpen) {
+                gu_window2d(28, 76, 424, 120);
+                gu_text2d(44, 90, storyTitle, ABGR(255, 225, 95, 255), 1);
+                gu_text2d(44, 114, storyL1, ABGR(240, 245, 255, 255), 1);
+                gu_text2d(44, 132, storyL2, ABGR(240, 245, 255, 255), 1);
+                gu_text2d(44, 150, storyL3, ABGR(145, 240, 255, 255), 1);
+                gu_text2d(150, 176, "[ PULSA X o O PARA CONTINUAR ]", ABGR(255, 225, 110, 255), 1);
             }
         }
 
