@@ -1009,16 +1009,16 @@ static void draw_box3d(float cx, float cy, float cz, float w, float h, float d, 
     unsigned int cSide = ABGR(((col & 0xFF) * 7) / 10, (((col >> 8) & 0xFF) * 7) / 10, (((col >> 16) & 0xFF) * 7) / 10, 255);
     unsigned int cDark = ABGR(((col & 0xFF) * 5) / 10, (((col >> 8) & 0xFF) * 5) / 10, (((col >> 16) & 0xFF) * 5) / 10, 255);
 
-    int nx = (w > 6.0f) ? ((int)(w / 6.0f) + 1) : 1;
-    int nz = (d > 6.0f) ? ((int)(d / 6.0f) + 1) : 1;
+    int nx = (w > 9.0f) ? ((int)(w / 9.0f) + 1) : 1;
+    int nz = (d > 9.0f) ? ((int)(d / 9.0f) + 1) : 1;
     float stepX = w / (float)nx, stepZ = d / (float)nz;
     float xStart = cx - hw, zStart = cz - hd;
     float uH = h * uvScale;
 
-    int ix0 = (int)((heroX - 54.0f - xStart) / stepX); if (ix0 < 0) ix0 = 0;
-    int ix1 = (int)((heroX + 54.0f - xStart) / stepX); if (ix1 >= nx) ix1 = nx - 1;
-    int iz0 = (int)((heroZ - 54.0f - zStart) / stepZ); if (iz0 < 0) iz0 = 0;
-    int iz1 = (int)((heroZ + 54.0f - zStart) / stepZ); if (iz1 >= nz) iz1 = nz - 1;
+    int ix0 = (int)((heroX - 48.0f - xStart) / stepX); if (ix0 < 0) ix0 = 0;
+    int ix1 = (int)((heroX + 48.0f - xStart) / stepX); if (ix1 >= nx) ix1 = nx - 1;
+    int iz0 = (int)((heroZ - 48.0f - zStart) / stepZ); if (iz0 < 0) iz0 = 0;
+    int iz1 = (int)((heroZ + 48.0f - zStart) / stepZ); if (iz1 >= nz) iz1 = nz - 1;
     if (ix0 > ix1 || iz0 > iz1) {
         sceGuEnable(GU_BLEND);
         sceGuEnable(GU_ALPHA_TEST);
@@ -2198,7 +2198,7 @@ int main(void) {
         sceGuEnable(GU_DEPTH_TEST);
         sceGuEnable(GU_CLIP_PLANES);
         sceGuEnable(GU_FOG);
-        sceGuFog(18.0f, 54.0f, worldMode == 1 ? 0xFF180A0Cu : skyHor);
+        sceGuFog(16.0f, 48.0f, worldMode == 1 ? 0xFF180A0Cu : skyHor);
 
         /* Sky-Sea below Islands (Overworld outer edges only) */
         if (worldMode == 0 && (fabsf(heroX) > 470.0f || fabsf(heroZ) > 410.0f)) {
@@ -2225,22 +2225,23 @@ int main(void) {
             sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, wk, 0, wv);
         }
 
-        /* Platforms (AABB Distance culled for 30 FPS) */
+        /* Platforms (AABB Distance culled for locked 30 FPS) */
         for (int i = 0; i < nPlats; i++) {
             Platform *p = &plats[i];
-            if (fabsf(p->x - heroX) > p->w * 0.5f + 56.0f || fabsf(p->z - heroZ) > p->d * 0.5f + 56.0f) continue;
+            if (fabsf(p->x - heroX) > p->w * 0.5f + 50.0f || fabsf(p->z - heroZ) > p->d * 0.5f + 50.0f) continue;
             const unsigned int *ptex = (p->texType == 0) ? texGrass : (p->texType == 1 ? texStone : (p->texType == 2 ? texObsidian : (p->texType == 3 ? texWood : texCrystal)));
             draw_box3d(p->x, p->y, p->z, p->w, p->h, p->d, ptex, ABGR(255, 255, 255, 255), 0.25f);
         }
 
-        /* 3D Props (LOD culled for 30 FPS) */
+        /* 3D Props (Fast fabsf early-out + tight LOD for locked 30 FPS) */
         for (int i = 0; i < nProps; i++) {
             Prop3D *pr = &props[i];
             float dx = pr->x - heroX, dz = pr->z - heroZ;
+            if (fabsf(dx) > 42.0f || fabsf(dz) > 42.0f) continue;
             float d2 = dx * dx + dz * dz;
-            if (d2 > 2200.0f) continue;
-            if ((pr->kind == 10 || pr->kind == 12) && d2 > 1150.0f) continue;
-            if ((pr->kind == 13 || pr->kind == 14) && d2 > 900.0f) continue;
+            if (d2 > 1750.0f) continue;
+            if ((pr->kind == 10 || pr->kind == 12) && d2 > 900.0f) continue;
+            if ((pr->kind == 13 || pr->kind == 14) && d2 > 650.0f) continue;
             if (pr->kind == 0) {
                 draw_box3d(pr->x, pr->y + pr->h, pr->z, pr->rad * 2, pr->h, pr->rad * 2, texStone, ABGR(220, 220, 235, 255), 0.5f);
             } else if (pr->kind == 1) {
@@ -2290,24 +2291,23 @@ int main(void) {
             }
         }
 
-        /* Procedural Dense Open-World Vegetation & Rocks (O(1) 13x13 grid around hero) */
+        /* Procedural Dense Open-World Vegetation (Single-pass O(1) 11x11 grid, 1 texTree bind) */
         if (worldMode == 0) {
-            const float cSz = 7.0f;
+            const float cSz = 8.0f;
             int hgx = (int)floorf(heroX / cSz), hgz = (int)floorf(heroZ / cSz);
-            /* Pass 1: Grass tufts, bushes, and trees (single texTree bind!) */
-            for (int iz = hgz - 6; iz <= hgz + 6; iz++) {
-                for (int ix = hgx - 6; ix <= hgx + 6; ix++) {
+            for (int iz = hgz - 5; iz <= hgz + 5; iz++) {
+                for (int ix = hgx - 5; ix <= hgx + 5; ix++) {
                     unsigned int h = ((unsigned int)ix * 73856093u) ^ ((unsigned int)iz * 19349663u);
                     h ^= (h >> 13); h *= 0x5bd1e995u; h ^= (h >> 15);
-                    float ox = ((float)(h & 255) / 255.0f - 0.5f) * 4.8f;
-                    float oz = ((float)((h >> 8) & 255) / 255.0f - 0.5f) * 4.8f;
+                    float ox = ((float)(h & 255) / 255.0f - 0.5f) * 5.2f;
+                    float oz = ((float)((h >> 8) & 255) / 255.0f - 0.5f) * 5.2f;
                     float wx = ((float)ix + 0.5f) * cSz + ox;
                     float wz = ((float)iz + 0.5f) * cSz + oz;
-                    if (wx * wx + wz * wz < 529.0f) continue; /* Keep Pueblo del Alba town plaza clear */
-                    if (fabsf(wx) < 32.0f && fabsf(wz + 305.0f) < 32.0f) continue; /* Keep Aldea Lacustre clear */
+                    if (wx * wx + wz * wz < 529.0f) continue;
+                    if (fabsf(wx) < 32.0f && fabsf(wz + 305.0f) < 32.0f) continue;
                     float dx = wx - heroX, dz = wz - heroZ;
                     float d2 = dx * dx + dz * dz;
-                    if (d2 > 1850.0f) continue;
+                    if (d2 > 1600.0f) continue;
                     float gy = 0.0f; int gtex = 0;
                     if (!get_ground_info(wx, wz, &gy, &gtex) || gtex != 0) continue;
                     int kindRoll = (h >> 16) & 31;
@@ -2315,33 +2315,10 @@ int main(void) {
                     if (kindRoll < (isForest ? 10 : 5)) {
                         float th = 3.2f + (float)((h >> 21) & 3) * 0.45f;
                         draw_billboard(wx, gy, wz, th, th * 1.15f, texTree, ABGR(255, 255, 255, 255), (h & 1), camYaw);
-                    } else if (kindRoll < 16 && d2 < 1100.0f) {
+                    } else if (kindRoll < 16 && d2 < 900.0f) {
                         draw_billboard(wx, gy, wz, 1.95f, 1.45f, texTree, ABGR(205, 255, 185, 255), (h & 1), camYaw);
-                    } else if (d2 < 850.0f) {
+                    } else if (d2 < 650.0f) {
                         draw_billboard(wx, gy, wz, 1.15f, 0.85f, texTree, ABGR(145, 255, 125, 255), (h & 1), camYaw);
-                        if ((h & 3) == 0)
-                            draw_billboard(wx + 1.4f, gy, wz - 1.1f, 0.95f, 0.72f, texTree, ABGR(160, 255, 140, 255), !(h & 1), camYaw);
-                    }
-                }
-            }
-            /* Pass 2: Rocks & Wildflowers / Mushrooms close to hero */
-            for (int iz = hgz - 4; iz <= hgz + 4; iz++) {
-                for (int ix = hgx - 4; ix <= hgx + 4; ix++) {
-                    unsigned int h = ((unsigned int)ix * 19349663u) ^ ((unsigned int)iz * 83492791u);
-                    h ^= (h >> 13); h *= 0x5bd1e995u; h ^= (h >> 15);
-                    if ((h & 7) > 2) continue;
-                    float wx = ((float)ix + 0.5f) * cSz + (((float)((h >> 4) & 255) / 255.0f - 0.5f) * 4.5f);
-                    float wz = ((float)iz + 0.5f) * cSz + (((float)((h >> 12) & 255) / 255.0f - 0.5f) * 4.5f);
-                    if (wx * wx + wz * wz < 529.0f) continue;
-                    float dx = wx - heroX, dz = wz - heroZ;
-                    if (dx * dx + dz * dz > 750.0f) continue;
-                    float gy = 0.0f; int gtex = 0;
-                    if (!get_ground_info(wx, wz, &gy, &gtex)) continue;
-                    if (gtex == 0 && (h & 3) != 0) {
-                        draw_ground_decal(wx, gy, wz, 1.7f, (wx < -220.0f && (h & 8)) ? 2 : 0);
-                    } else if ((gtex == 0 || gtex == 2) && (h & 3) == 0) {
-                        float rs = 0.5f + (float)((h >> 20) & 3) * 0.18f;
-                        draw_box3d(wx, gy + rs, wz, rs * 2.1f, rs, rs * 1.8f, texStone, ABGR(185, 195, 200, 255), 0.7f);
                     }
                 }
             }
