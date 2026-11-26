@@ -408,8 +408,8 @@ static void show_story(const char *t, const char *l1, const char *l2, const char
     storyOpen = 1;
 }
 
-static float heroX = 0.0f, heroY = 0.0f, heroZ = 6.0f, heroYaw = 3.14159f;
-static float saveOvX = 0.0f, saveOvY = 0.0f, saveOvZ = 6.0f;
+static float heroX = 0.0f, heroY = 0.10f, heroZ = 6.0f, heroYaw = 3.14159f;
+static float saveOvX = 0.0f, saveOvY = 0.10f, saveOvZ = 6.0f;
 static float camYaw = 0.0f;
 static int heroFlip = 0, heroHp = 100, heroMaxHp = 100, heroAtk = 12, forgeCount = 0;
 static int forge_cost(void) { return 40 + 35 * forgeCount + 15 * forgeCount * forgeCount; }
@@ -569,12 +569,12 @@ static void build_overworld(void) {
     add_camp(-44.0f, 0.0f,  40.0f, 0, 3, 0, -1);
 
     /* 2. CAMINO DEL OESTE -> LLANURAS DEL VIENTO -> BOSQUE ESMERALDA (x=-58..-480) */
-    add_plat(-100.0f, 0.0f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
-    add_camp(-105.0f, 0.0f, 2.0f, 0, 3, 0, -1);
+    add_plat(-100.0f, -0.05f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
+    add_camp(-105.0f, -0.05f, 2.0f, 0, 3, 0, -1);
     add_plat(-180.0f, 0.0f, 0.0f, 84.0f, 44.0f, 3.0f, 0, 1); /* Torre de Vigia Oeste */
     add_camp(-182.0f, 0.0f, -10.0f, 1, 3, 1, 12);
-    add_plat(-260.0f, 0.0f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
-    add_camp(-265.0f, 0.0f, -2.0f, 1, 3, 0, -1);
+    add_plat(-260.0f, -0.05f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
+    add_camp(-265.0f, -0.05f, -2.0f, 1, 3, 0, -1);
     add_plat(-390.0f, 0.0f, 0.0f, 180.0f, 180.0f, 4.0f, 0, 1); /* BOSQUE ESMERALDA GIGANTE */
     for (int i = 0; i < 18; i++) {
         float tx = -320.0f - (float)((i * 29) % 135);
@@ -592,63 +592,63 @@ static void build_overworld(void) {
     add_camp(-435.0f, 0.0f, -42.0f, 1, 4, 0, -1);
 
     /* 3. CAMINO DEL NORTE -> PASO DE LA GARGANTA -> LAGO DE LOS ECOS (z=-58..-410) */
-    add_plat(0.0f, 0.5f, -100.0f, 18.0f, 88.0f, 3.5f, 1, 1);
-    add_camp(0.0f, 0.5f, -105.0f, 1, 3, 0, -1);
-    add_plat(0.0f, 1.0f, -180.0f, 48.0f, 84.0f, 4.0f, 1, 1); /* Paso de la Garganta */
-    add_camp(0.0f, 1.0f, -182.0f, 1, 4, 0, 13);
-    add_plat(0.0f, 1.5f, -255.0f, 18.0f, 78.0f, 4.0f, 1, 1);
-    add_plat(0.0f, 2.0f, -340.0f, 160.0f, 130.0f, 4.5f, 1, 1); /* LAGO DE LOS ECOS & ALDEA LACUSTRE */
-    add_prop(-22.0f, 2.0f, -305.0f, 2.0f, 2.8f, 5, 4);
-    add_prop( 22.0f, 2.0f, -305.0f, 2.0f, 2.8f, 5, 5);
-    add_prop(  0.0f, 2.0f, -315.0f, 0.7f, 2.5f, 4, 1); /* Lake Crystal (Heal only) */
-    add_prop( 14.0f, 2.0f, -298.0f, 1.0f, 3.0f, 9, 0); /* Paid Return Portal */
-    add_prop(-48.0f, 2.0f, -365.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
-    add_prop( 52.0f, 2.0f, -370.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
-    add_prop( 26.0f, 2.0f, -335.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
-    add_prop(  0.0f, 2.0f, -395.0f, 1.2f, 3.6f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
-    add_npc(-14.0f, 2.0f, -298.0f, 2, 4, "Mercader Nilo", "NILO: Tienda de Supervivencia!");
-    add_camp(-54.0f, 2.0f, -345.0f, 1, 4, 1, -1);
-    add_camp( 54.0f, 2.0f, -355.0f, 2, 4, 0, -1);
+    add_plat(0.0f, 0.35f, -100.0f, 18.0f, 88.0f, 3.5f, 1, 1);
+    add_camp(0.0f, 0.35f, -105.0f, 1, 3, 0, -1);
+    add_plat(0.0f, 0.70f, -180.0f, 48.0f, 84.0f, 4.0f, 1, 1); /* Paso de la Garganta */
+    add_camp(0.0f, 0.70f, -182.0f, 1, 4, 0, 13);
+    add_plat(0.0f, 1.05f, -255.0f, 18.0f, 78.0f, 4.0f, 1, 1);
+    add_plat(0.0f, 1.40f, -340.0f, 160.0f, 130.0f, 4.5f, 1, 1); /* LAGO DE LOS ECOS & ALDEA LACUSTRE */
+    add_prop(-22.0f, 1.40f, -305.0f, 2.0f, 2.8f, 5, 4);
+    add_prop( 22.0f, 1.40f, -305.0f, 2.0f, 2.8f, 5, 5);
+    add_prop(  0.0f, 1.40f, -315.0f, 0.7f, 2.5f, 4, 1); /* Lake Crystal (Heal only) */
+    add_prop( 14.0f, 1.40f, -298.0f, 1.0f, 3.0f, 9, 0); /* Paid Return Portal */
+    add_prop(-48.0f, 1.40f, -365.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
+    add_prop( 52.0f, 1.40f, -370.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
+    add_prop( 26.0f, 1.40f, -335.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
+    add_prop(  0.0f, 1.40f, -395.0f, 1.2f, 3.6f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
+    add_npc(-14.0f, 1.40f, -298.0f, 2, 4, "Mercader Nilo", "NILO: Tienda de Supervivencia!");
+    add_camp(-54.0f, 1.40f, -345.0f, 1, 4, 1, -1);
+    add_camp( 54.0f, 1.40f, -355.0f, 2, 4, 0, -1);
 
     /* 4. CAMINO DEL ESTE -> DESFILADERO -> CANON CARMESI (x=+58..+480) */
-    add_plat(100.0f, 0.5f, 0.0f, 88.0f, 18.0f, 3.5f, 2, 2);
-    add_camp(105.0f, 0.5f, 0.0f, 1, 3, 0, -1);
-    add_plat(180.0f, 1.0f, 0.0f, 84.0f, 48.0f, 4.0f, 2, 2); /* Ruinas del Desfiladero */
-    add_camp(182.0f, 1.0f, -6.0f, 2, 4, 0, 14);
-    add_plat(260.0f, 1.5f, 0.0f, 88.0f, 18.0f, 4.0f, 2, 2);
-    add_plat(390.0f, 2.0f, 0.0f, 180.0f, 160.0f, 4.5f, 2, 2); /* CANON CARMESI & CAMPAMENTO */
-    add_prop(325.0f, 2.0f, -22.0f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
-    add_prop(336.0f, 2.0f, -12.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal */
-    add_prop(390.0f, 2.0f, -52.0f, 0.7f, 3.2f, 2, 2); /* Obelisk 2 */
-    add_prop(455.0f, 2.0f,  55.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
-    add_prop(468.0f, 2.0f,   0.0f, 1.2f, 3.6f, 6, 2); /* DUNGEON 2 PORTAL: Forja de Obsidiana */
-    add_npc(325.0f, 2.0f, -12.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada!");
-    add_camp(395.0f, 2.0f, -48.0f, 2, 4, 1, -1);
-    add_camp(410.0f, 2.0f,  48.0f, 2, 4, 1, -1);
-    add_camp(445.0f, 2.0f, -18.0f, 2, 3, 0, -1);
+    add_plat(100.0f, 0.35f, 0.0f, 88.0f, 18.0f, 3.5f, 2, 2);
+    add_camp(105.0f, 0.35f, 0.0f, 1, 3, 0, -1);
+    add_plat(180.0f, 0.70f, 0.0f, 84.0f, 48.0f, 4.0f, 2, 2); /* Ruinas del Desfiladero */
+    add_camp(182.0f, 0.70f, -6.0f, 2, 4, 0, 14);
+    add_plat(260.0f, 1.05f, 0.0f, 88.0f, 18.0f, 4.0f, 2, 2);
+    add_plat(390.0f, 1.40f, 0.0f, 180.0f, 160.0f, 4.5f, 2, 2); /* CANON CARMESI & CAMPAMENTO */
+    add_prop(325.0f, 1.40f, -22.0f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
+    add_prop(336.0f, 1.40f, -12.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal */
+    add_prop(390.0f, 1.40f, -52.0f, 0.7f, 3.2f, 2, 2); /* Obelisk 2 */
+    add_prop(455.0f, 1.40f,  55.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
+    add_prop(468.0f, 1.40f,   0.0f, 1.2f, 3.6f, 6, 2); /* DUNGEON 2 PORTAL: Forja de Obsidiana */
+    add_npc(325.0f, 1.40f, -12.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada!");
+    add_camp(395.0f, 1.40f, -48.0f, 2, 4, 1, -1);
+    add_camp(410.0f, 1.40f,  48.0f, 2, 4, 1, -1);
+    add_camp(445.0f, 1.40f, -18.0f, 2, 3, 0, -1);
 
     /* 5. ASCENSO ALPINO -> CIUDADELA ASTRAL (z=-400..-580) */
-    add_plat(0.0f, 3.0f, -435.0f, 16.0f, 70.0f, 4.5f, 4, 3);
-    add_plat(0.0f, 4.0f, -520.0f, 120.0f, 110.0f, 5.0f, 4, 3); /* CIUDADELA ASTRAL */
-    add_prop(-28.0f, 4.0f, -490.0f, 0.7f, 4.4f, 2, 3); /* Obelisk 3 */
-    add_prop( 28.0f, 4.0f, -490.0f, 0.7f, 4.4f, 2, 4); /* Obelisk 4 */
-    add_prop(-28.0f, 4.0f, -550.0f, 0.7f, 4.4f, 0, 0);
-    add_prop( 28.0f, 4.0f, -550.0f, 0.7f, 4.4f, 0, 0);
-    add_prop(  0.0f, 4.0f, -560.0f, 0.7f, 2.8f, 4, 2); /* Astral Crystal */
-    add_prop(  0.0f, 4.0f, -495.0f, 0.6f, 0.9f, 3, 5); /* Chest 5 */
-    add_enemy( 0.0f, 4.0f, -530.0f, 2, 1, 2); /* Final Sky Dragon Boss */
+    add_plat(0.0f, 1.80f, -435.0f, 16.0f, 70.0f, 4.5f, 4, 3);
+    add_plat(0.0f, 2.20f, -520.0f, 120.0f, 110.0f, 5.0f, 4, 3); /* CIUDADELA ASTRAL */
+    add_prop(-28.0f, 2.20f, -490.0f, 0.7f, 4.4f, 2, 3); /* Obelisk 3 */
+    add_prop( 28.0f, 2.20f, -490.0f, 0.7f, 4.4f, 2, 4); /* Obelisk 4 */
+    add_prop(-28.0f, 2.20f, -550.0f, 0.7f, 4.4f, 0, 0);
+    add_prop( 28.0f, 2.20f, -550.0f, 0.7f, 4.4f, 0, 0);
+    add_prop(  0.0f, 2.20f, -560.0f, 0.7f, 2.8f, 4, 2); /* Astral Crystal */
+    add_prop(  0.0f, 2.20f, -495.0f, 0.6f, 0.9f, 3, 5); /* Chest 5 */
+    add_enemy( 0.0f, 2.20f, -530.0f, 2, 1, 2); /* Final Sky Dragon Boss */
 
     /* 6. FRONTERA SUR & BASTION ANTIGUO (z=+58..+440) */
-    add_plat(0.0f, 0.0f, 105.0f, 18.0f, 96.0f, 3.0f, 1, 0);
-    add_camp(0.0f, 0.0f, 110.0f, 0, 3, 0, -1);
+    add_plat(0.0f, -0.05f, 105.0f, 18.0f, 96.0f, 3.0f, 1, 0);
+    add_camp(0.0f, -0.05f, 110.0f, 0, 3, 0, -1);
     add_plat(0.0f, 0.0f, 195.0f, 52.0f, 88.0f, 3.0f, 0, 0); /* Torre del Sur */
     add_camp(0.0f, 0.0f, 195.0f, 1, 4, 1, 15);
-    add_plat(0.0f, 0.0f, 280.0f, 18.0f, 88.0f, 3.0f, 1, 0);
-    add_plat(0.0f, 0.5f, 375.0f, 150.0f, 130.0f, 3.5f, 1, 2); /* BASTION DEL SUR */
-    add_prop(0.0f, 0.5f, 375.0f, 0.7f, 3.4f, 2, 5); /* Obelisk 5 */
-    add_prop(24.0f, 0.5f, 340.0f, 1.0f, 3.0f, 9, 2); /* Paid Return Portal */
-    add_camp(-46.0f, 0.5f, 375.0f, 2, 4, 1, -1);
-    add_camp( 46.0f, 0.5f, 375.0f, 2, 4, 1, -1);
+    add_plat(0.0f, -0.05f, 280.0f, 18.0f, 88.0f, 3.0f, 1, 0);
+    add_plat(0.0f, 0.35f, 375.0f, 150.0f, 130.0f, 3.5f, 1, 2); /* BASTION DEL SUR */
+    add_prop(0.0f, 0.35f, 375.0f, 0.7f, 3.4f, 2, 5); /* Obelisk 5 */
+    add_prop(24.0f, 0.35f, 340.0f, 1.0f, 3.0f, 9, 2); /* Paid Return Portal */
+    add_camp(-46.0f, 0.35f, 375.0f, 2, 4, 1, -1);
+    add_camp( 46.0f, 0.35f, 375.0f, 2, 4, 1, -1);
 }
 
 static void build_dungeon(int dId) {
@@ -1569,7 +1569,7 @@ int main(void) {
                                 if (worldMode == 1) build_overworld();
                                 int lostG = heroGold / 4;
                                 heroGold -= lostG;
-                                heroHp = heroMaxHp; heroX = 0.0f; heroY = 0.0f; heroZ = 4.0f;
+                                heroHp = heroMaxHp; heroX = 0.0f; heroY = 0.25f; heroZ = 4.0f;
                                 snprintf(dialogMsg, sizeof(dialogMsg), "CAIDO! Pierdes %d Oro y vuelves al Santuario!", lostG);
                                 dialogT = 180;
                             }
@@ -1659,10 +1659,12 @@ int main(void) {
 
         sceGumMatrixMode(GU_VIEW);
         sceGumLoadIdentity();
+        static float smoothCamY = 0.10f;
+        smoothCamY += (heroY - smoothCamY) * 0.18f;
         float camDist = inTitle ? 12.5f : 10.2f;
         float camH    = inTitle ? 5.8f  : 6.0f;
-        ScePspFVector3 eye = { heroX + sinf(camYaw) * camDist, heroY + camH, heroZ + cosf(camYaw) * camDist };
-        ScePspFVector3 at  = { heroX, heroY + 1.1f, heroZ };
+        ScePspFVector3 eye = { heroX + sinf(camYaw) * camDist, smoothCamY + camH, heroZ + cosf(camYaw) * camDist };
+        ScePspFVector3 at  = { heroX, smoothCamY + 1.1f, heroZ };
         ScePspFVector3 up  = { 0.0f, 1.0f, 0.0f };
         sceGumLookAt(&eye, &at, &up);
 
