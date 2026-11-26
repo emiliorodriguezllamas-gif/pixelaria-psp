@@ -2819,6 +2819,58 @@ int main(void) {
                         gu_text2d(sx, sy, pb, pc, 1);
                     }
                 }
+                if (!inTitle && !storyOpen && !shopOpen && !menuOpen && !fireOpen && !guideOpen && !ghActive) {
+                    float bestD2 = 10.5f, ix = 0.0f, iy = 0.0f, iz = 0.0f;
+                    int btnLane = -1;
+                    for (int i = 0; i < nNpcs; i++) {
+                        float dx = npcs[i].x - heroX, dz = npcs[i].z - heroZ;
+                        float d2 = dx * dx + dz * dz;
+                        if (d2 < bestD2) { bestD2 = d2; ix = npcs[i].x; iy = npcs[i].y + 2.55f; iz = npcs[i].z; btnLane = 2; }
+                    }
+                    for (int i = 0; i < nProps; i++) {
+                        Prop3D *pr = &props[i];
+                        int k = pr->kind;
+                        if (k == 3 && !pr->active) {}
+                        else if (k == 4 || k == 6 || k == 7 || k == 8 || k == 9 || k == 15) {}
+                        else continue;
+                        float dx = pr->x - heroX, dz = pr->z - heroZ;
+                        float d2 = dx * dx + dz * dz;
+                        if (d2 < bestD2) {
+                            bestD2 = d2; ix = pr->x; iz = pr->z; btnLane = 2;
+                            iy = pr->y + ((k == 6 || k == 7 || k == 9) ? 3.85f : (k == 4 ? 3.25f : (k == 8 ? 2.35f : (k == 15 ? 1.85f : 1.45f))));
+                        }
+                    }
+                    if (btnLane < 0) {
+                        float altD2 = 10.5f;
+                        for (int i = 0; i < nProps; i++) {
+                            Prop3D *pr = &props[i];
+                            int k = pr->kind;
+                            if (!((k == 2 && !pr->active) || ((k == 1 || k == 13) && !pr->active))) continue;
+                            float dx = pr->x - heroX, dz = pr->z - heroZ;
+                            float d2 = dx * dx + dz * dz;
+                            float lim = (k == 2) ? 10.5f : 7.5f;
+                            if (d2 < lim && d2 < altD2) {
+                                altD2 = d2; ix = pr->x; iz = pr->z;
+                                iy = pr->y + (k == 2 ? pr->h + 0.6f : (k == 1 ? 2.8f : pr->h + 0.5f));
+                                btnLane = (k == 2) ? 1 : 3;
+                            }
+                        }
+                    }
+                    if (btnLane >= 0) {
+                        float dx = ix - eye.x, dy = iy - eye.y, dz = iz - eye.z;
+                        float zc = dx * fx + dy * fy + dz * fz;
+                        if (zc >= 2.0f) {
+                            float xc = dx * rx + dz * rz;
+                            float yc = dx * ux + dy * uy + dz * uz;
+                            int sx = 240 + (int)((xc / zc) * 280.0f);
+                            int sy = 136 - (int)((yc / zc) * 280.0f) + (int)(sinf((float)animFrame * 0.16f) * 3.0f);
+                            if (sx >= 16 && sx <= 464 && sy >= 16 && sy <= 256) {
+                                gu_rect2d(sx - 11, sy - 11, 22, 22, ABGR(14, 18, 32, 210));
+                                gu_btn2d(sx - 9, sy - 9, 18, btnLane, ABGR(255, 255, 255, 255));
+                            }
+                        }
+                    }
+                }
             }
         }
 
