@@ -333,7 +333,7 @@ typedef struct {
 } Particle3D;
 
 #define MAX_PLATS 160
-#define MAX_PROPS 480
+#define MAX_PROPS 640
 #define MAX_ENEMIES 120
 #define MAX_NPCS 12
 #define MAX_PARTS 140
@@ -573,7 +573,13 @@ static void build_overworld(void) {
     for (int i = 0; i < 8; i++) {
         float ang = (float)i * 0.7854f + 0.38f;
         add_prop(cosf(ang) * 44.0f, 0.0f, sinf(ang) * 44.0f, 1.2f, 3.8f, 1, 0);
+        add_prop(cosf(ang) * 44.0f + 2.0f, 0.0f, sinf(ang) * 44.0f + 1.5f, 1.8f, 0.0f, 10, 0);
     }
+    /* Town Gate Lanterns (4 cardinal exits of Pueblo del Alba) */
+    add_prop(-16.0f, 0.10f, -4.5f, 0.4f, 1.8f, 11, 0); add_prop(-16.0f, 0.10f,  4.5f, 0.4f, 1.8f, 11, 0);
+    add_prop( 16.0f, 0.10f, -4.5f, 0.4f, 1.8f, 11, 0); add_prop( 16.0f, 0.10f,  4.5f, 0.4f, 1.8f, 11, 0);
+    add_prop(-4.5f, 0.10f, -16.0f, 0.4f, 1.8f, 11, 0); add_prop( 4.5f, 0.10f, -16.0f, 0.4f, 1.8f, 11, 0);
+    add_prop(-4.5f, 0.10f,  16.0f, 0.4f, 1.8f, 11, 0); add_prop( 4.5f, 0.10f,  16.0f, 0.4f, 1.8f, 11, 0);
     /* Realistic Frontier Patrols outside Pueblo del Alba safe zone */
     add_camp(-44.0f, 0.0f, -34.0f, 0, 2, 0, -1);
     add_camp( 44.0f, 0.0f,  34.0f, 0, 2, 0, -1);
@@ -582,40 +588,73 @@ static void build_overworld(void) {
 
     /* 2. CAMINO DEL OESTE -> LLANURAS DEL VIENTO -> BOSQUE ESMERALDA (x=-58..-480) */
     add_plat(-100.0f, -0.05f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
+    for (int i = 0; i < 3; i++) {
+        float rx = -72.0f - (float)i * 28.0f;
+        add_prop(rx, -0.05f, -7.2f, 0.4f, 1.8f, 11, 0);
+        add_prop(rx, -0.05f,  7.2f, 0.4f, 1.8f, 11, 0);
+        add_prop(rx, -0.05f,  0.0f, 2.2f, 0.0f, 10, 1);
+    }
     add_camp(-105.0f, -0.05f, 2.0f, 0, 3, 0, -1);
     add_plat(-180.0f, 0.0f, 0.0f, 84.0f, 44.0f, 3.0f, 0, 1); /* Torre de Vigia Oeste */
+    add_prop(-165.0f, 0.0f, 16.0f, 1.2f, 3.6f, 1, 0);
+    add_prop(-195.0f, 0.0f, 16.0f, 1.2f, 3.6f, 1, 0);
+    add_prop(-180.0f, 0.0f,  8.0f, 2.5f, 0.0f, 10, 0);
     add_camp(-182.0f, 0.0f, -10.0f, 1, 3, 1, 12);
     add_plat(-260.0f, -0.05f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
+    for (int i = 0; i < 3; i++) {
+        float rx = -232.0f - (float)i * 28.0f;
+        add_prop(rx, -0.05f, -7.2f, 0.4f, 1.8f, 11, 1);
+        add_prop(rx, -0.05f,  7.2f, 0.4f, 1.8f, 11, 1);
+    }
     add_camp(-265.0f, -0.05f, -2.0f, 1, 3, 0, -1);
     add_plat(-390.0f, 0.0f, 0.0f, 180.0f, 180.0f, 4.0f, 0, 1); /* BOSQUE ESMERALDA GIGANTE */
-    for (int i = 0; i < 18; i++) {
-        float tx = -320.0f - (float)((i * 29) % 135);
-        float tz = -75.0f + (float)((i * 47) % 150);
+    for (int i = 0; i < 24; i++) {
+        float tx = -315.0f - (float)((i * 29) % 145);
+        float tz = -78.0f + (float)((i * 47) % 156);
         if (fabsf(tz) < 12.0f && tx > -340.0f) tz += 18.0f;
         add_prop(tx, 0.0f, tz, 1.2f, 3.6f + (float)(i % 3) * 0.4f, 1, 0);
-        add_prop(tx + 2.2f, 0.0f, tz + 1.8f, 1.7f, 0.0f, 10, (i & 1) ? 2 : 0); /* Mushrooms & Wildflowers */
+        add_prop(tx + 2.2f, 0.0f, tz + 1.8f, 1.8f, 0.0f, 10, (i & 1) ? 2 : 0); /* Mushrooms & Wildflowers */
     }
     add_prop(-390.0f, 0.0f,  0.0f, 0.7f, 3.2f, 2, 0); /* Obelisk 0 */
+    add_prop(-390.0f, 0.0f,  0.0f, 3.2f, 0.0f, 10, 3); /* Rune Sigil under Obelisk 0 */
     add_prop(-455.0f, 0.0f,  58.0f, 0.6f, 0.9f, 3, 1); /* Chest 1 */
     add_prop(-455.0f, 0.0f, -58.0f, 0.6f, 0.9f, 3, 2); /* Chest 2 */
     add_prop(-345.0f, 0.0f,  35.0f, 0.55f, 1.8f, 8, 1); /* Clue 1 */
     add_prop(-468.0f, 0.0f,  0.0f, 1.2f, 3.6f, 6, 0); /* DUNGEON 0 PORTAL: Templo del Bosque */
+    add_prop(-462.0f, 0.0f, -5.0f, 0.4f, 1.8f, 11, 1);
+    add_prop(-462.0f, 0.0f,  5.0f, 0.4f, 1.8f, 11, 1);
     add_camp(-355.0f, 0.0f, -52.0f, 1, 4, 1, -1);
     add_camp(-365.0f, 0.0f,  56.0f, 1, 4, 1, -1);
     add_camp(-435.0f, 0.0f, -42.0f, 1, 4, 0, -1);
 
     /* 3. CAMINO DEL NORTE -> PASO DE LA GARGANTA -> LAGO DE LOS ECOS (z=-58..-410) */
     add_plat(0.0f, 0.35f, -100.0f, 18.0f, 88.0f, 3.5f, 1, 1);
+    for (int i = 0; i < 3; i++) {
+        float rz = -72.0f - (float)i * 28.0f;
+        add_prop(-7.2f, 0.35f, rz, 0.4f, 1.8f, 11, 1);
+        add_prop( 7.2f, 0.35f, rz, 0.4f, 1.8f, 11, 1);
+        add_prop( 0.0f, 0.35f, rz, 2.2f, 0.0f, 10, 1);
+    }
     add_camp(0.0f, 0.35f, -105.0f, 1, 3, 0, -1);
     add_plat(0.0f, 0.70f, -180.0f, 48.0f, 84.0f, 4.0f, 1, 1); /* Paso de la Garganta */
+    add_prop(-18.0f, 0.70f, -155.0f, 0.7f, 3.8f, 0, 0);
+    add_prop( 18.0f, 0.70f, -155.0f, 0.7f, 3.8f, 0, 0);
+    add_prop(-18.0f, 0.70f, -205.0f, 0.7f, 3.8f, 0, 0);
+    add_prop( 18.0f, 0.70f, -205.0f, 0.7f, 3.8f, 0, 0);
     add_camp(0.0f, 0.70f, -182.0f, 1, 4, 0, 13);
     add_plat(0.0f, 1.05f, -255.0f, 18.0f, 78.0f, 4.0f, 1, 1);
+    add_prop(-7.2f, 1.05f, -240.0f, 0.4f, 1.8f, 11, 1);
+    add_prop( 7.2f, 1.05f, -240.0f, 0.4f, 1.8f, 11, 1);
     add_plat(0.0f, 1.40f, -340.0f, 160.0f, 130.0f, 4.5f, 1, 1); /* LAGO DE LOS ECOS & ALDEA LACUSTRE */
     add_prop(-22.0f, 1.40f, -305.0f, 2.0f, 2.8f, 5, 4);
     add_prop( 22.0f, 1.40f, -305.0f, 2.0f, 2.8f, 5, 5);
     add_prop(  0.0f, 1.40f, -315.0f, 0.7f, 2.5f, 4, 1); /* Lake Crystal (Heal only) */
+    add_prop(  0.0f, 1.40f, -315.0f, 3.0f, 0.0f, 10, 3); /* Lake Sigil */
+    add_prop(-12.0f, 1.40f, -285.0f, 0.4f, 1.8f, 11, 1);
+    add_prop( 12.0f, 1.40f, -285.0f, 0.4f, 1.8f, 11, 1);
     add_prop( 14.0f, 1.40f, -298.0f, 1.0f, 3.0f, 9, 0); /* Paid Return Portal */
     add_prop(-48.0f, 1.40f, -365.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
+    add_prop(-48.0f, 1.40f, -365.0f, 2.6f, 0.0f, 10, 3);
     add_prop( 52.0f, 1.40f, -370.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
     add_prop( 26.0f, 1.40f, -335.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
     add_prop(  0.0f, 1.40f, -395.0f, 1.2f, 3.6f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
@@ -625,16 +664,28 @@ static void build_overworld(void) {
 
     /* 4. CAMINO DEL ESTE -> DESFILADERO -> CANON CARMESI (x=+58..+480) */
     add_plat(100.0f, 0.35f, 0.0f, 88.0f, 18.0f, 3.5f, 2, 2);
+    for (int i = 0; i < 3; i++) {
+        float rx = 72.0f + (float)i * 28.0f;
+        add_prop(rx, 0.35f, -7.2f, 0.4f, 1.8f, 11, 2);
+        add_prop(rx, 0.35f,  7.2f, 0.4f, 1.8f, 11, 2);
+    }
     add_camp(105.0f, 0.35f, 0.0f, 1, 3, 0, -1);
     add_plat(180.0f, 0.70f, 0.0f, 84.0f, 48.0f, 4.0f, 2, 2); /* Ruinas del Desfiladero */
+    add_prop(165.0f, 0.70f, -16.0f, 0.7f, 4.0f, 0, 0);
+    add_prop(195.0f, 0.70f,  16.0f, 0.7f, 4.0f, 0, 0);
     add_camp(182.0f, 0.70f, -6.0f, 2, 4, 0, 14);
     add_plat(260.0f, 1.05f, 0.0f, 88.0f, 18.0f, 4.0f, 2, 2);
+    add_prop(255.0f, 1.05f, -7.2f, 0.4f, 1.8f, 11, 2);
+    add_prop(255.0f, 1.05f,  7.2f, 0.4f, 1.8f, 11, 2);
     add_plat(390.0f, 1.40f, 0.0f, 180.0f, 160.0f, 4.5f, 2, 2); /* CANON CARMESI & CAMPAMENTO */
     add_prop(325.0f, 1.40f, -22.0f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
     add_prop(336.0f, 1.40f, -12.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal */
     add_prop(390.0f, 1.40f, -52.0f, 0.7f, 3.2f, 2, 2); /* Obelisk 2 */
+    add_prop(390.0f, 1.40f, -52.0f, 2.8f, 0.0f, 10, 3);
     add_prop(455.0f, 1.40f,  55.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
     add_prop(468.0f, 1.40f,   0.0f, 1.2f, 3.6f, 6, 2); /* DUNGEON 2 PORTAL: Forja de Obsidiana */
+    add_prop(462.0f, 1.40f,  -5.0f, 0.4f, 1.8f, 11, 2);
+    add_prop(462.0f, 1.40f,   5.0f, 0.4f, 1.8f, 11, 2);
     add_npc(325.0f, 1.40f, -12.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada!");
     add_camp(395.0f, 1.40f, -48.0f, 2, 4, 1, -1);
     add_camp(410.0f, 1.40f,  48.0f, 2, 4, 1, -1);
@@ -642,6 +693,11 @@ static void build_overworld(void) {
 
     /* 5. ASCENSO ALPINO -> CIUDADELA ASTRAL (z=-400..-580) */
     add_plat(0.0f, 1.80f, -435.0f, 16.0f, 70.0f, 4.5f, 4, 3);
+    for (int i = 0; i < 3; i++) {
+        float az = -415.0f - (float)i * 22.0f;
+        add_prop(-6.5f, 1.80f, az, 0.4f, 1.8f, 11, 1);
+        add_prop( 6.5f, 1.80f, az, 0.4f, 1.8f, 11, 1);
+    }
     add_plat(0.0f, 2.20f, -520.0f, 120.0f, 110.0f, 5.0f, 4, 3); /* CIUDADELA ASTRAL */
     add_prop(-28.0f, 2.20f, -490.0f, 0.7f, 4.4f, 2, 3); /* Obelisk 3 */
     add_prop( 28.0f, 2.20f, -490.0f, 0.7f, 4.4f, 2, 4); /* Obelisk 4 */
@@ -656,12 +712,21 @@ static void build_overworld(void) {
 
     /* 6. FRONTERA SUR & BASTION ANTIGUO (z=+58..+440) */
     add_plat(0.0f, -0.05f, 105.0f, 18.0f, 96.0f, 3.0f, 1, 0);
+    for (int i = 0; i < 3; i++) {
+        float sz = 75.0f + (float)i * 30.0f;
+        add_prop(-7.2f, -0.05f, sz, 0.4f, 1.8f, 11, 0);
+        add_prop( 7.2f, -0.05f, sz, 0.4f, 1.8f, 11, 0);
+    }
     add_camp(0.0f, -0.05f, 110.0f, 0, 3, 0, -1);
     add_plat(0.0f, 0.0f, 195.0f, 52.0f, 88.0f, 3.0f, 0, 0); /* Torre del Sur */
+    add_prop(-18.0f, 0.0f, 175.0f, 1.2f, 3.6f, 1, 0);
+    add_prop( 18.0f, 0.0f, 215.0f, 1.2f, 3.6f, 1, 0);
+    add_prop(  0.0f, 0.0f, 175.0f, 2.2f, 0.0f, 10, 0);
     add_camp(0.0f, 0.0f, 195.0f, 1, 4, 1, 15);
     add_plat(0.0f, -0.05f, 280.0f, 18.0f, 88.0f, 3.0f, 1, 0);
     add_plat(0.0f, 0.35f, 375.0f, 150.0f, 130.0f, 3.5f, 1, 2); /* BASTION DEL SUR */
     add_prop(0.0f, 0.35f, 375.0f, 0.7f, 3.4f, 2, 5); /* Obelisk 5 */
+    add_prop(0.0f, 0.35f, 375.0f, 3.2f, 0.0f, 10, 3);
     add_prop(24.0f, 0.35f, 340.0f, 1.0f, 3.0f, 9, 2); /* Paid Return Portal */
     add_camp(-46.0f, 0.35f, 375.0f, 2, 4, 1, -1);
     add_camp( 46.0f, 0.35f, 375.0f, 2, 4, 1, -1);
@@ -1862,6 +1927,11 @@ int main(void) {
                 draw_box3d(pr->x, pr->y + 3.6f, pr->z, 2.8f, 0.5f, 0.7f, texCrystal, pc, 0.5f);
             } else if (pr->kind == 10) {
                 draw_ground_decal(pr->x, pr->y, pr->z, pr->rad, pr->id);
+            } else if (pr->kind == 11) {
+                float bob = sinf((float)animFrame * 0.07f + pr->x) * 0.12f;
+                unsigned int lc = (pr->id == 1) ? ABGR(120, 235, 255, 225) : ((pr->id == 2) ? ABGR(255, 125, 70, 225) : ABGR(255, 215, 110, 225));
+                draw_box3d(pr->x, pr->y + 1.5f, pr->z, 0.45f, 1.5f, 0.45f, texStone, ABGR(210, 215, 230, 255), 0.6f);
+                draw_billboard(pr->x, pr->y + 1.85f + bob, pr->z, 1.35f, 1.35f, texSoftGlow, lc, 0, camYaw);
             } else if (pr->kind == 8) {
                 unsigned int lc = pr->active ? ABGR(140, 235, 255, 255) : ABGR(255, 215, 95, 255);
                 draw_ground_disc(pr->x, pr->y, pr->z, 1.0f, lc);
