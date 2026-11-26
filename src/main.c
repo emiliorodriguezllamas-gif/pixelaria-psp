@@ -1553,11 +1553,11 @@ int main(void) {
 
         /* ==================== HARDWARE GU 3D RENDER ==================== */
         int curZone = get_current_zone();
-        pspTime pspNow;
+        ScePspDateTime pspNow;
         int curHour = 12, curMin = 0;
         if (sceRtcGetCurrentClockLocalTime(&pspNow) >= 0) {
             curHour = pspNow.hour;
-            curMin = pspNow.minutes;
+            curMin = pspNow.minute;
         }
         float dayHour = (float)curHour + (float)curMin / 60.0f;
 
