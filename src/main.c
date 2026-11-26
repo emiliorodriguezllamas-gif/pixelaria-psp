@@ -560,7 +560,7 @@ static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
 static float dashDx = 0.0f, dashDz = 0.0f;
 static int worldMode = 0; /* 0=Overworld, 1=Dungeon */
 static int curDungeon = 0, dngRunes = 0, hasSave = 0;
-static int shopOpen = 0, shopCursor = 0, hungerTick = 0;
+static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, hungerTick = 0;
 
 typedef struct {
     unsigned int magic;
@@ -1315,6 +1315,54 @@ int main(void) {
                     play_sfx(180.0f, 800);
                 }
             }
+        } else if (menuOpen) {
+            if (pressed & PSP_CTRL_UP) { menuCursor = (menuCursor + 3) & 3; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { menuCursor = (menuCursor + 1) & 3; play_sfx(520.0f, 400); }
+            if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { menuOpen = 0; play_sfx(420.0f, 500); }
+            if (pressed & PSP_CTRL_CROSS) {
+                if (menuCursor == 0) {
+                    if (heroPotions > 0 && heroHp < heroMaxHp) {
+                        heroPotions--;
+                        heroHp += 60; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                        snprintf(dialogMsg, sizeof(dialogMsg), "POCION USADA! +60 HP (Quedan %d)", heroPotions);
+                        play_sfx(860.0f, 1200);
+                    } else {
+                        snprintf(dialogMsg, sizeof(dialogMsg), heroPotions > 0 ? "Ya tienes la vida al maximo!" : "No tienes Pociones!");
+                        play_sfx(200.0f, 600);
+                    }
+                    dialogT = 110;
+                } else if (menuCursor == 1) {
+                    if (heroFood > 0) {
+                        heroFood--;
+                        heroHunger += 50.0f; if (heroHunger > 100.0f) heroHunger = 100.0f;
+                        heroHp += 20; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                        snprintf(dialogMsg, sizeof(dialogMsg), "RACION COMIDA! +50%% Comida +20 HP (Quedan %d)", heroFood);
+                        play_sfx(780.0f, 1000);
+                    } else {
+                        snprintf(dialogMsg, sizeof(dialogMsg), "No tienes Raciones!");
+                        play_sfx(200.0f, 600);
+                    }
+                    dialogT = 110;
+                } else if (menuCursor == 2) {
+                    if (heroElixirs > 0) {
+                        heroElixirs--;
+                        heroStam = heroMaxStam;
+                        heroHp += 40; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                        snprintf(dialogMsg, sizeof(dialogMsg), "ELIXIR USADO! Estamina 100%% +40 HP (Quedan %d)", heroElixirs);
+                        play_sfx(920.0f, 1200);
+                    } else {
+                        snprintf(dialogMsg, sizeof(dialogMsg), "No tienes Elixires!");
+                        play_sfx(200.0f, 600);
+                    }
+                    dialogT = 110;
+                } else {
+                    save_game();
+                    menuOpen = 0;
+                    snprintf(dialogMsg, sizeof(dialogMsg), "PARTIDA GUARDADA CORRECTAMENTE! (NV.%d)", heroLv);
+                    dialogT = 140;
+                    play_sfx(1040.0f, 1600);
+                }
+            }
         } else if (ghActive) {
             /* GUITAR HERO CRITICAL SOLO: Power up massive AoE damage! */
             if (ghJudgeT > 0) ghJudgeT--;
@@ -1549,38 +1597,11 @@ int main(void) {
                 play_sfx(680.0f, 900);
             }
 
-            /* START: Use Elixir / Ration / Potion */
+            /* START: Open Inventory & Save Menu */
             if (pressed & PSP_CTRL_START) {
-                if (heroStam < 30.0f && heroElixirs > 0) {
-                    heroElixirs--;
-                    heroStam = heroMaxStam;
-                    heroHp += 40; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                    snprintf(dialogMsg, sizeof(dialogMsg), "ELIXIR USADO! Estamina 100%% +40 HP (Quedan %d)", heroElixirs);
-                    dialogT = 100; play_sfx(920.0f, 1200);
-                } else if (heroHunger < 75.0f && heroFood > 0 && heroHp >= (heroMaxHp * 85) / 100) {
-                    heroFood--;
-                    heroHunger += 50.0f; if (heroHunger > 100.0f) heroHunger = 100.0f;
-                    heroHp += 20; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                    snprintf(dialogMsg, sizeof(dialogMsg), "RACION COMIDA! +50%% Comida +20 HP (Quedan %d)", heroFood);
-                    dialogT = 100; play_sfx(780.0f, 1000);
-                } else if (heroPotions > 0 && heroHp < heroMaxHp) {
-                    heroPotions--;
-                    heroHp += 60; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                    snprintf(dialogMsg, sizeof(dialogMsg), "POCION USADA! +60 HP (Quedan %d)", heroPotions);
-                    dialogT = 100; play_sfx(860.0f, 1200);
-                } else if (heroFood > 0 && heroHunger < 95.0f) {
-                    heroFood--;
-                    heroHunger += 50.0f; if (heroHunger > 100.0f) heroHunger = 100.0f;
-                    heroHp += 20; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                    snprintf(dialogMsg, sizeof(dialogMsg), "RACION COMIDA! +50%% Comida +20 HP (Quedan %d)", heroFood);
-                    dialogT = 100; play_sfx(780.0f, 1000);
-                } else if (heroElixirs > 0 && (heroStam < heroMaxStam || heroHp < heroMaxHp)) {
-                    heroElixirs--;
-                    heroStam = heroMaxStam;
-                    heroHp += 40; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                    snprintf(dialogMsg, sizeof(dialogMsg), "ELIXIR USADO! Estamina 100%% +40 HP (Quedan %d)", heroElixirs);
-                    dialogT = 100; play_sfx(920.0f, 1200);
-                }
+                menuOpen = 1;
+                menuCursor = 0;
+                play_sfx(680.0f, 800);
             }
 
             /* Square: Souls Dodge Roll (22 Stamina, 16 i-frames) */
@@ -2629,7 +2650,7 @@ int main(void) {
             gu_text2d(349, 34, buf, (nightFactor > 0.5f) ? ABGR(160, 205, 255, 255) : ABGR(255, 230, 120, 255), 1);
 
             gu_window2d(6, 246, 468, 20);
-            gu_text2d(12, 252, "X:ESPADA []:DASH /\\:PULSO O:TIENDA/ENTRAR SELECT:DIARIO START:USAR", ABGR(200, 225, 255, 255), 1);
+            gu_text2d(12, 252, "X:ATACAR/TALAR []:DASH /\\:PULSO O:INTERACT SELECT:DIARIO START:INV/GUARDAR", ABGR(200, 225, 255, 255), 1);
 
             if (bannerT > 0) {
                 gu_window2d(84, 8, 246, 24);
@@ -2666,6 +2687,28 @@ int main(void) {
                     gu_text2d(48, ry, buf, col, 1);
                 }
                 gu_text2d(92, 182, "[ARRIBA/ABAJO] ELEGIR   [X] COMPRAR   [O] SALIR", ABGR(145, 240, 255, 255), 1);
+            }
+            if (menuOpen) {
+                gu_window2d(34, 46, 412, 166);
+                snprintf(buf, sizeof(buf), "INVENTARIO Y GUARDADO  |  NV.%d  HP %d/%d  ATK %d", heroLv, heroHp, heroMaxHp, heroAtk);
+                gu_text2d(46, 56, buf, ABGR(255, 225, 95, 255), 1);
+                snprintf(buf, sizeof(buf), "ORO:%d  MONEDAS:%d  MADERA:%d  PIEDRA:%d", heroGold, heroCoins, heroWood, heroStone);
+                gu_text2d(46, 70, buf, ABGR(145, 245, 255, 255), 1);
+                snprintf(buf, sizeof(buf), "LLAVES:%d/3   PISTAS:%d/6   RELIQUIAS:%d   COM:%d%%", keysFound, cluesCount, heroRelics, (int)heroHunger);
+                gu_text2d(46, 82, buf, ABGR(200, 230, 255, 255), 1);
+                char mItems[4][64];
+                snprintf(mItems[0], 64, "USAR POCION CURATIVA (+60 HP)      [Tienes: %d]", heroPotions);
+                snprintf(mItems[1], 64, "COMER RACION VIAJE (+50%% Com,+20HP) [Tienes: %d]", heroFood);
+                snprintf(mItems[2], 64, "BEBER ELIXIR ESTAMINA (100%%,+40HP)  [Tienes: %d]", heroElixirs);
+                snprintf(mItems[3], 64, "GUARDAR PARTIDA EN LA CONSOLA");
+                for (int m = 0; m < 4; m++) {
+                    int ry = 102 + m * 19;
+                    if (m == menuCursor) gu_rect2d(44, ry - 3, 392, 15, ABGR(55, 85, 145, 210));
+                    snprintf(buf, sizeof(buf), "%s %s", (m == menuCursor) ? ">" : " ", mItems[m]);
+                    unsigned int col = (m == 3) ? ABGR(120, 255, 165, 255) : ABGR(235, 250, 255, 255);
+                    gu_text2d(48, ry, buf, col, 1);
+                }
+                gu_text2d(78, 192, "[ARRIBA/ABAJO] ELEGIR   [X] USAR/GUARDAR   [O/START] SALIR", ABGR(145, 240, 255, 255), 1);
             }
             if (ghActive) {
                 gu_window2d(140, 52, 200, 186);
