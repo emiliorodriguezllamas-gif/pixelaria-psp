@@ -315,6 +315,8 @@ typedef struct {
 typedef struct {
     float x, y, z;
     int hp, maxHp, kind, alive, flash, cd, isBoss, bossId;
+    int state, timer; /* 0=chase, 1=windup(telegraph), 2=recovery */
+    float atkX, atkZ, atkRad;
 } Enemy3D;
 
 typedef struct {
@@ -373,10 +375,12 @@ static void show_story(const char *t, const char *l1, const char *l2, const char
     storyOpen = 1;
 }
 
-static float heroX = 0.0f, heroY = 0.0f, heroZ = 6.0f;
+static float heroX = 0.0f, heroY = 0.0f, heroZ = 6.0f, heroYaw = 3.14159f;
 static float saveOvX = 0.0f, saveOvY = 0.0f, saveOvZ = 6.0f;
 static float camYaw = 0.0f;
 static int heroFlip = 0, heroHp = 130, heroMaxHp = 130, heroAtk = 22;
+static float heroStam = 100.0f, heroMaxStam = 100.0f;
+static int stamDelay = 0, heavyT = 0;
 static int heroGold = 40, heroPotions = 2, heroLv = 1, heroXp = 0;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
 static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
@@ -409,7 +413,7 @@ static void add_npc(float x, float y, float z, int role, const char *name, const
 static void add_enemy(float x, float y, float z, int kind, int isBoss, int bossId) {
     if (nEnemies >= MAX_ENEMIES) return;
     int hp = isBoss ? (180 + bossId * 110) : (45 + kind * 28);
-    enemies[nEnemies++] = (Enemy3D){ x, y, z, hp, hp, kind, 1, 0, 0, isBoss, bossId };
+    enemies[nEnemies++] = (Enemy3D){ x, y, z, hp, hp, kind, 1, 0, 0, isBoss, bossId, 0, 0, x, z, isBoss ? 3.2f : 1.9f };
 }
 
 static void spawn_part(float x, float y, float z, float vx, float vy, float vz, float life, float sz, unsigned int col) {
@@ -741,9 +745,15 @@ int main(void) {
             if (bannerT > 0) bannerT--;
             if (dialogT > 0) dialogT--;
             if (atkT > 0) atkT--;
+            if (heavyT > 0) heavyT--;
             if (pulseT > 0) pulseT--;
             if (invulnT > 0) invulnT--;
             if (heroFlash > 0) heroFlash--;
+            if (stamDelay > 0) stamDelay--;
+            else if (heroStam < heroMaxStam) {
+                heroStam += 0.85f;
+                if (heroStam > heroMaxStam) heroStam = heroMaxStam;
+            }
 
             if (pad.Buttons & PSP_CTRL_LTRIGGER) camYaw -= 0.035f;
             if (pad.Buttons & PSP_CTRL_RTRIGGER) camYaw += 0.035f;
@@ -777,6 +787,7 @@ int main(void) {
             }
 
             if (fabsf(mvX) > 0.001f || fabsf(mvZ) > 0.001f) {
+                if (dashT == 0) heroYaw = atan2f(mvX, mvZ);
                 float ny = -10.0f;
                 if (is_walkable(heroX + mvX, heroZ, &ny)) { heroX += mvX; heroY = ny; }
                 ny = -10.0f;
@@ -813,33 +824,40 @@ int main(void) {
                 play_sfx(860.0f, 1200);
             }
 
-            /* Square: Dash */
-            if ((pressed & PSP_CTRL_SQUARE) && dashT == 0) {
+            /* Square: Souls Dodge Roll (22 Stamina, 16 i-frames) */
+            if ((pressed & PSP_CTRL_SQUARE) && dashT == 0 && heroStam >= 22.0f) {
+                heroStam -= 22.0f; stamDelay = 24;
                 float dl = sqrtf(mvX * mvX + mvZ * mvZ);
                 if (dl > 0.01f) { dashDx = mvX / dl; dashDz = mvZ / dl; }
-                else { dashDx = fwdX; dashDz = fwdZ; }
-                dashT = 11; invulnT = 14;
+                else { dashDx = sinf(heroYaw); dashDz = cosf(heroYaw); }
+                dashT = 12; invulnT = 16;
                 play_sfx(540.0f, 900);
             }
 
-            /* Cross: Light-Blade Slash */
-            if ((pressed & PSP_CTRL_CROSS) && atkT == 0) {
-                atkT = 15;
+            /* Cross: Directional Light-Blade Slash (18 Stamina, hits where hero aims) */
+            if ((pressed & PSP_CTRL_CROSS) && atkT == 0 && heavyT == 0 && heroStam >= 18.0f) {
+                heroStam -= 18.0f; stamDelay = 20;
+                atkT = 14;
                 play_sfx(740.0f, 1000);
-                for (int p = 0; p < 10; p++) {
-                    float ang = ((float)p / 10.0f) * 6.28318f;
-                    spawn_part(heroX + cosf(ang) * 1.5f, heroY + 0.7f, heroZ + sinf(ang) * 1.5f,
-                               cosf(ang) * 0.06f, 0.03f, sinf(ang) * 0.06f, 16.0f, 0.38f, ABGR(255, 235, 110, 240));
+                float hitX = heroX + sinf(heroYaw) * 1.85f;
+                float hitZ = heroZ + cosf(heroYaw) * 1.85f;
+                for (int p = -3; p <= 3; p++) {
+                    float ang = heroYaw + (float)p * 0.25f;
+                    spawn_part(heroX + sinf(ang) * 1.85f, heroY + 0.75f, heroZ + cosf(ang) * 1.85f,
+                               sinf(ang) * 0.05f, 0.02f, cosf(ang) * 0.05f, 14.0f, 0.42f, ABGR(255, 240, 120, 240));
                 }
                 for (int i = 0; i < nEnemies; i++) {
                     if (!enemies[i].alive) continue;
-                    float dx = enemies[i].x - heroX, dz = enemies[i].z - heroZ;
+                    float dx = enemies[i].x - hitX, dz = enemies[i].z - hitZ;
                     float d = sqrtf(dx * dx + dz * dz);
-                    if (d < 3.6f) {
+                    float effRad = enemies[i].isBoss ? 2.8f : 2.1f;
+                    if (d < effRad) {
                         enemies[i].hp -= heroAtk;
                         enemies[i].flash = 8;
-                        if (d > 0.05f) {
-                            float kx = enemies[i].x + (dx / d) * 0.7f, kz = enemies[i].z + (dz / d) * 0.7f, ky = enemies[i].y;
+                        float kdx = enemies[i].x - heroX, kdz = enemies[i].z - heroZ;
+                        float kd = sqrtf(kdx * kdx + kdz * kdz);
+                        if (kd > 0.05f) {
+                            float kx = enemies[i].x + (kdx / kd) * 0.6f, kz = enemies[i].z + (kdz / kd) * 0.6f, ky = enemies[i].y;
                             if (is_walkable(kx, kz, &ky)) { enemies[i].x = kx; enemies[i].z = kz; enemies[i].y = ky; }
                         }
                         play_sfx(920.0f, 1200);
@@ -889,26 +907,35 @@ int main(void) {
                 }
             }
 
-            /* Triangle: Resonance Pulse (Lights Obelisks & Purifies Final Boss) */
-            if ((pressed & PSP_CTRL_TRIANGLE) && pulseT == 0) {
-                pulseT = 28;
+            /* Triangle: Heavy Resonance Strike (32 Stamina, 2.2x ATK + Stagger + Obelisks + Purify) */
+            if ((pressed & PSP_CTRL_TRIANGLE) && pulseT == 0 && heroStam >= 32.0f) {
+                heroStam -= 32.0f; stamDelay = 28;
+                pulseT = 28; heavyT = 18;
                 play_sfx(660.0f, 1800);
-                if (worldMode == 0 && keysFound >= 3 && !trueEnding) {
-                    for (int i = 0; i < nEnemies; i++) {
-                        if (enemies[i].alive && enemies[i].isBoss) {
-                            float dx = enemies[i].x - heroX, dz = enemies[i].z - heroZ;
-                            if (dx * dx + dz * dz < 49.0f) {
-                                trueEnding = 1;
-                                enemies[i].alive = 0;
-                                for (int s = 0; s < 40; s++)
-                                    spawn_part(enemies[i].x + frand(-2.5f, 2.5f), enemies[i].y + frand(0.5f, 3.5f), enemies[i].z + frand(-2.5f, 2.5f),
-                                               frand(-0.06f, 0.06f), frand(0.04f, 0.14f), frand(-0.06f, 0.06f), 110.0f, 0.48f, ABGR(255, 235, 110, 255));
-                                show_story("FINAL VERDADERO: PURIFICACION",
-                                    "Las 3 Llaves resuenan y rompen la sombra de Vaelen!",
-                                    "El Dragon Astral despierta sano y eleva Aetheria al cielo.",
-                                    "Has salvado el mundo comprendiendo la verdad!");
-                                play_sfx(1180.0f, 3800);
-                            }
+                for (int i = 0; i < nEnemies; i++) {
+                    if (!enemies[i].alive) continue;
+                    float dx = enemies[i].x - heroX, dz = enemies[i].z - heroZ;
+                    if (dx * dx + dz * dz < 14.5f) {
+                        if (worldMode == 0 && keysFound >= 3 && !trueEnding && enemies[i].isBoss) {
+                            trueEnding = 1;
+                            enemies[i].alive = 0;
+                            for (int s = 0; s < 40; s++)
+                                spawn_part(enemies[i].x + frand(-2.5f, 2.5f), enemies[i].y + frand(0.5f, 3.5f), enemies[i].z + frand(-2.5f, 2.5f),
+                                           frand(-0.06f, 0.06f), frand(0.04f, 0.14f), frand(-0.06f, 0.06f), 110.0f, 0.48f, ABGR(255, 235, 110, 255));
+                            show_story("FINAL VERDADERO: PURIFICACION",
+                                "Las 3 Llaves resuenan y rompen la sombra de Vaelen!",
+                                "El Dragon Astral despierta sano y eleva Aetheria al cielo.",
+                                "Has salvado el mundo comprendiendo la verdad!");
+                            play_sfx(1180.0f, 3800);
+                        } else {
+                            enemies[i].hp -= (heroAtk * 2);
+                            enemies[i].flash = 12;
+                            if (enemies[i].state == 1) { enemies[i].state = 2; enemies[i].timer = 40; } /* Stagger! */
+                            for (int s = 0; s < 10; s++)
+                                spawn_part(enemies[i].x, enemies[i].y + 0.8f, enemies[i].z,
+                                           frand(-0.10f, 0.10f), frand(0.05f, 0.15f), frand(-0.10f, 0.10f),
+                                           24.0f, 0.40f, ABGR(120, 240, 255, 255));
+                            if (enemies[i].hp <= 0) { enemies[i].alive = 0; heroGold += 20; heroXp += 35; }
                         }
                     }
                 }
@@ -1000,30 +1027,57 @@ int main(void) {
                 }
             }
 
-            /* Update Enemies */
+            /* Update Enemies (Dark Souls State Machine: Chase -> Telegraph Windup -> Strike -> Recovery) */
             for (int i = 0; i < nEnemies; i++) {
                 Enemy3D *e = &enemies[i];
                 if (!e->alive) continue;
                 if (e->flash > 0) e->flash--;
-                if (e->cd > 0) e->cd--;
                 float dx = heroX - e->x, dz = heroZ - e->z;
                 float d = sqrtf(dx * dx + dz * dz);
-                if (d < 11.0f && d > 1.0f) {
-                    float es = e->isBoss ? 0.055f : 0.045f;
-                    float nx = e->x + (dx / d) * es, nz = e->z + (dz / d) * es, ey = e->y;
-                    if (is_walkable(nx, nz, &ey)) { e->x = nx; e->z = nz; e->y = ey; }
-                }
-                if (d < 1.35f && invulnT == 0 && e->cd == 0) {
-                    int dmg = e->isBoss ? (18 + e->bossId * 5) : (9 + e->kind * 4);
-                    heroHp -= dmg;
-                    heroFlash = 10; invulnT = 36; e->cd = 45;
-                    play_sfx(160.0f, 1100);
-                    if (heroHp <= 0) {
-                        if (worldMode == 1) build_overworld();
-                        heroHp = heroMaxHp; heroX = 0.0f; heroY = 0.0f; heroZ = 4.0f;
-                        snprintf(dialogMsg, sizeof(dialogMsg), "EL SANTUARIO DEL ALBA TE HA RESCATADO!");
-                        dialogT = 160;
+                float trigDist = e->isBoss ? 3.8f : 2.5f;
+
+                if (e->state == 0) { /* Chase */
+                    if (d < 12.0f && d > trigDist * 0.75f) {
+                        float es = e->isBoss ? 0.055f : 0.045f;
+                        float nx = e->x + (dx / d) * es, nz = e->z + (dz / d) * es, ey = e->y;
+                        if (is_walkable(nx, nz, &ey)) { e->x = nx; e->z = nz; e->y = ey; }
                     }
+                    if (d <= trigDist) {
+                        e->state = 1;
+                        e->timer = e->isBoss ? 48 : 38;
+                        e->atkX = heroX;
+                        e->atkZ = heroZ;
+                        e->atkRad = e->isBoss ? 3.3f : 2.0f;
+                    }
+                } else if (e->state == 1) { /* Wind-up Telegraph */
+                    e->timer--;
+                    if (e->timer <= 0) {
+                        /* Strike at telegraphed zone! */
+                        for (int s = 0; s < 12; s++)
+                            spawn_part(e->atkX + frand(-1.0f, 1.0f), e->y + 0.3f, e->atkZ + frand(-1.0f, 1.0f),
+                                       frand(-0.07f, 0.07f), frand(0.05f, 0.14f), frand(-0.07f, 0.07f),
+                                       20.0f, 0.42f, ABGR(255, 65, 55, 255));
+                        float hdx = heroX - e->atkX, hdz = heroZ - e->atkZ;
+                        if (sqrtf(hdx * hdx + hdz * hdz) <= e->atkRad && invulnT == 0) {
+                            int dmg = e->isBoss ? (22 + e->bossId * 6) : (12 + e->kind * 4);
+                            heroHp -= dmg;
+                            heroFlash = 10; invulnT = 28;
+                            play_sfx(150.0f, 1200);
+                            if (heroHp <= 0) {
+                                if (worldMode == 1) build_overworld();
+                                heroHp = heroMaxHp; heroX = 0.0f; heroY = 0.0f; heroZ = 4.0f;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "EL SANTUARIO DEL ALBA TE HA RESCATADO!");
+                                dialogT = 160;
+                            }
+                        } else {
+                            play_sfx(220.0f, 700);
+                        }
+                        e->state = 2;
+                        e->timer = e->isBoss ? 46 : 36;
+                    }
+                } else { /* Recovery window */
+                    e->timer--;
+                    if (e->timer <= 0) e->state = 0;
                 }
             }
 
@@ -1160,13 +1214,28 @@ int main(void) {
             float dx = e->x - heroX, dz = e->z - heroZ;
             if (dx * dx + dz * dz > 2500.0f) continue;
             float sz = e->isBoss ? 3.4f : 1.7f;
+            if (e->state == 1) {
+                /* Enemy Red Danger Telegraph Zone + Timing Ring! */
+                float prog = 1.0f - ((float)e->timer / (float)(e->isBoss ? 48 : 38));
+                draw_ground_disc(e->atkX, e->y + 0.02f, e->atkZ, e->atkRad, ABGR(255, 40, 40, 185));
+                draw_ground_disc(e->atkX, e->y + 0.04f, e->atkZ, e->atkRad * prog, ABGR(255, 165, 45, 220));
+            }
             draw_ground_disc(e->x, e->y, e->z, sz * 0.55f, ABGR(180, 25, 45, 165));
-            unsigned int ec = e->flash > 0 ? ABGR(255, 90, 90, 255) : ABGR(255, 255, 255, 255);
+            unsigned int ec = e->flash > 0 ? ABGR(255, 90, 90, 255) : (e->state == 1 ? ABGR(255, 195, 140, 255) : ABGR(255, 255, 255, 255));
             const unsigned int *et = e->isBoss ? texBoss[e->bossId % 3] : texMob[e->kind % 3];
             draw_billboard(e->x, e->y, e->z, sz, sz, et, ec, (e->x > heroX) ? 1 : 0, camYaw);
         }
 
-        /* Hero + Lumen Wisp */
+        /* Hero Aim Hit-Zone Telegraph + Hero + Lumen Wisp */
+        if (!inTitle) {
+            float aimX = heroX + sinf(heroYaw) * 1.85f;
+            float aimZ = heroZ + cosf(heroYaw) * 1.85f;
+            unsigned int aimCol = (atkT > 0) ? ABGR(255, 240, 90, 235) : ABGR(110, 225, 255, 120);
+            draw_ground_disc(aimX, heroY + 0.02f, aimZ, (atkT > 0) ? 2.1f : 1.45f, aimCol);
+            if (heavyT > 0) {
+                draw_ground_disc(heroX, heroY + 0.03f, heroZ, 3.8f, ABGR(130, 245, 255, 180));
+            }
+        }
         float hBob = fabsf(sinf((float)animFrame * 0.12f)) * 0.08f;
         draw_ground_disc(heroX, heroY, heroZ, 0.85f, ABGR(10, 15, 25, 180));
         unsigned int hc = heroFlash > 0 ? ABGR(255, 90, 90, 255) : ABGR(255, 255, 255, 255);
@@ -1197,16 +1266,21 @@ int main(void) {
             gu_text2d(136, 208, "PULSA X O START PARA VIAJAR", ABGR(255, 240, 120, 255), 1);
             gu_text2d(124, 224, "3 MAZMORRAS + PUEBLOS + 60 FPS", ABGR(140, 255, 175, 255), 1);
         } else {
-            gu_window2d(6, 6, 304, 42);
+            gu_window2d(6, 6, 304, 50);
             char buf[72];
             snprintf(buf, sizeof(buf), "NV.%d  HP %d/%d", heroLv, heroHp, heroMaxHp);
-            gu_text2d(14, 12, buf, ABGR(120, 255, 155, 255), 1);
-            gu_rect2d(124, 12, 112, 8, ABGR(20, 24, 40, 255));
+            gu_text2d(14, 10, buf, ABGR(120, 255, 155, 255), 1);
+            gu_rect2d(124, 10, 112, 7, ABGR(20, 24, 40, 255));
             int hpw = (heroHp * 110) / heroMaxHp;
-            gu_rect2d(125, 13, hpw, 6, ABGR(70, 235, 125, 255));
+            gu_rect2d(125, 11, hpw, 5, ABGR(70, 235, 125, 255));
+
+            gu_text2d(14, 21, "ESTAMINA", ABGR(190, 255, 130, 255), 1);
+            gu_rect2d(74, 21, 162, 6, ABGR(20, 24, 40, 255));
+            int stw = (int)((heroStam * 160.0f) / heroMaxStam);
+            gu_rect2d(75, 22, stw, 4, ABGR(215, 235, 75, 255));
 
             snprintf(buf, sizeof(buf), "ORO:%d POC:%d LLAVES:%d/3 PISTAS:%d/6", heroGold, heroPotions, keysFound, cluesCount);
-            gu_text2d(14, 28, buf, ABGR(255, 225, 110, 255), 1);
+            gu_text2d(14, 34, buf, ABGR(255, 225, 110, 255), 1);
 
             /* Minimap + FPS */
             gu_window2d(406, 6, 68, 68);
