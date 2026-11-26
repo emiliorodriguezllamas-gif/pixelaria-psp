@@ -12,6 +12,7 @@
 #include <math.h>
 #include "font5x7.h"
 #include "world_sprites.h"
+#include "ground_deco.h"
 
 PSP_MODULE_INFO("AetheriaSkyRuins", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -526,6 +527,7 @@ static void spawn_part(float x, float y, float z, float vx, float vy, float vz, 
 static void add_camp(float cx, float cy, float cz, int tier, int count, int hasHouse, int chestId) {
     if (hasHouse) add_prop(cx, cy, cz, 2.0f, 2.8f, 5, 9);
     else add_prop(cx, cy, cz, 0.65f, 2.2f, 0, 0); /* Campfire / Ruin marker */
+    add_prop(cx, cy, cz, 2.6f, 0.0f, 10, hasHouse ? 1 : 2); /* Camp ground decal */
     add_prop(cx - 3.8f, cy, cz - 3.2f, 0.55f, 2.6f, 0, 0);
     add_prop(cx + 3.8f, cy, cz + 3.2f, 0.55f, 2.6f, 0, 0);
     if (chestId >= 0) add_prop(cx + 2.2f, cy, cz - 2.0f, 0.6f, 0.9f, 3, chestId);
@@ -546,6 +548,16 @@ static void build_overworld(void) {
     add_plat(0.0f, 0.10f, 0.0f, 34.0f, 34.0f, 0.3f, 1, 0); /* Town Stone Ground */
     add_plat(0.0f, 0.25f, 0.0f, 10.0f, 10.0f, 0.25f, 4, 0); /* Central Crystal Plaza */
     add_prop(0.0f, 0.25f, 0.0f, 0.7f, 2.5f, 4, 0); /* Sanctuary Crystal (SAVE) */
+    add_prop(0.0f, 0.25f, 0.0f, 3.2f, 0.0f, 10, 3); /* Astral Rune Sigil under Crystal */
+    for (int i = 0; i < 16; i++) {
+        float ang = (float)i * 0.3927f;
+        float r = (i & 1) ? 26.0f : 38.0f;
+        add_prop(cosf(ang) * r, 0.0f, sinf(ang) * r, 1.8f, 0.0f, 10, (i % 3 == 0) ? 1 : 0);
+    }
+    for (int i = 0; i < 8; i++) {
+        float ang = (float)i * 0.7854f;
+        add_prop(cosf(ang) * 11.5f, 0.10f, sinf(ang) * 11.5f, 1.5f, 0.0f, 10, 1); /* Town Cobbles */
+    }
     add_prop(-11.0f, 0.10f, -9.5f, 2.2f, 3.0f, 5, 0);
     add_prop( 11.0f, 0.10f, -9.5f, 2.2f, 3.0f, 5, 1);
     add_prop(-11.0f, 0.10f,  9.5f, 2.2f, 3.0f, 5, 2);
@@ -581,6 +593,7 @@ static void build_overworld(void) {
         float tz = -75.0f + (float)((i * 47) % 150);
         if (fabsf(tz) < 12.0f && tx > -340.0f) tz += 18.0f;
         add_prop(tx, 0.0f, tz, 1.2f, 3.6f + (float)(i % 3) * 0.4f, 1, 0);
+        add_prop(tx + 2.2f, 0.0f, tz + 1.8f, 1.7f, 0.0f, 10, (i & 1) ? 2 : 0); /* Mushrooms & Wildflowers */
     }
     add_prop(-390.0f, 0.0f,  0.0f, 0.7f, 3.2f, 2, 0); /* Obelisk 0 */
     add_prop(-455.0f, 0.0f,  58.0f, 0.6f, 0.9f, 3, 1); /* Chest 1 */
@@ -635,6 +648,9 @@ static void build_overworld(void) {
     add_prop(-28.0f, 2.20f, -550.0f, 0.7f, 4.4f, 0, 0);
     add_prop( 28.0f, 2.20f, -550.0f, 0.7f, 4.4f, 0, 0);
     add_prop(  0.0f, 2.20f, -560.0f, 0.7f, 2.8f, 4, 2); /* Astral Crystal */
+    add_prop(  0.0f, 2.20f, -530.0f, 4.2f, 0.0f, 10, 3); /* Astral Dragon Sigil */
+    add_prop(-28.0f, 2.20f, -490.0f, 2.4f, 0.0f, 10, 3);
+    add_prop( 28.0f, 2.20f, -490.0f, 2.4f, 0.0f, 10, 3);
     add_prop(  0.0f, 2.20f, -495.0f, 0.6f, 0.9f, 3, 5); /* Chest 5 */
     add_enemy( 0.0f, 2.20f, -530.0f, 2, 1, 2); /* Final Sky Dragon Boss */
 
@@ -666,6 +682,8 @@ static void build_dungeon(int dId) {
     add_plat(0.0f, 0.2f, -56.0f, 20.0f, 20.0f, 2.2f, 4,   3);
 
     add_prop( 0.0f, 0.0f,  3.5f, 1.0f, 3.0f, 7, 0); /* Exit Portal */
+    add_prop( 0.0f, 0.0f, -26.0f, 3.5f, 0.0f, 10, 3); /* Dungeon Rune Sigil */
+    add_prop( 0.0f, 0.2f, -57.0f, 3.8f, 0.0f, 10, 3); /* Boss Arena Sigil */
     add_prop(-6.5f, 0.0f, -26.0f, 0.7f, 3.0f, 2, 6 + dId * 2);     /* Dungeon Rune 1 */
     add_prop( 6.5f, 0.0f, -26.0f, 0.7f, 3.0f, 2, 6 + dId * 2 + 1); /* Dungeon Rune 2 */
     add_prop(-7.5f, 0.0f, -31.0f, 0.6f, 0.9f, 3, 6 + dId * 2);     /* Dungeon Chest 1 */
@@ -814,6 +832,25 @@ static void draw_ground_disc(float x, float y, float z, float r, unsigned int co
     v[3] = (Vtx3D){ 0, 0, col, x - r, y + 0.03f, z - r };
     v[4] = (Vtx3D){ 1, 1, col, x + r, y + 0.03f, z + r };
     v[5] = (Vtx3D){ 0, 1, col, x - r, y + 0.03f, z + r };
+    sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, 6, 0, v);
+}
+
+static void draw_ground_decal(float x, float y, float z, float r, int decoId) {
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+    sceGuTexImage(0, 32, 32, 32, texDeco[decoId & 3]);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+
+    Vtx3D *v = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
+    unsigned int col = ABGR(255, 255, 255, 245);
+    v[0] = (Vtx3D){ 0, 0, col, x - r, y + 0.035f, z - r };
+    v[1] = (Vtx3D){ 1, 0, col, x + r, y + 0.035f, z - r };
+    v[2] = (Vtx3D){ 1, 1, col, x + r, y + 0.035f, z + r };
+    v[3] = (Vtx3D){ 0, 0, col, x - r, y + 0.035f, z - r };
+    v[4] = (Vtx3D){ 1, 1, col, x + r, y + 0.035f, z + r };
+    v[5] = (Vtx3D){ 0, 1, col, x - r, y + 0.035f, z + r };
     sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, 6, 0, v);
 }
 
@@ -1813,6 +1850,9 @@ int main(void) {
             } else if (pr->kind == 6 || pr->kind == 7) {
                 unsigned int pc = (pr->kind == 6) ? ABGR(190, 110, 255, 255) : ABGR(100, 255, 190, 255);
                 draw_ground_disc(pr->x, pr->y, pr->z, 1.8f, pc);
+            } else if (pr->kind == 10) {
+                draw_ground_decal(pr->x, pr->y, pr->z, pr->rad, pr->id);
+            }
                 draw_box3d(pr->x - 1.1f, pr->y + 3.2f, pr->z, 0.6f, 3.2f, 0.6f, texStone, pc, 0.5f);
                 draw_box3d(pr->x + 1.1f, pr->y + 3.2f, pr->z, 0.6f, 3.2f, 0.6f, texStone, pc, 0.5f);
                 draw_box3d(pr->x, pr->y + 3.6f, pr->z, 2.8f, 0.5f, 0.7f, texCrystal, pc, 0.5f);
