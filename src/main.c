@@ -458,10 +458,15 @@ static int clueFound[6];
 static int cluesCount = 0, trueEnding = 0;
 static int qState[4] = { 0, 0, 0, 0 }; /* 0:Eldon->Nilo, 1:Kael->Vulcan, 2:Lyra, 3:Orin */
 static int qKillsForest = 0, qKillsLake = 0, qKillsCanyon = 0;
+static int heroWood = 0, heroStone = 0, qGather = 0;
 
 static int get_npc_marker(int nid) {
     /* 1=Yellow ! (New), 2=Silver ? (Active), 3=Gold ? (Turn-in Ready) */
-    if (nid == 0) return (qState[0] == 0) ? 1 : 0; /* Eldon */
+    if (nid == 0) {
+        if (qState[0] == 0) return 1;
+        if (qGather == 1) return (heroWood >= 8 && heroStone >= 6) ? 3 : 2;
+        return (qGather == 0) ? 1 : 0;
+    }
     if (nid == 4) { /* Nilo */
         if (qState[0] == 1 || qState[0] == 3) return 3;
         if (qState[0] == 2) return 2;
@@ -559,7 +564,7 @@ static int shopOpen = 0, shopCursor = 0, hungerTick = 0;
 
 typedef struct {
     unsigned int magic;
-    int lv, xp, gold, coins, potions, food, elixirs, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
+    int lv, xp, gold, coins, potions, food, elixirs, wood, stone, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
     float hunger;
     int chests[16], obelisks[12], dngs[3], clueArr[6], qSt[4], qF, qL, qC;
 } SaveData;
@@ -569,6 +574,7 @@ static void save_game(void) {
     sd.magic = 0xAE7E2026u;
     sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.coins = heroCoins;
     sd.potions = heroPotions; sd.food = heroFood; sd.elixirs = heroElixirs;
+    sd.wood = heroWood; sd.stone = heroStone; sd.qG = qGather;
     sd.hunger = heroHunger;
     sd.atk = heroAtk; sd.maxHp = heroMaxHp; sd.forge = forgeCount; sd.furor = furorCharge;
     sd.clues = cluesCount; sd.runes = runesLit; sd.keys = keysFound; sd.relics = heroRelics;
@@ -592,6 +598,7 @@ static int load_game(void) {
     if (rd != (int)sizeof(sd) || sd.magic != 0xAE7E2026u) return 0;
     heroLv = sd.lv; heroXp = sd.xp; heroGold = sd.gold; heroCoins = sd.coins;
     heroPotions = sd.potions; heroFood = sd.food; heroElixirs = sd.elixirs;
+    heroWood = sd.wood; heroStone = sd.stone; qGather = sd.qG;
     heroHunger = sd.hunger;
     heroAtk = sd.atk; heroMaxHp = sd.maxHp; heroHp = heroMaxHp; forgeCount = sd.forge;
     furorCharge = sd.furor; cluesCount = sd.clues; runesLit = sd.runes; keysFound = sd.keys;
@@ -920,6 +927,39 @@ static void build_dungeon(int dId) {
     heroX = 0.0f; heroY = 0.0f; heroZ = 0.5f;
 }
 
+static int harvest_nearby(void) {
+    int best = -1; float bestD2 = 10.5f;
+    for (int i = 0; i < nProps; i++) {
+        if (props[i].active) continue;
+        if (props[i].kind != 1 && props[i].kind != 13 && props[i].kind != 0) continue;
+        float dx = props[i].x - heroX, dz = props[i].z - heroZ;
+        float d2 = dx * dx + dz * dz;
+        if (d2 < bestD2) { bestD2 = d2; best = i; }
+    }
+    if (best < 0) return 0;
+    props[best].active = 1;
+    int isTree = (props[best].kind == 1);
+    int amt = ((isTree && heroX < -220.0f) || (!isTree && heroX > 220.0f)) ? 2 : 1;
+    if (isTree) {
+        heroWood += amt;
+        snprintf(dialogMsg, sizeof(dialogMsg), "TALADO! +%d Madera (Total %d)", amt, heroWood);
+        play_sfx(310.0f, 900);
+    } else {
+        heroStone += amt;
+        snprintf(dialogMsg, sizeof(dialogMsg), "PICADO! +%d Piedra (Total %d)", amt, heroStone);
+        play_sfx(640.0f, 800);
+    }
+    heroXp += 4;
+    dialogT = 95;
+    camShake = 0.22f;
+    unsigned int pcol = isTree ? ABGR(175, 130, 75, 255) : ABGR(185, 195, 205, 255);
+    for (int s = 0; s < 8; s++)
+        spawn_part(props[best].x, props[best].y + 0.8f, props[best].z,
+                   frand(-0.08f, 0.08f), frand(0.05f, 0.14f), frand(-0.08f, 0.08f),
+                   20.0f, 0.36f, pcol);
+    return 1;
+}
+
 static int get_current_zone(void) {
     if (worldMode == 1) return (curDungeon + 1) & 3;
     if (heroZ < -420.0f) return 3;
@@ -1227,6 +1267,7 @@ int main(void) {
                 inTitle = 0;
                 heroLv = 1; heroXp = 0; heroGold = 25; heroCoins = 30;
                 heroPotions = 2; heroFood = 2; heroElixirs = 1; heroHunger = 100.0f;
+                heroWood = 0; heroStone = 0; qGather = 0;
                 shopOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
                 furorCharge = 40; cluesCount = 0; runesLit = 0; keysFound = 0;
@@ -1566,12 +1607,14 @@ int main(void) {
                     spawn_part(heroX + sinf(ang) * 1.85f, heroY + 0.75f, heroZ + cosf(ang) * 1.85f,
                                sinf(ang) * 0.05f, 0.02f, cosf(ang) * 0.05f, 14.0f, 0.42f, ABGR(255, 240, 120, 240));
                 }
+                int hitEnemy = 0;
                 for (int i = 0; i < nEnemies; i++) {
                     if (!enemies[i].alive) continue;
                     float dx = enemies[i].x - hitX, dz = enemies[i].z - hitZ;
                     float d = sqrtf(dx * dx + dz * dz);
                     float effRad = enemies[i].isBoss ? 2.8f : 2.1f;
                     if (d < effRad) {
+                        hitEnemy = 1;
                         enemies[i].hp -= heroAtk;
                         enemies[i].flash = 8;
                         furorCharge += 8; if (furorCharge > 100) furorCharge = 100;
@@ -1641,6 +1684,7 @@ int main(void) {
                         }
                     }
                 }
+                if (!hitEnemy) harvest_nearby();
             }
 
             /* Triangle: Heavy Resonance Strike (32 Stamina, 2.2x ATK + Stagger + Obelisks + Purify) */
@@ -1709,10 +1753,26 @@ int main(void) {
                                     "Los campamentos cortaron el Paso de la Garganta...",
                                     "Lleva mi Sello a NILO en Aldea Lacustre (Norte).",
                                     "Compra raciones antes de partir! (+45 Oro, +20 Mon)");
+                            } else if (qGather == 0) {
+                                qGather = 1;
+                                show_story("MISION: RECONSTRUIR AETHERIA (Eldon)",
+                                    "Necesitamos reforzar las murallas contra la Sombra!",
+                                    "Tala arboles y pica piedras (pulsa X o O junto a ellos).",
+                                    "Traeme 8 Madera y 6 Piedra (+80 Oro, +50 Mon, +25 HP)");
+                            } else if (qGather == 1 && heroWood >= 8 && heroStone >= 6) {
+                                qGather = 2; heroWood -= 8; heroStone -= 6;
+                                heroGold += 80; heroCoins += 50; heroMaxHp += 25; heroHp = heroMaxHp; heroAtk += 6;
+                                show_story("MISION COMPLETADA: MURALLAS FUERTES",
+                                    "Excelente trabajo! Pueblo del Alba resiste (+80g, +50M)",
+                                    "Tu fuerza tambien ha crecido (+25 MaxHP, +6 ATK)!",
+                                    "Sigue buscando las 3 Llaves y las 6 Tablillas.");
                             } else if (cluesCount >= 4) {
                                 show_story("ALCALDE ELDON", "Vimos a Vaelen cruzar las llanuras hacia el Norte...", "Si lo que dicen las tablillas es cierto, el Dragon", "es nuestro protector. Ten cuidado en la Ciudadela!");
                             } else {
-                                show_story("ALCALDE ELDON", "El continente tiembla desde que la Campana callo.", "Lleva mi Sello a NILO (Norte) y busca las 3 Llaves.", "El Bastion del Sur tambien guarda reliquias!");
+                                char el3[72];
+                                if (qGather == 1) snprintf(el3, sizeof(el3), "Recursos: %d/8 Madera, %d/6 Piedra (X o O).", heroWood, heroStone);
+                                else snprintf(el3, sizeof(el3), "El Bastion del Sur tambien guarda reliquias!");
+                                show_story("ALCALDE ELDON", "El continente tiembla desde que la Campana callo.", "Lleva mi Sello a NILO (Norte) y busca las 3 Llaves.", el3);
                             }
                             play_sfx(780.0f, 1100);
                         } else if (nid == 4) { /* Mercader Nilo (Aldea Lacustre) */
@@ -1872,6 +1932,7 @@ int main(void) {
                         }
                     }
                 }
+                if (!acted) harvest_nearby();
             }
 
             /* Update Enemies (Respawn for Farming + Dark Souls Telegraph AI) */
@@ -2245,8 +2306,12 @@ int main(void) {
             if (pr->kind == 0) {
                 draw_box3d(pr->x, pr->y + pr->h, pr->z, pr->rad * 2, pr->h, pr->rad * 2, texStone, ABGR(220, 220, 235, 255), 0.5f);
             } else if (pr->kind == 1) {
-                if (d2 < 360.0f) draw_ground_disc(pr->x, pr->y, pr->z, 1.4f, ABGR(10, 20, 15, 160));
-                draw_billboard(pr->x, pr->y, pr->z, pr->h, pr->h * 1.15f, texTree, ABGR(255, 255, 255, 255), 0, camYaw);
+                if (!pr->active) {
+                    if (d2 < 360.0f) draw_ground_disc(pr->x, pr->y, pr->z, 1.4f, ABGR(10, 20, 15, 160));
+                    draw_billboard(pr->x, pr->y, pr->z, pr->h, pr->h * 1.15f, texTree, ABGR(255, 255, 255, 255), 0, camYaw);
+                } else {
+                    draw_billboard(pr->x, pr->y, pr->z, 1.0f, 0.7f, texTree, ABGR(140, 140, 120, 180), 0, camYaw);
+                }
             } else if (pr->kind == 2) {
                 unsigned int oc = pr->active ? ABGR(140, 255, 255, 255) : ABGR(130, 145, 180, 255);
                 draw_box3d(pr->x, pr->y + pr->h, pr->z, pr->rad * 1.6f, pr->h, pr->rad * 1.6f, texCrystal, oc, 0.5f);
@@ -2275,7 +2340,8 @@ int main(void) {
             } else if (pr->kind == 12) {
                 draw_billboard(pr->x, pr->y, pr->z, pr->h * 1.35f, pr->h, texTree, ABGR(210, 255, 195, 255), 0, camYaw);
             } else if (pr->kind == 13) {
-                draw_box3d(pr->x, pr->y + pr->h, pr->z, pr->rad * 2.0f, pr->h, pr->rad * 1.8f, texStone, ABGR(185, 195, 200, 255), 0.7f);
+                if (!pr->active) draw_box3d(pr->x, pr->y + pr->h, pr->z, pr->rad * 2.0f, pr->h, pr->rad * 1.8f, texStone, ABGR(185, 195, 200, 255), 0.7f);
+                else draw_box3d(pr->x, pr->y + 0.25f, pr->z, pr->rad * 1.2f, 0.25f, pr->rad * 1.1f, texStone, ABGR(115, 120, 125, 255), 0.7f);
             } else if (pr->kind == 14) {
                 draw_billboard(pr->x, pr->y, pr->z, 1.15f, pr->h, texTree, ABGR(150, 255, 130, 255), 0, camYaw);
             } else if (pr->kind == 8) {
@@ -2478,7 +2544,7 @@ int main(void) {
             }
         } else {
             /* Compact Vertical Left-Edge HUD (unobstructed center view!) */
-            gu_window2d(6, 6, 72, 152);
+            gu_window2d(6, 6, 72, 162);
             char buf[80];
             snprintf(buf, sizeof(buf), "NV.%d", heroLv);
             gu_text2d(14, 10, buf, ABGR(140, 255, 175, 255), 1);
@@ -2520,6 +2586,8 @@ int main(void) {
             gu_text2d(12, 128, buf, ABGR(185, 235, 255, 255), 1);
             snprintf(buf, sizeof(buf), "PS:%d/6", cluesCount);
             gu_text2d(12, 138, buf, ABGR(145, 245, 255, 255), 1);
+            snprintf(buf, sizeof(buf), "MD:%d PD:%d", heroWood, heroStone);
+            gu_text2d(12, 148, buf, ABGR(220, 185, 125, 255), 1);
 
             /* Hero-Centered Open-World Radar Minimap + FPS + Clock */
             gu_window2d(406, 6, 68, 68);
