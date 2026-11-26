@@ -331,9 +331,9 @@ typedef struct {
     unsigned int col;
 } Particle3D;
 
-#define MAX_PLATS 64
-#define MAX_PROPS 128
-#define MAX_ENEMIES 28
+#define MAX_PLATS 160
+#define MAX_PROPS 360
+#define MAX_ENEMIES 72
 #define MAX_NPCS 12
 #define MAX_PARTS 140
 
@@ -527,80 +527,129 @@ static void build_overworld(void) {
     nPlats = 0; nProps = 0; nEnemies = 0; nNpcs = 0;
     worldMode = 0;
 
-    /* 1. PUEBLO DEL ALBA (Starter Town: x=-14..14, z=-14..14) */
-    add_plat(0.0f, 0.0f, 0.0f, 28.0f, 28.0f, 2.5f, 1, 0);
-    add_plat(0.0f, 0.20f, 0.0f, 8.0f, 8.0f, 0.20f, 4, 0); /* Central Crystal Plaza */
-    add_prop(0.0f, 0.20f, 0.0f, 0.7f, 2.5f, 4, 0); /* Sanctuary Crystal */
-    add_prop(-9.5f, 0.0f, -8.5f, 2.2f, 3.0f, 5, 0); /* Town House 1 */
-    add_prop( 9.5f, 0.0f, -8.5f, 2.2f, 3.0f, 5, 1); /* Town House 2 */
-    add_prop(-9.5f, 0.0f,  8.5f, 2.2f, 3.0f, 5, 2); /* Town House 3 */
-    add_prop( 9.5f, 0.0f,  8.5f, 2.2f, 3.0f, 5, 3); /* Town House 4 */
-    add_prop(-11.5f, 0.0f, 0.0f, 1.1f, 3.2f, 1, 0);
-    add_prop( 11.5f, 0.0f, 0.0f, 1.1f, 3.2f, 1, 0);
-    add_prop( 11.0f, 0.0f, 11.0f, 0.6f, 0.9f, 3, 0); /* Starter Chest */
-    add_prop(-5.5f, 0.0f,  5.5f, 0.55f, 1.8f, 8, 0); /* Clue 0 */
-    add_npc(-3.2f, 0.20f,  2.8f, 0, 0, "Alcalde Eldon", "ALCALDE: Encuentra las 3 Llaves en los Templos del Norte, Oeste y Este!");
-    add_npc(-6.2f, 0.0f,  -6.5f, 1, 1, "Herrero Kael",  "KAEL: Forjar Espada (+6 ATK) por 30 Oro!");
-    add_npc( 6.2f, 0.0f,  -6.5f, 2, 2, "Alquimista Lyra","LYRA: Pocion (+60 HP) por 20 Oro!");
-    add_npc( 3.2f, 0.20f,  2.8f, 3, 3, "Sabio Orin",    "ORIN: Usa /\\ cerca de los Obeliscos para iluminarlos y ganar vida!");
+    /* 1. PUEBLO DEL ALBA & LLANURAS CENTRALES (x=-60..60, z=-60..60) */
+    add_plat(0.0f, 0.0f, 0.0f, 120.0f, 120.0f, 4.0f, 0, 0);
+    add_plat(0.0f, 0.10f, 0.0f, 34.0f, 34.0f, 0.3f, 1, 0); /* Town Stone Ground */
+    add_plat(0.0f, 0.25f, 0.0f, 10.0f, 10.0f, 0.25f, 4, 0); /* Central Crystal Plaza */
+    add_prop(0.0f, 0.25f, 0.0f, 0.7f, 2.5f, 4, 0); /* Sanctuary Crystal (SAVE) */
+    add_prop(-11.0f, 0.10f, -9.5f, 2.2f, 3.0f, 5, 0);
+    add_prop( 11.0f, 0.10f, -9.5f, 2.2f, 3.0f, 5, 1);
+    add_prop(-11.0f, 0.10f,  9.5f, 2.2f, 3.0f, 5, 2);
+    add_prop( 11.0f, 0.10f,  9.5f, 2.2f, 3.0f, 5, 3);
+    add_prop(-13.5f, 0.10f,  0.0f, 1.1f, 3.2f, 1, 0);
+    add_prop( 13.5f, 0.10f,  0.0f, 1.1f, 3.2f, 1, 0);
+    add_prop( 12.5f, 0.10f, 12.5f, 0.6f, 0.9f, 3, 0); /* Starter Chest */
+    add_prop(-6.0f,  0.10f,  6.0f, 0.55f, 1.8f, 8, 0); /* Clue 0 */
+    add_npc(-3.4f, 0.25f,  2.8f, 0, 0, "Alcalde Eldon", "ALCALDE: Encuentra las 3 Llaves en los Templos del Norte, Oeste y Este!");
+    add_npc(-7.0f, 0.10f, -7.0f, 1, 1, "Herrero Kael",  "KAEL: Forjar Espada!");
+    add_npc( 7.0f, 0.10f, -7.0f, 2, 2, "Alquimista Lyra","LYRA: Tienda de Supervivencia!");
+    add_npc( 3.4f, 0.25f,  2.8f, 3, 3, "Sabio Orin",    "ORIN: Usa /\\ cerca de los Obeliscos para iluminarlos!");
+    for (int i = 0; i < 8; i++) {
+        float ang = (float)i * 0.7854f + 0.38f;
+        add_prop(cosf(ang) * 44.0f, 0.0f, sinf(ang) * 44.0f, 1.2f, 3.8f, 1, 0);
+    }
 
-    /* 2. BOSQUE ESMERALDA (West: x=-48..-22, z=-12..12) */
-    add_plat(-18.0f, -0.04f, 0.0f, 8.0f, 4.5f, 0.6f, 3, 1); /* West Bridge */
-    add_plat(-35.0f,  0.0f,  0.0f, 26.0f, 26.0f, 2.5f, 0, 1);
-    add_prop(-28.0f, 0.0f, -8.0f, 1.2f, 3.6f, 1, 0);
-    add_prop(-42.0f, 0.0f, -8.0f, 1.2f, 3.8f, 1, 0);
-    add_prop(-28.0f, 0.0f,  8.0f, 1.2f, 3.4f, 1, 0);
-    add_prop(-42.0f, 0.0f,  8.0f, 1.2f, 3.5f, 1, 0);
-    add_prop(-35.0f, 0.0f,  0.0f, 0.7f, 3.0f, 2, 0); /* Obelisk 0 */
-    add_prop(-44.0f, 0.0f,  9.5f, 0.6f, 0.9f, 3, 1); /* Chest 1 */
-    add_prop(-44.0f, 0.0f, -9.5f, 0.6f, 0.9f, 3, 2); /* Chest 2 */
-    add_prop(-30.0f, 0.0f,  9.5f, 0.55f, 1.8f, 8, 1); /* Clue 1 */
-    add_prop(-46.5f, 0.0f,  0.0f, 1.1f, 3.4f, 6, 0); /* DUNGEON 0 PORTAL: Templo del Bosque */
-    add_enemy(-30.0f, 0.0f, -4.0f, 0, 0, 0);
-    add_enemy(-38.0f, 0.0f,  5.0f, 0, 0, 0);
-    add_enemy(-41.0f, 0.0f, -3.5f, 1, 0, 0);
+    /* 2. CAMINO DEL OESTE -> LLANURAS DEL VIENTO -> BOSQUE ESMERALDA (x=-58..-480) */
+    add_plat(-100.0f, 0.0f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
+    add_plat(-180.0f, 0.0f, 0.0f, 84.0f, 44.0f, 3.0f, 0, 1); /* Torre de Vigia Oeste */
+    add_prop(-180.0f, 0.0f, -14.0f, 2.0f, 3.0f, 5, 7);
+    add_prop(-188.0f, 0.0f, -14.0f, 0.6f, 0.9f, 3, 12); /* Watchtower Chest */
+    add_enemy(-172.0f, 0.0f, 10.0f, 0, 0, 0);
+    add_enemy(-186.0f, 0.0f,  8.0f, 1, 0, 0);
+    add_plat(-260.0f, 0.0f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
+    add_plat(-390.0f, 0.0f, 0.0f, 180.0f, 180.0f, 4.0f, 0, 1); /* BOSQUE ESMERALDA GIGANTE */
+    for (int i = 0; i < 18; i++) {
+        float tx = -320.0f - (float)((i * 29) % 135);
+        float tz = -75.0f + (float)((i * 47) % 150);
+        if (fabsf(tz) < 12.0f && tx > -340.0f) tz += 18.0f;
+        add_prop(tx, 0.0f, tz, 1.2f, 3.6f + (float)(i % 3) * 0.4f, 1, 0);
+    }
+    add_prop(-390.0f, 0.0f,  0.0f, 0.7f, 3.2f, 2, 0); /* Obelisk 0 */
+    add_prop(-455.0f, 0.0f,  58.0f, 0.6f, 0.9f, 3, 1); /* Chest 1 */
+    add_prop(-455.0f, 0.0f, -58.0f, 0.6f, 0.9f, 3, 2); /* Chest 2 */
+    add_prop(-345.0f, 0.0f,  35.0f, 0.55f, 1.8f, 8, 1); /* Clue 1 */
+    add_prop(-468.0f, 0.0f,  0.0f, 1.2f, 3.6f, 6, 0); /* DUNGEON 0 PORTAL: Templo del Bosque */
+    add_enemy(-340.0f, 0.0f, -24.0f, 0, 0, 0);
+    add_enemy(-365.0f, 0.0f,  28.0f, 0, 0, 0);
+    add_enemy(-410.0f, 0.0f, -35.0f, 1, 0, 0);
+    add_enemy(-425.0f, 0.0f,  32.0f, 1, 0, 0);
+    add_enemy(-445.0f, 0.0f,  -8.0f, 1, 0, 0);
 
-    /* 3. LAGO DE LOS ECOS & ALDEA LACUSTRE (North: x=-13..13, z=-48..-22) */
-    add_plat(0.0f, -0.04f, -18.0f, 4.5f, 8.0f, 0.6f, 3, 1); /* North Bridge */
-    add_plat(0.0f,  0.0f,  -35.0f, 26.0f, 26.0f, 2.5f, 1, 1);
-    add_prop(-8.5f, 0.0f, -27.0f, 2.0f, 2.8f, 5, 4); /* Lake Village House */
-    add_prop( 8.5f, 0.0f, -27.0f, 2.0f, 2.8f, 5, 5);
-    add_prop( 0.0f, 0.0f, -29.0f, 0.7f, 2.5f, 4, 1); /* Lake Crystal (Heal only) */
-    add_prop( 6.0f, 0.0f, -24.5f, 1.0f, 3.0f, 9, 0); /* Paid Return Portal -> Pueblo del Alba */
-    add_prop(-9.0f, 0.0f, -41.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
-    add_prop( 9.5f, 0.0f, -42.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
-    add_prop( 8.5f, 0.0f, -34.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
-    add_prop( 0.0f, 0.0f, -46.5f, 1.1f, 3.4f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
-    add_npc(-6.0f, 0.0f, -25.0f, 2, 4, "Mercader Nilo", "NILO: Pocion (+60 HP) por 20 Oro!");
-    add_enemy(-5.0f, 0.0f, -36.0f, 1, 0, 0);
-    add_enemy( 5.5f, 0.0f, -38.0f, 1, 0, 0);
+    /* 3. CAMINO DEL NORTE -> PASO DE LA GARGANTA -> LAGO DE LOS ECOS (z=-58..-410) */
+    add_plat(0.0f, 0.5f, -100.0f, 18.0f, 88.0f, 3.5f, 1, 1);
+    add_plat(0.0f, 1.0f, -180.0f, 48.0f, 84.0f, 4.0f, 1, 1); /* Paso de la Garganta */
+    add_prop(-16.0f, 1.0f, -175.0f, 0.6f, 3.4f, 0, 0);
+    add_prop( 16.0f, 1.0f, -185.0f, 0.6f, 3.4f, 0, 0);
+    add_prop( 18.0f, 1.0f, -180.0f, 0.6f, 0.9f, 3, 13);
+    add_enemy(-10.0f, 1.0f, -180.0f, 1, 0, 0);
+    add_enemy( 10.0f, 1.0f, -190.0f, 1, 0, 0);
+    add_plat(0.0f, 1.5f, -255.0f, 18.0f, 78.0f, 4.0f, 1, 1);
+    add_plat(0.0f, 2.0f, -340.0f, 160.0f, 130.0f, 4.5f, 1, 1); /* LAGO DE LOS ECOS & ALDEA LACUSTRE */
+    add_prop(-22.0f, 2.0f, -305.0f, 2.0f, 2.8f, 5, 4);
+    add_prop( 22.0f, 2.0f, -305.0f, 2.0f, 2.8f, 5, 5);
+    add_prop(  0.0f, 2.0f, -315.0f, 0.7f, 2.5f, 4, 1); /* Lake Crystal (Heal only) */
+    add_prop( 14.0f, 2.0f, -298.0f, 1.0f, 3.0f, 9, 0); /* Paid Return Portal */
+    add_prop(-48.0f, 2.0f, -365.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
+    add_prop( 52.0f, 2.0f, -370.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
+    add_prop( 26.0f, 2.0f, -335.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
+    add_prop(  0.0f, 2.0f, -395.0f, 1.2f, 3.6f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
+    add_npc(-14.0f, 2.0f, -298.0f, 2, 4, "Mercader Nilo", "NILO: Tienda de Supervivencia!");
+    add_enemy(-32.0f, 2.0f, -345.0f, 1, 0, 0);
+    add_enemy( 34.0f, 2.0f, -352.0f, 1, 0, 0);
+    add_enemy(-18.0f, 2.0f, -375.0f, 2, 0, 0);
+    add_enemy( 22.0f, 2.0f, -378.0f, 1, 0, 0);
 
-    /* 4. CANON CARMESI & CAMPAMENTO MINERO (East: x=22..48, z=-13..13) */
-    add_plat(18.0f, -0.04f, 0.0f, 8.0f, 4.5f, 0.6f, 3, 2); /* East Bridge */
-    add_plat(35.0f,  0.0f,  0.0f, 26.0f, 26.0f, 2.5f, 2, 2);
-    add_prop(27.0f, 0.0f, -8.5f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
-    add_prop(31.0f, 0.0f, -5.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal -> Pueblo del Alba */
-    add_prop(28.0f, 0.0f,  7.0f, 0.6f, 3.4f, 0, 0);
-    add_prop(42.0f, 0.0f, -7.0f, 0.6f, 3.4f, 0, 0);
-    add_prop(42.0f, 0.0f,  7.0f, 0.6f, 3.4f, 0, 0);
-    add_prop(35.0f, 0.0f, -9.0f, 0.7f, 3.0f, 2, 2); /* Obelisk 2 */
-    add_prop(44.0f, 0.0f,  9.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
-    add_prop(46.5f, 0.0f,  0.0f, 1.1f, 3.4f, 6, 2); /* DUNGEON 2 PORTAL: Forja de Obsidiana */
-    add_npc(27.0f, 0.0f, -5.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada (+6 ATK) por 30 Oro!");
-    add_enemy(34.0f, 0.0f,  4.0f, 2, 0, 0);
-    add_enemy(40.0f, 0.0f, -3.5f, 2, 0, 0);
-    add_enemy(41.0f, 0.0f,  5.0f, 1, 0, 0);
+    /* 4. CAMINO DEL ESTE -> DESFILADERO -> CANON CARMESI (x=+58..+480) */
+    add_plat(100.0f, 0.5f, 0.0f, 88.0f, 18.0f, 3.5f, 2, 2);
+    add_plat(180.0f, 1.0f, 0.0f, 84.0f, 48.0f, 4.0f, 2, 2); /* Ruinas del Desfiladero */
+    add_prop(175.0f, 1.0f, -16.0f, 0.6f, 3.4f, 0, 0);
+    add_prop(185.0f, 1.0f,  16.0f, 0.6f, 3.4f, 0, 0);
+    add_prop(182.0f, 1.0f, -18.0f, 0.6f, 0.9f, 3, 14);
+    add_enemy(175.0f, 1.0f,  8.0f, 1, 0, 0);
+    add_enemy(192.0f, 1.0f, -9.0f, 2, 0, 0);
+    add_plat(260.0f, 1.5f, 0.0f, 88.0f, 18.0f, 4.0f, 2, 2);
+    add_plat(390.0f, 2.0f, 0.0f, 180.0f, 160.0f, 4.5f, 2, 2); /* CANON CARMESI & CAMPAMENTO */
+    add_prop(325.0f, 2.0f, -22.0f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
+    add_prop(336.0f, 2.0f, -12.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal */
+    add_prop(355.0f, 2.0f,  45.0f, 0.6f, 3.4f, 0, 0);
+    add_prop(430.0f, 2.0f, -45.0f, 0.6f, 3.4f, 0, 0);
+    add_prop(430.0f, 2.0f,  45.0f, 0.6f, 3.4f, 0, 0);
+    add_prop(390.0f, 2.0f, -52.0f, 0.7f, 3.2f, 2, 2); /* Obelisk 2 */
+    add_prop(455.0f, 2.0f,  55.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
+    add_prop(468.0f, 2.0f,   0.0f, 1.2f, 3.6f, 6, 2); /* DUNGEON 2 PORTAL: Forja de Obsidiana */
+    add_npc(325.0f, 2.0f, -12.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada!");
+    add_enemy(365.0f, 2.0f,  25.0f, 2, 0, 0);
+    add_enemy(405.0f, 2.0f, -28.0f, 2, 0, 0);
+    add_enemy(420.0f, 2.0f,  30.0f, 1, 0, 0);
+    add_enemy(445.0f, 2.0f, -14.0f, 2, 0, 0);
 
-    /* 5. CIUDADELA ASTRAL (Far North: x=-14..14, z=-84..-58) */
-    add_plat(0.0f, 0.15f, -53.0f, 5.0f, 10.0f, 0.7f, 4, 3); /* Astral Bridge */
-    add_plat(0.0f, 0.30f, -71.0f, 28.0f, 26.0f, 3.0f, 4, 3);
-    add_prop(-9.0f, 0.30f, -63.0f, 0.7f, 4.2f, 2, 3); /* Obelisk 3 */
-    add_prop( 9.0f, 0.30f, -63.0f, 0.7f, 4.2f, 2, 4); /* Obelisk 4 */
-    add_prop(-9.0f, 0.30f, -79.0f, 0.7f, 4.2f, 0, 0);
-    add_prop( 9.0f, 0.30f, -79.0f, 0.7f, 4.2f, 0, 0);
-    add_prop( 0.0f, 0.30f, -81.0f, 0.7f, 2.8f, 4, 2); /* Astral Crystal (Heal only) */
-    add_prop( 0.0f, 0.30f, -66.0f, 0.6f, 0.9f, 3, 5); /* Chest 5 */
-    add_enemy(0.0f, 0.30f, -73.0f, 2, 1, 2); /* Final Sky Dragon Boss */
+    /* 5. ASCENSO ALPINO -> CIUDADELA ASTRAL (z=-400..-580) */
+    add_plat(0.0f, 3.0f, -435.0f, 16.0f, 70.0f, 4.5f, 4, 3);
+    add_plat(0.0f, 4.0f, -520.0f, 120.0f, 110.0f, 5.0f, 4, 3); /* CIUDADELA ASTRAL */
+    add_prop(-28.0f, 4.0f, -490.0f, 0.7f, 4.4f, 2, 3); /* Obelisk 3 */
+    add_prop( 28.0f, 4.0f, -490.0f, 0.7f, 4.4f, 2, 4); /* Obelisk 4 */
+    add_prop(-28.0f, 4.0f, -550.0f, 0.7f, 4.4f, 0, 0);
+    add_prop( 28.0f, 4.0f, -550.0f, 0.7f, 4.4f, 0, 0);
+    add_prop(  0.0f, 4.0f, -560.0f, 0.7f, 2.8f, 4, 2); /* Astral Crystal */
+    add_prop(  0.0f, 4.0f, -495.0f, 0.6f, 0.9f, 3, 5); /* Chest 5 */
+    add_enemy( 0.0f, 4.0f, -530.0f, 2, 1, 2); /* Final Sky Dragon Boss */
+
+    /* 6. FRONTERA SUR & BASTION ANTIGUO (z=+58..+440) */
+    add_plat(0.0f, 0.0f, 105.0f, 18.0f, 96.0f, 3.0f, 1, 0);
+    add_plat(0.0f, 0.0f, 195.0f, 52.0f, 88.0f, 3.0f, 0, 0); /* Torre del Sur */
+    add_prop(-16.0f, 0.0f, 190.0f, 2.0f, 3.0f, 5, 8);
+    add_prop( 18.0f, 0.0f, 200.0f, 0.6f, 0.9f, 3, 15);
+    add_enemy(-8.0f, 0.0f, 195.0f, 0, 0, 0);
+    add_enemy(12.0f, 0.0f, 205.0f, 1, 0, 0);
+    add_plat(0.0f, 0.0f, 280.0f, 18.0f, 88.0f, 3.0f, 1, 0);
+    add_plat(0.0f, 0.5f, 375.0f, 150.0f, 130.0f, 3.5f, 1, 2); /* BASTION DEL SUR */
+    add_prop(0.0f, 0.5f, 375.0f, 0.7f, 3.4f, 2, 5); /* Obelisk 5 */
+    add_prop(-22.0f, 0.5f, 355.0f, 0.6f, 3.6f, 0, 0);
+    add_prop( 22.0f, 0.5f, 355.0f, 0.6f, 3.6f, 0, 0);
+    add_prop( 24.0f, 0.5f, 340.0f, 1.0f, 3.0f, 9, 2); /* Paid Return Portal */
+    add_enemy(-30.0f, 0.5f, 385.0f, 1, 0, 0);
+    add_enemy( 30.0f, 0.5f, 385.0f, 2, 0, 0);
+    add_enemy(  0.0f, 0.5f, 410.0f, 2, 0, 0);
 }
 
 static void build_dungeon(int dId) {
@@ -644,10 +693,10 @@ static void build_dungeon(int dId) {
 
 static int get_current_zone(void) {
     if (worldMode == 1) return (curDungeon + 1) & 3;
-    if (heroZ < -50.0f) return 3;
-    if (heroX > 18.0f) return 2;
-    if (heroZ < -18.0f) return 1;
-    if (heroX < -18.0f) return 1;
+    if (heroZ < -420.0f) return 3;
+    if (heroX > 140.0f) return 2;
+    if (heroZ < -140.0f) return 1;
+    if (heroX < -140.0f) return 1;
     return 0;
 }
 
@@ -962,9 +1011,9 @@ int main(void) {
                         if (enemies[i].hp <= 0) {
                             enemies[i].alive = 0;
                             furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
-                            if (enemies[i].x < -18.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
-                            if (enemies[i].z < -18.0f && enemies[i].x > -18.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
-                            if (enemies[i].x > 18.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
+                            if (enemies[i].x < -250.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
+                            if (enemies[i].z < -250.0f && enemies[i].x > -250.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
+                            if (enemies[i].x > 250.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
                             heroGold += enemies[i].isBoss ? 50 : 18;
                             heroCoins += enemies[i].isBoss ? 40 : 12;
                             heroXp += enemies[i].isBoss ? 80 : 25;
@@ -1059,7 +1108,7 @@ int main(void) {
             float mag = sqrtf(ax * ax + ay * ay);
             if (mag > 1.0f) { ax /= mag; ay /= mag; }
 
-            float spd = 0.15f;
+            float spd = 0.22f;
             float fwdX = -sinf(camYaw), fwdZ = -cosf(camYaw);
             float rgtX =  cosf(camYaw), rgtZ = -sinf(camYaw);
             float mvX = (rgtX * ax + fwdX * (-ay));
@@ -1185,9 +1234,9 @@ int main(void) {
                             enemies[i].alive = 0;
                             if (!enemies[i].isBoss) enemies[i].respawnT = 600;
                             furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
-                            if (enemies[i].x < -18.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
-                            if (enemies[i].z < -18.0f && enemies[i].x > -18.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
-                            if (enemies[i].x > 18.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
+                            if (enemies[i].x < -250.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
+                            if (enemies[i].z < -250.0f && enemies[i].x > -250.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
+                            if (enemies[i].x > 250.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
                             static const int mobGold[3]  = { 10, 22, 40 };
                             static const int mobCoins[3] = {  6, 12, 22 };
                             static const int mobXp[3]    = { 14, 30, 55 };
@@ -1729,11 +1778,10 @@ int main(void) {
             sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, 6, 0, wv);
         }
 
-        /* Platforms (Distance culled for 60 FPS) */
+        /* Platforms (AABB Distance culled for large Skyrim-scale biomes at 60 FPS) */
         for (int i = 0; i < nPlats; i++) {
             Platform *p = &plats[i];
-            float dx = p->x - heroX, dz = p->z - heroZ;
-            if (dx * dx + dz * dz > 4200.0f) continue;
+            if (fabsf(p->x - heroX) > p->w * 0.5f + 76.0f || fabsf(p->z - heroZ) > p->d * 0.5f + 76.0f) continue;
             const unsigned int *ptex = (p->texType == 0) ? texGrass : (p->texType == 1 ? texStone : (p->texType == 2 ? texObsidian : (p->texType == 3 ? texWood : texCrystal)));
             draw_box3d(p->x, p->y, p->z, p->w, p->h, p->d, ptex, ABGR(255, 255, 255, 255), 0.25f);
         }
@@ -1888,19 +1936,36 @@ int main(void) {
             snprintf(buf, sizeof(buf), "POC:%d RAC:%d ELX:%d LL:%d/3 P:%d/6", heroPotions, heroFood, heroElixirs, keysFound, cluesCount);
             gu_text2d(14, 46, buf, ABGR(185, 235, 255, 255), 1);
 
-            /* Minimap + FPS */
+            /* Hero-Centered Open-World Radar Minimap + FPS + Clock */
             gu_window2d(406, 6, 68, 68);
+            const float mScale = 0.14f;
             for (int i = 0; i < nPlats; i++) {
-                int mx = 440 + (int)(plats[i].x * 0.55f);
-                int mz = 44 + (int)(plats[i].z * 0.55f);
-                int mw = (int)(plats[i].w * 0.55f); if (mw < 2) mw = 2;
-                int md = (int)(plats[i].d * 0.55f); if (md < 2) md = 2;
-                if (mx - mw/2 >= 408 && mx + mw/2 <= 472 && mz - md/2 >= 8 && mz + md/2 <= 72)
-                    gu_rect2d(mx - mw/2, mz - md/2, mw, md, ABGR(90, 140, 210, 180));
+                int mx = 440 + (int)((plats[i].x - heroX) * mScale);
+                int mz = 40  + (int)((plats[i].z - heroZ) * mScale);
+                int mw = (int)(plats[i].w * mScale); if (mw < 2) mw = 2;
+                int md = (int)(plats[i].d * mScale); if (md < 2) md = 2;
+                int x0 = mx - mw/2, y0 = mz - md/2, x1 = mx + mw/2, y1 = mz + md/2;
+                if (x1 < 408 || x0 > 472 || y1 < 8 || y0 > 72) continue;
+                if (x0 < 408) x0 = 408;
+                if (x1 > 472) x1 = 472;
+                if (y0 < 8) y0 = 8;
+                if (y1 > 72) y1 = 72;
+                gu_rect2d(x0, y0, x1 - x0, y1 - y0, ABGR(90, 140, 210, 170));
             }
-            int hx = 440 + (int)(heroX * 0.55f), hz = 44 + (int)(heroZ * 0.55f);
-            if (hx >= 408 && hx <= 470 && hz >= 8 && hz <= 70)
-                gu_rect2d(hx - 1, hz - 1, 3, 3, ABGR(255, 240, 80, 255));
+            for (int i = 0; i < nNpcs; i++) {
+                int nx = 440 + (int)((npcs[i].x - heroX) * mScale);
+                int nz = 40  + (int)((npcs[i].z - heroZ) * mScale);
+                if (nx >= 409 && nx <= 470 && nz >= 9 && nz <= 70)
+                    gu_rect2d(nx - 1, nz - 1, 2, 2, ABGR(100, 245, 255, 255));
+            }
+            for (int i = 0; i < nEnemies; i++) {
+                if (!enemies[i].alive) continue;
+                int ex = 440 + (int)((enemies[i].x - heroX) * mScale);
+                int ez = 40  + (int)((enemies[i].z - heroZ) * mScale);
+                if (ex >= 409 && ex <= 470 && ez >= 9 && ez <= 70)
+                    gu_rect2d(ex - 1, ez - 1, 2, 2, ABGR(255, 80, 80, 255));
+            }
+            gu_rect2d(439, 39, 3, 3, ABGR(255, 240, 80, 255));
 
             gu_window2d(336, 6, 64, 20);
             snprintf(buf, sizeof(buf), "FPS:%2d", curFps);
