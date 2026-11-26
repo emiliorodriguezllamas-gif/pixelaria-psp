@@ -381,6 +381,17 @@ static float camYaw = 0.0f;
 static int heroFlip = 0, heroHp = 130, heroMaxHp = 130, heroAtk = 22;
 static float heroStam = 100.0f, heroMaxStam = 100.0f;
 static int stamDelay = 0, heavyT = 0;
+
+/* Guitar Hero Critical Special ("Sinfonia Critica" every ~3 combats) */
+typedef struct { float y, spd; int lane, active; } GhNote;
+#define GH_MAX 10
+#define GH_HIT_Y 208
+static GhNote ghNotes[GH_MAX];
+static int furorCharge = 40; /* 0..100: +34 per kill, +8 per hit */
+static int ghActive = 0, ghSpawned = 0, ghSpawnT = 0, ghHits = 0;
+static float ghMult = 1.5f;
+static char ghJudge[32] = "";
+static int ghJudgeT = 0;
 static int heroGold = 40, heroPotions = 2, heroLv = 1, heroXp = 0;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
 static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
@@ -728,6 +739,99 @@ int main(void) {
                 storyOpen = 0;
                 play_sfx(520.0f, 600);
             }
+        } else if (ghActive) {
+            /* GUITAR HERO CRITICAL SOLO: Power up massive AoE damage! */
+            if (ghJudgeT > 0) ghJudgeT--;
+            if (ghSpawned < 8) {
+                ghSpawnT--;
+                if (ghSpawnT <= 0) {
+                    ghSpawnT = 18;
+                    for (int i = 0; i < GH_MAX; i++) {
+                        if (!ghNotes[i].active) {
+                            ghNotes[i].active = 1;
+                            ghNotes[i].lane = (int)(xr() & 3);
+                            ghNotes[i].y = 54.0f;
+                            ghNotes[i].spd = 3.2f;
+                            ghSpawned++;
+                            break;
+                        }
+                    }
+                }
+            }
+            static const unsigned int ghBtns[4] = { PSP_CTRL_SQUARE, PSP_CTRL_TRIANGLE, PSP_CTRL_CIRCLE, PSP_CTRL_CROSS };
+            static const float ghFreqs[4] = { 293.66f, 349.23f, 440.00f, 587.33f };
+            for (int l = 0; l < 4; l++) {
+                if (pressed & ghBtns[l]) {
+                    int best = -1; float bestD = 999.0f;
+                    for (int i = 0; i < GH_MAX; i++) {
+                        if (ghNotes[i].active && ghNotes[i].lane == l) {
+                            float d = fabsf(ghNotes[i].y - (float)GH_HIT_Y);
+                            if (d < bestD) { bestD = d; best = i; }
+                        }
+                    }
+                    if (best >= 0 && bestD <= 26.0f) {
+                        ghNotes[best].active = 0;
+                        ghHits++;
+                        int perf = (bestD <= 12.0f);
+                        ghMult += perf ? 0.45f : 0.30f;
+                        snprintf(ghJudge, sizeof(ghJudge), perf ? "CRITICO! x%.1f" : "BIEN! x%.1f", ghMult);
+                        ghJudgeT = 24;
+                        play_sfx(ghFreqs[l], 1600);
+                        spawn_part(heroX + frand(-1.5f, 1.5f), heroY + 1.2f, heroZ + frand(-1.5f, 1.5f),
+                                   0, 0.08f, 0, 26.0f, 0.5f, ABGR(255, 235, 90, 255));
+                    } else {
+                        snprintf(ghJudge, sizeof(ghJudge), "FALLO!");
+                        ghJudgeT = 20;
+                        play_sfx(140.0f, 700);
+                    }
+                }
+            }
+            int anyLeft = 0;
+            for (int i = 0; i < GH_MAX; i++) {
+                if (!ghNotes[i].active) continue;
+                anyLeft = 1;
+                ghNotes[i].y += ghNotes[i].spd;
+                if (ghNotes[i].y > GH_HIT_Y + 26.0f) {
+                    ghNotes[i].active = 0;
+                    snprintf(ghJudge, sizeof(ghJudge), "MISS");
+                    ghJudgeT = 18;
+                }
+            }
+            if (ghSpawned >= 8 && !anyLeft) {
+                /* Unleash JUICIO SINFONICO massive critical hit! */
+                ghActive = 0;
+                int totalDmg = (int)((float)heroAtk * ghMult);
+                int hitsLanded = 0;
+                for (int i = 0; i < nEnemies; i++) {
+                    if (!enemies[i].alive) continue;
+                    float dx = enemies[i].x - heroX, dz = enemies[i].z - heroZ;
+                    if (dx * dx + dz * dz < 100.0f) {
+                        enemies[i].hp -= totalDmg;
+                        enemies[i].flash = 16;
+                        enemies[i].state = 2; enemies[i].timer = 50;
+                        hitsLanded++;
+                        if (enemies[i].hp <= 0) {
+                            enemies[i].alive = 0;
+                            furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
+                            heroGold += enemies[i].isBoss ? 50 : 18;
+                            heroXp += enemies[i].isBoss ? 80 : 25;
+                            if (enemies[i].isBoss && worldMode == 1 && !dngCleared[curDungeon]) {
+                                dngCleared[curDungeon] = 1; keysFound++;
+                                add_prop(0.0f, 0.2f, -57.0f, 1.0f, 3.0f, 7, 1);
+                            }
+                        }
+                    }
+                }
+                for (int s = 0; s < 36; s++) {
+                    float ang = ((float)s / 36.0f) * 6.28318f;
+                    spawn_part(heroX + cosf(ang) * 2.0f, heroY + 0.9f, heroZ + sinf(ang) * 2.0f,
+                               cosf(ang) * 0.14f, 0.06f, sinf(ang) * 0.14f, 32.0f, 0.55f, ABGR(255, 225, 85, 255));
+                }
+                heroHp += heroMaxHp / 4; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                snprintf(dialogMsg, sizeof(dialogMsg), "JUICIO SINFONICO x%.1f! %d DANO CRITICO MASIVO!", ghMult, totalDmg);
+                dialogT = 160;
+                play_sfx(1046.5f, 3000);
+            }
         } else {
             int zone = get_current_zone();
             curZoneAudio = zone;
@@ -755,8 +859,20 @@ int main(void) {
                 if (heroStam > heroMaxStam) heroStam = heroMaxStam;
             }
 
-            if (pad.Buttons & PSP_CTRL_LTRIGGER) camYaw -= 0.035f;
-            if (pad.Buttons & PSP_CTRL_RTRIGGER) camYaw += 0.035f;
+            /* L + R together: Activate Guitar Hero Critical Special when Furor = 100% */
+            if ((pad.Buttons & PSP_CTRL_LTRIGGER) && (pad.Buttons & PSP_CTRL_RTRIGGER) && furorCharge >= 100 && !ghActive) {
+                furorCharge = 0;
+                ghActive = 1;
+                ghSpawned = 0;
+                ghSpawnT = 6;
+                ghHits = 0;
+                ghMult = 1.5f;
+                ghJudge[0] = 0; ghJudgeT = 0;
+                memset(ghNotes, 0, sizeof(ghNotes));
+                play_sfx(880.0f, 1500);
+            }
+            if ((pad.Buttons & PSP_CTRL_LTRIGGER) && !(pad.Buttons & PSP_CTRL_RTRIGGER)) camYaw -= 0.035f;
+            if ((pad.Buttons & PSP_CTRL_RTRIGGER) && !(pad.Buttons & PSP_CTRL_LTRIGGER)) camYaw += 0.035f;
 
             float ax = ((float)pad.Lx - 128.0f) / 128.0f;
             float ay = ((float)pad.Ly - 128.0f) / 128.0f;
@@ -854,6 +970,7 @@ int main(void) {
                     if (d < effRad) {
                         enemies[i].hp -= heroAtk;
                         enemies[i].flash = 8;
+                        furorCharge += 8; if (furorCharge > 100) furorCharge = 100;
                         float kdx = enemies[i].x - heroX, kdz = enemies[i].z - heroZ;
                         float kd = sqrtf(kdx * kdx + kdz * kdz);
                         if (kd > 0.05f) {
@@ -867,6 +984,7 @@ int main(void) {
                                        22.0f, 0.35f, ABGR(255, 120, 80, 255));
                         if (enemies[i].hp <= 0) {
                             enemies[i].alive = 0;
+                            furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
                             int goldDrop = enemies[i].isBoss ? 50 : (12 + enemies[i].kind * 6);
                             int xpGain = enemies[i].isBoss ? 80 : (20 + enemies[i].kind * 10);
                             heroGold += goldDrop;
@@ -1275,9 +1393,15 @@ int main(void) {
             gu_rect2d(125, 11, hpw, 5, ABGR(70, 235, 125, 255));
 
             gu_text2d(14, 21, "ESTAMINA", ABGR(190, 255, 130, 255), 1);
-            gu_rect2d(74, 21, 162, 6, ABGR(20, 24, 40, 255));
-            int stw = (int)((heroStam * 160.0f) / heroMaxStam);
+            gu_rect2d(74, 21, 90, 6, ABGR(20, 24, 40, 255));
+            int stw = (int)((heroStam * 88.0f) / heroMaxStam);
             gu_rect2d(75, 22, stw, 4, ABGR(215, 235, 75, 255));
+
+            snprintf(buf, sizeof(buf), "FUROR:%d%%", furorCharge);
+            gu_text2d(170, 21, buf, furorCharge >= 100 ? ABGR(255, 110, 235, 255) : ABGR(160, 210, 255, 255), 1);
+            if (furorCharge >= 100 && !ghActive && (animFrame & 16)) {
+                gu_text2d(244, 21, "L+R!", ABGR(255, 235, 80, 255), 1);
+            }
 
             snprintf(buf, sizeof(buf), "ORO:%d POC:%d LLAVES:%d/3 PISTAS:%d/6", heroGold, heroPotions, keysFound, cluesCount);
             gu_text2d(14, 34, buf, ABGR(255, 225, 110, 255), 1);
@@ -1318,6 +1442,30 @@ int main(void) {
                 gu_text2d(44, 132, storyL2, ABGR(240, 245, 255, 255), 1);
                 gu_text2d(44, 150, storyL3, ABGR(145, 240, 255, 255), 1);
                 gu_text2d(150, 176, "[ PULSA X o O PARA CONTINUAR ]", ABGR(255, 225, 110, 255), 1);
+            }
+            if (ghActive) {
+                static const unsigned int lCols[4] = {
+                    ABGR(235, 95, 225, 255), ABGR(80, 235, 130, 255),
+                    ABGR(255, 95, 95, 255),  ABGR(95, 165, 255, 255)
+                };
+                static const char *lLbls[4] = { "[]", "/\\", "O", "X" };
+                gu_window2d(140, 52, 200, 186);
+                gu_text2d(156, 58, "SINFONIA CRITICA!", ABGR(255, 225, 90, 255), 1);
+                char mb[32]; snprintf(mb, sizeof(mb), "PODER: x%.1f", ghMult);
+                gu_text2d(268, 58, mb, ABGR(120, 255, 175, 255), 1);
+                for (int l = 0; l < 4; l++) {
+                    int lx = 152 + l * 46;
+                    gu_rect2d(lx + 14, 72, 2, 148, ABGR(70, 90, 140, 220));
+                    gu_rect2d(lx + 2, GH_HIT_Y - 7, 26, 14, ABGR(25, 35, 65, 220));
+                    gu_text2d(lx + 9, GH_HIT_Y - 3, lLbls[l], lCols[l], 1);
+                }
+                for (int i = 0; i < GH_MAX; i++) {
+                    if (!ghNotes[i].active) continue;
+                    int nx = 154 + ghNotes[i].lane * 46;
+                    int ny = (int)ghNotes[i].y;
+                    gu_rect2d(nx, ny - 5, 26, 10, lCols[ghNotes[i].lane]);
+                }
+                if (ghJudgeT > 0) gu_text2d(196, 86, ghJudge, ABGR(255, 240, 100, 255), 1);
             }
         }
 
