@@ -826,6 +826,8 @@ static unsigned int shade_vtx(float vx, float vy, float vz, unsigned int baseCol
 }
 
 static void draw_box3d(float cx, float cy, float cz, float w, float h, float d, const unsigned int *tex, unsigned int col, float uvScale) {
+    sceGuDisable(GU_BLEND);
+    sceGuDisable(GU_ALPHA_TEST);
     sceGuEnable(GU_TEXTURE_2D);
     sceGuTexMode(GU_PSM_8888, 0, 0, 0);
     sceGuTexImage(0, 64, 64, 64, tex);
@@ -834,24 +836,60 @@ static void draw_box3d(float cx, float cy, float cz, float w, float h, float d, 
     sceGuTexWrap(GU_REPEAT, GU_REPEAT);
 
     float hw = w * 0.5f, hd = d * 0.5f, y0 = cy - h, y1 = cy;
-    unsigned int cTop = shade_vtx(cx, y1, cz, col);
     unsigned int cSide = ABGR(((col & 0xFF) * 7) / 10, (((col >> 8) & 0xFF) * 7) / 10, (((col >> 16) & 0xFF) * 7) / 10, 255);
     unsigned int cDark = ABGR(((col & 0xFF) * 5) / 10, (((col >> 8) & 0xFF) * 5) / 10, (((col >> 16) & 0xFF) * 5) / 10, 255);
 
-    Vtx3D *v = (Vtx3D *)sceGuGetMemory(30 * sizeof(Vtx3D));
-    float uW = w * uvScale, uD = d * uvScale, uH = h * uvScale;
+    int nx = (w > 14.0f) ? ((int)(w / 14.0f) + 1) : 1;
+    int nz = (d > 14.0f) ? ((int)(d / 14.0f) + 1) : 1;
+    float stepX = w / (float)nx, stepZ = d / (float)nz;
+    float xStart = cx - hw, zStart = cz - hd;
+    float uH = h * uvScale;
+
+    /* Count visible tiles & boundary edges to allocate exact GU memory */
+    int maxTris = nx * nz * 2 + (nx + nz) * 4;
+    Vtx3D *v = (Vtx3D *)sceGuGetMemory(maxTris * 3 * sizeof(Vtx3D));
     int k = 0;
-    v[k++] = (Vtx3D){ 0,  0,  cTop, cx-hw, y1, cz-hd }; v[k++] = (Vtx3D){ uW, 0,  cTop, cx+hw, y1, cz-hd }; v[k++] = (Vtx3D){ uW, uD, cTop, cx+hw, y1, cz+hd };
-    v[k++] = (Vtx3D){ 0,  0,  cTop, cx-hw, y1, cz-hd }; v[k++] = (Vtx3D){ uW, uD, cTop, cx+hw, y1, cz+hd }; v[k++] = (Vtx3D){ 0,  uD, cTop, cx-hw, y1, cz+hd };
-    v[k++] = (Vtx3D){ 0,  0,  cSide, cx-hw, y1, cz+hd }; v[k++] = (Vtx3D){ uW, 0,  cSide, cx+hw, y1, cz+hd }; v[k++] = (Vtx3D){ uW, uH, cDark, cx+hw, y0, cz+hd };
-    v[k++] = (Vtx3D){ 0,  0,  cSide, cx-hw, y1, cz+hd }; v[k++] = (Vtx3D){ uW, uH, cDark, cx+hw, y0, cz+hd }; v[k++] = (Vtx3D){ 0,  uH, cDark, cx-hw, y0, cz+hd };
-    v[k++] = (Vtx3D){ 0,  0,  cSide, cx+hw, y1, cz-hd }; v[k++] = (Vtx3D){ uW, 0,  cSide, cx-hw, y1, cz-hd }; v[k++] = (Vtx3D){ uW, uH, cDark, cx-hw, y0, cz-hd };
-    v[k++] = (Vtx3D){ 0,  0,  cSide, cx+hw, y1, cz-hd }; v[k++] = (Vtx3D){ uW, uH, cDark, cx-hw, y0, cz-hd }; v[k++] = (Vtx3D){ 0,  uH, cDark, cx+hw, y0, cz-hd };
-    v[k++] = (Vtx3D){ 0,  0,  cSide, cx-hw, y1, cz-hd }; v[k++] = (Vtx3D){ uD, 0,  cSide, cx-hw, y1, cz+hd }; v[k++] = (Vtx3D){ uD, uH, cDark, cx-hw, y0, cz+hd };
-    v[k++] = (Vtx3D){ 0,  0,  cSide, cx-hw, y1, cz-hd }; v[k++] = (Vtx3D){ uD, uH, cDark, cx-hw, y0, cz+hd }; v[k++] = (Vtx3D){ 0,  uH, cDark, cx-hw, y0, cz-hd };
-    v[k++] = (Vtx3D){ 0,  0,  cSide, cx+hw, y1, cz+hd }; v[k++] = (Vtx3D){ uD, 0,  cSide, cx+hw, y1, cz-hd }; v[k++] = (Vtx3D){ uD, uH, cDark, cx+hw, y0, cz-hd };
-    v[k++] = (Vtx3D){ 0,  0,  cSide, cx+hw, y1, cz+hd }; v[k++] = (Vtx3D){ uD, uH, cDark, cx+hw, y0, cz-hd }; v[k++] = (Vtx3D){ 0,  uH, cDark, cx+hw, y0, cz+hd };
-    sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, 30, 0, v);
+
+    for (int iz = 0; iz < nz; iz++) {
+        float tz0 = zStart + (float)iz * stepZ, tz1 = tz0 + stepZ;
+        if (tz1 < heroZ - 78.0f || tz0 > heroZ + 78.0f) continue;
+        float v0 = (float)iz * stepZ * uvScale, v1 = (float)(iz + 1) * stepZ * uvScale;
+        for (int ix = 0; ix < nx; ix++) {
+            float tx0 = xStart + (float)ix * stepX, tx1 = tx0 + stepX;
+            if (tx1 < heroX - 78.0f || tx0 > heroX + 78.0f) continue;
+            float u0 = (float)ix * stepX * uvScale, u1 = (float)(ix + 1) * stepX * uvScale;
+            unsigned int c00 = shade_vtx(tx0, y1, tz0, col);
+            unsigned int c10 = shade_vtx(tx1, y1, tz0, col);
+            unsigned int c11 = shade_vtx(tx1, y1, tz1, col);
+            unsigned int c01 = shade_vtx(tx0, y1, tz1, col);
+            v[k++] = (Vtx3D){ u0, v0, c00, tx0, y1, tz0 };
+            v[k++] = (Vtx3D){ u1, v0, c10, tx1, y1, tz0 };
+            v[k++] = (Vtx3D){ u1, v1, c11, tx1, y1, tz1 };
+            v[k++] = (Vtx3D){ u0, v0, c00, tx0, y1, tz0 };
+            v[k++] = (Vtx3D){ u1, v1, c11, tx1, y1, tz1 };
+            v[k++] = (Vtx3D){ u0, v1, c01, tx0, y1, tz1 };
+
+            if (iz == nz - 1) {
+                v[k++] = (Vtx3D){ u0, 0, cSide, tx0, y1, tz1 }; v[k++] = (Vtx3D){ u1, 0, cSide, tx1, y1, tz1 }; v[k++] = (Vtx3D){ u1, uH, cDark, tx1, y0, tz1 };
+                v[k++] = (Vtx3D){ u0, 0, cSide, tx0, y1, tz1 }; v[k++] = (Vtx3D){ u1, uH, cDark, tx1, y0, tz1 }; v[k++] = (Vtx3D){ u0, uH, cDark, tx0, y0, tz1 };
+            }
+            if (iz == 0) {
+                v[k++] = (Vtx3D){ u1, 0, cSide, tx1, y1, tz0 }; v[k++] = (Vtx3D){ u0, 0, cSide, tx0, y1, tz0 }; v[k++] = (Vtx3D){ u0, uH, cDark, tx0, y0, tz0 };
+                v[k++] = (Vtx3D){ u1, 0, cSide, tx1, y1, tz0 }; v[k++] = (Vtx3D){ u0, uH, cDark, tx0, y0, tz0 }; v[k++] = (Vtx3D){ u1, uH, cDark, tx1, y0, tz0 };
+            }
+            if (ix == 0) {
+                v[k++] = (Vtx3D){ v0, 0, cSide, tx0, y1, tz0 }; v[k++] = (Vtx3D){ v1, 0, cSide, tx0, y1, tz1 }; v[k++] = (Vtx3D){ v1, uH, cDark, tx0, y0, tz1 };
+                v[k++] = (Vtx3D){ v0, 0, cSide, tx0, y1, tz0 }; v[k++] = (Vtx3D){ v1, uH, cDark, tx0, y0, tz1 }; v[k++] = (Vtx3D){ v0, uH, cDark, tx0, y0, tz0 };
+            }
+            if (ix == nx - 1) {
+                v[k++] = (Vtx3D){ v1, 0, cSide, tx1, y1, tz1 }; v[k++] = (Vtx3D){ v0, 0, cSide, tx1, y1, tz0 }; v[k++] = (Vtx3D){ v0, uH, cDark, tx1, y0, tz0 };
+                v[k++] = (Vtx3D){ v1, 0, cSide, tx1, y1, tz1 }; v[k++] = (Vtx3D){ v0, uH, cDark, tx1, y0, tz0 }; v[k++] = (Vtx3D){ v1, uH, cDark, tx1, y0, tz1 };
+            }
+        }
+    }
+    if (k > 0) sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, k, 0, v);
+    sceGuEnable(GU_BLEND);
+    sceGuEnable(GU_ALPHA_TEST);
 }
 
 static void draw_house3d(float cx, float cy, float cz) {
@@ -908,6 +946,7 @@ static void draw_ground_decal(float x, float y, float z, float r, int decoId) {
     sceGuTexFilter(GU_LINEAR, GU_LINEAR);
     sceGuTexWrap(GU_CLAMP, GU_CLAMP);
 
+    sceGuDepthMask(GU_TRUE);
     Vtx3D *v = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
     unsigned int col = ABGR(255, 255, 255, 245);
     v[0] = (Vtx3D){ 0, 0, col, x - r, y + 0.035f, z - r };
@@ -917,6 +956,7 @@ static void draw_ground_decal(float x, float y, float z, float r, int decoId) {
     v[4] = (Vtx3D){ 1, 1, col, x + r, y + 0.035f, z + r };
     v[5] = (Vtx3D){ 0, 1, col, x - r, y + 0.035f, z + r };
     sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, 6, 0, v);
+    sceGuDepthMask(GU_FALSE);
 }
 
 int main(void) {
@@ -1877,16 +1917,25 @@ int main(void) {
             sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
             sceGuTexFilter(GU_LINEAR, GU_LINEAR);
             sceGuTexWrap(GU_REPEAT, GU_REPEAT);
-            Vtx3D *wv = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
+            Vtx3D *wv = (Vtx3D *)sceGuGetMemory(36 * 6 * sizeof(Vtx3D));
             unsigned int wc = lerp_abgr(ABGR(190, 225, 255, 255), skyHor, 0.35f);
             wc = (wc & 0x00FFFFFFu) | (190u << 24);
-            wv[0] = (Vtx3D){ 0 + wOff,  0 + wOff,  wc, heroX - 60, -3.5f, heroZ - 60 };
-            wv[1] = (Vtx3D){ 16 + wOff, 0 + wOff,  wc, heroX + 60, -3.5f, heroZ - 60 };
-            wv[2] = (Vtx3D){ 16 + wOff, 16 + wOff, wc, heroX + 60, -3.5f, heroZ + 60 };
-            wv[3] = (Vtx3D){ 0 + wOff,  0 + wOff,  wc, heroX - 60, -3.5f, heroZ - 60 };
-            wv[4] = (Vtx3D){ 16 + wOff, 16 + wOff, wc, heroX + 60, -3.5f, heroZ + 60 };
-            wv[5] = (Vtx3D){ 0 + wOff,  16 + wOff, wc, heroX - 60, -3.5f, heroZ + 60 };
-            sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, 6, 0, wv);
+            int wk = 0;
+            for (int iz = 0; iz < 6; iz++) {
+                float wz0 = heroZ - 60.0f + (float)iz * 20.0f, wz1 = wz0 + 20.0f;
+                float v0 = (float)iz * 2.5f + wOff, v1 = v0 + 2.5f;
+                for (int ix = 0; ix < 6; ix++) {
+                    float wx0 = heroX - 60.0f + (float)ix * 20.0f, wx1 = wx0 + 20.0f;
+                    float u0 = (float)ix * 2.5f + wOff, u1 = u0 + 2.5f;
+                    wv[wk++] = (Vtx3D){ u0, v0, wc, wx0, -3.5f, wz0 };
+                    wv[wk++] = (Vtx3D){ u1, v0, wc, wx1, -3.5f, wz0 };
+                    wv[wk++] = (Vtx3D){ u1, v1, wc, wx1, -3.5f, wz1 };
+                    wv[wk++] = (Vtx3D){ u0, v0, wc, wx0, -3.5f, wz0 };
+                    wv[wk++] = (Vtx3D){ u1, v1, wc, wx1, -3.5f, wz1 };
+                    wv[wk++] = (Vtx3D){ u0, v1, wc, wx0, -3.5f, wz1 };
+                }
+            }
+            sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, wk, 0, wv);
         }
 
         /* Platforms (AABB Distance culled for large Skyrim-scale biomes at 60 FPS) */
