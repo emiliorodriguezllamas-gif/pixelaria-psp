@@ -542,8 +542,8 @@ static int ghActive = 0, ghSpawned = 0, ghSpawnT = 0, ghHits = 0;
 static float ghMult = 1.5f;
 static char ghJudge[32] = "";
 static int ghJudgeT = 0;
-static int heroGold = 25, heroCoins = 30, heroPotions = 2, heroFood = 2, heroWater = 2, heroElixirs = 1, heroLv = 1, heroXp = 0;
-static float heroHunger = 100.0f, heroThirst = 100.0f;
+static int heroGold = 25, heroCoins = 30, heroPotions = 2, heroFood = 2, heroWater = 2, heroElixirs = 1, heroCampfires = 0, heroLv = 1, heroXp = 0;
+static float heroHunger = 100.0f, heroThirst = 100.0f, gameHourOffset = 0.0f;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
 typedef struct {
     float x, y, z, vy;
@@ -572,8 +572,8 @@ static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, hungerTic
 
 typedef struct {
     unsigned int magic;
-    int lv, xp, gold, coins, potions, food, water, elixirs, wood, stone, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
-    float hunger, thirst;
+    int lv, xp, gold, coins, potions, food, water, elixirs, campfires, wood, stone, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
+    float hunger, thirst, hourOffset;
     int chests[16], obelisks[12], dngs[3], clueArr[6], qSt[4], qF, qL, qC;
 } SaveData;
 
@@ -582,8 +582,8 @@ static void save_game(void) {
     sd.magic = 0xAE7E2026u;
     sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.coins = heroCoins;
     sd.potions = heroPotions; sd.food = heroFood; sd.water = heroWater; sd.elixirs = heroElixirs;
-    sd.wood = heroWood; sd.stone = heroStone; sd.qG = qGather;
-    sd.hunger = heroHunger; sd.thirst = heroThirst;
+    sd.campfires = heroCampfires; sd.wood = heroWood; sd.stone = heroStone; sd.qG = qGather;
+    sd.hunger = heroHunger; sd.thirst = heroThirst; sd.hourOffset = gameHourOffset;
     sd.atk = heroAtk; sd.maxHp = heroMaxHp; sd.forge = forgeCount; sd.furor = furorCharge;
     sd.clues = cluesCount; sd.runes = runesLit; sd.keys = keysFound; sd.relics = heroRelics;
     sd.ending = trueEnding;
@@ -606,8 +606,8 @@ static int load_game(void) {
     if (rd != (int)sizeof(sd) || sd.magic != 0xAE7E2026u) return 0;
     heroLv = sd.lv; heroXp = sd.xp; heroGold = sd.gold; heroCoins = sd.coins;
     heroPotions = sd.potions; heroFood = sd.food; heroWater = sd.water; heroElixirs = sd.elixirs;
-    heroWood = sd.wood; heroStone = sd.stone; qGather = sd.qG;
-    heroHunger = sd.hunger; heroThirst = sd.thirst;
+    heroCampfires = sd.campfires; heroWood = sd.wood; heroStone = sd.stone; qGather = sd.qG;
+    heroHunger = sd.hunger; heroThirst = sd.thirst; gameHourOffset = sd.hourOffset;
     heroAtk = sd.atk; heroMaxHp = sd.maxHp; heroHp = heroMaxHp; forgeCount = sd.forge;
     furorCharge = sd.furor; cluesCount = sd.clues; runesLit = sd.runes; keysFound = sd.keys;
     heroRelics = sd.relics; trueEnding = sd.ending;
@@ -1348,8 +1348,8 @@ int main(void) {
             } else if (pressed & PSP_CTRL_START) {
                 inTitle = 0;
                 heroLv = 1; heroXp = 0; heroGold = 25; heroCoins = 30;
-                heroPotions = 2; heroFood = 2; heroWater = 2; heroElixirs = 1;
-                heroHunger = 100.0f; heroThirst = 100.0f;
+                heroPotions = 2; heroFood = 2; heroWater = 2; heroElixirs = 1; heroCampfires = 0;
+                heroHunger = 100.0f; heroThirst = 100.0f; gameHourOffset = 0.0f;
                 heroWood = 0; heroStone = 0; qGather = 0;
                 shopOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
@@ -1366,7 +1366,7 @@ int main(void) {
                 show_story("EL SILENCIO DE LA BOVEDA",
                     "Hace 3 dias la Gran Campana del Cielo callo.",
                     "Las islas se hunden y el Arconte Vaelen desaparecio.",
-                    "Solo puedes guardar en el Cristal de Pueblo del Alba!");
+                    "Crea Hogueras (START) y ponlas en el suelo para guardar!");
             }
         } else if (storyOpen) {
             if (pressed & (PSP_CTRL_CROSS | PSP_CTRL_CIRCLE | PSP_CTRL_SELECT)) {
@@ -1399,8 +1399,8 @@ int main(void) {
                 }
             }
         } else if (menuOpen) {
-            if (pressed & PSP_CTRL_UP) { menuCursor = (menuCursor + 4) % 5; play_sfx(520.0f, 400); }
-            if (pressed & PSP_CTRL_DOWN) { menuCursor = (menuCursor + 1) % 5; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_UP) { menuCursor = (menuCursor + 5) % 6; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { menuCursor = (menuCursor + 1) % 6; play_sfx(520.0f, 400); }
             if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { menuOpen = 0; play_sfx(420.0f, 500); }
             if (pressed & PSP_CTRL_CROSS) {
                 if (menuCursor == 0) {
@@ -1450,12 +1450,38 @@ int main(void) {
                         play_sfx(200.0f, 600);
                     }
                     dialogT = 110;
+                } else if (menuCursor == 4) {
+                    if (heroWood >= 3 && heroStone >= 2) {
+                        heroWood -= 3; heroStone -= 2; heroCampfires++;
+                        snprintf(dialogMsg, sizeof(dialogMsg), "HOGUERA CREADA! (Tienes %d) - Ponla en el suelo para guardar!", heroCampfires);
+                        play_sfx(960.0f, 1400);
+                    } else {
+                        snprintf(dialogMsg, sizeof(dialogMsg), "Necesitas 3 Madera y 2 Piedra! (Tienes %d Mad, %d Pied)", heroWood, heroStone);
+                        play_sfx(200.0f, 600);
+                    }
+                    dialogT = 130;
                 } else {
-                    save_game();
-                    menuOpen = 0;
-                    snprintf(dialogMsg, sizeof(dialogMsg), "PARTIDA GUARDADA CORRECTAMENTE! (NV.%d)", heroLv);
+                    if (heroCampfires > 0) {
+                        float fx = heroX + sinf(heroYaw) * 2.0f;
+                        float fz = heroZ + cosf(heroYaw) * 2.0f;
+                        float fy = heroY;
+                        if (worldMode == 0 && is_walkable(fx, fz, &fy)) {
+                            heroCampfires--;
+                            add_prop(fx, fy, fz, 0.8f, 1.0f, 15, 0);
+                            for (int s = 0; s < 10; s++)
+                                spawn_part(fx, fy + 0.5f, fz, frand(-0.07f, 0.07f), frand(0.05f, 0.14f), frand(-0.07f, 0.07f), 26.0f, 0.42f, ABGR(255, 165, 55, 255));
+                            menuOpen = 0;
+                            snprintf(dialogMsg, sizeof(dialogMsg), "HOGUERA COLOCADA! Pulsa O junto a ella para descansar y guardar.");
+                            play_sfx(880.0f, 1400);
+                        } else {
+                            snprintf(dialogMsg, sizeof(dialogMsg), worldMode != 0 ? "No puedes poner hogueras en mazmorras!" : "Busca suelo firme lejos del agua!");
+                            play_sfx(200.0f, 600);
+                        }
+                    } else {
+                        snprintf(dialogMsg, sizeof(dialogMsg), "No tienes Hogueras! Crea una con 3 Madera y 2 Piedra.");
+                        play_sfx(200.0f, 600);
+                    }
                     dialogT = 140;
-                    play_sfx(1040.0f, 1600);
                 }
             }
         } else if (ghActive) {
@@ -2005,13 +2031,20 @@ int main(void) {
                             dialogT = 150; play_sfx(1100.0f, 1800); acted = 1;
                         } else if (props[i].kind == 4) {
                             heroHp = heroMaxHp; heroStam = heroMaxStam;
-                            if (props[i].id == 0) {
-                                save_game();
-                                snprintf(dialogMsg, sizeof(dialogMsg), "PARTIDA GUARDADA EN PUEBLO DEL ALBA! (HP 100%%)");
-                            } else {
-                                snprintf(dialogMsg, sizeof(dialogMsg), "VIDA RESTAURADA! (Solo se guarda en Pueblo del Alba)");
-                            }
+                            snprintf(dialogMsg, sizeof(dialogMsg), "VIDA Y ESTAMINA RESTAURADAS! (Pon una Hoguera para guardar)");
                             dialogT = 150; play_sfx(880.0f, 1400); acted = 1;
+                        } else if (props[i].kind == 15) {
+                            ScePspDateTime rtNow;
+                            float rawH = 12.0f;
+                            if (sceRtcGetCurrentClockLocalTime(&rtNow) >= 0)
+                                rawH = (float)rtNow.hour + (float)rtNow.minute / 60.0f;
+                            gameHourOffset = 7.0f - rawH;
+                            heroHp = heroMaxHp; heroStam = heroMaxStam;
+                            for (int s = 0; s < 14; s++)
+                                spawn_part(props[i].x, props[i].y + 0.6f, props[i].z, frand(-0.08f, 0.08f), frand(0.06f, 0.16f), frand(-0.08f, 0.08f), 30.0f, 0.45f, ABGR(255, 195, 70, 255));
+                            save_game();
+                            snprintf(dialogMsg, sizeof(dialogMsg), "DESCANSAS Y PERNOCTAS EN LA HOGUERA (07:00) - PARTIDA GUARDADA!");
+                            dialogT = 170; play_sfx(1040.0f, 1800); acted = 1;
                         } else if (props[i].kind == 9) {
                             if (heroGold >= 25) {
                                 heroGold -= 25;
@@ -2207,12 +2240,13 @@ int main(void) {
         /* ==================== HARDWARE GU 3D RENDER ==================== */
         int curZone = get_current_zone();
         ScePspDateTime pspNow;
-        int curHour = 12, curMin = 0;
+        float rawHour = 12.0f;
         if (sceRtcGetCurrentClockLocalTime(&pspNow) >= 0) {
-            curHour = pspNow.hour;
-            curMin = pspNow.minute;
+            rawHour = (float)pspNow.hour + (float)pspNow.minute / 60.0f;
         }
-        float dayHour = (float)curHour + (float)curMin / 60.0f;
+        float dayHour = fmodf(rawHour + gameHourOffset + 24.0f, 24.0f);
+        int curHour = (int)dayHour;
+        int curMin = (int)((dayHour - (float)curHour) * 60.0f);
 
         /* Time-of-day palette interpolation: Dawn, Day, Sunset, Night */
         static const unsigned int cHor[4] = {
@@ -2527,6 +2561,13 @@ int main(void) {
                 draw_box3d(pr->x - 0.9f, pr->y + 2.6f, pr->z, 0.45f, 2.6f, 0.45f, texCrystal, wc, 0.5f);
                 draw_box3d(pr->x + 0.9f, pr->y + 2.6f, pr->z, 0.45f, 2.6f, 0.45f, texCrystal, wc, 0.5f);
                 draw_box3d(pr->x, pr->y + 2.9f, pr->z, 2.2f, 0.4f, 0.5f, texCrystal, ABGR(140, 240, 255, 255), 0.5f);
+            } else if (pr->kind == 15) {
+                float fl = 0.85f + 0.25f * sinf((float)animFrame * 0.28f + pr->x);
+                draw_ground_disc(pr->x, pr->y, pr->z, 1.35f, ABGR(45, 25, 15, 210));
+                draw_box3d(pr->x, pr->y + 0.28f, pr->z, 1.15f, 0.28f, 0.28f, texWood, ABGR(185, 130, 80, 255), 1.0f);
+                draw_box3d(pr->x, pr->y + 0.28f, pr->z, 0.28f, 0.28f, 1.15f, texWood, ABGR(175, 120, 70, 255), 1.0f);
+                draw_billboard(pr->x, pr->y + 0.45f, pr->z, 1.9f * fl, 2.1f * fl, texSoftGlow, ABGR(255, 135, 35, 225), 0, camYaw);
+                draw_billboard(pr->x, pr->y + 0.55f, pr->z, 1.05f * fl, 1.25f * fl, texSoftGlow, ABGR(255, 235, 125, 255), 0, camYaw);
             }
         }
 
@@ -2876,27 +2917,28 @@ int main(void) {
                 gu_text2d(92, 192, "[ARRIBA/ABAJO] ELEGIR   [X] COMPRAR   [O] SALIR", ABGR(145, 240, 255, 255), 1);
             }
             if (menuOpen) {
-                gu_window2d(34, 40, 412, 184);
-                snprintf(buf, sizeof(buf), "INVENTARIO Y GUARDADO  |  NV.%d  HP %d/%d  ATK %d", heroLv, heroHp, heroMaxHp, heroAtk);
-                gu_text2d(46, 50, buf, ABGR(255, 225, 95, 255), 1);
-                snprintf(buf, sizeof(buf), "ORO:%d  MONEDAS:%d  MADERA:%d  PIEDRA:%d", heroGold, heroCoins, heroWood, heroStone);
-                gu_text2d(46, 63, buf, ABGR(145, 245, 255, 255), 1);
-                snprintf(buf, sizeof(buf), "LLAVES:%d/3  PISTAS:%d/6  COM:%d%%  SED:%d%%", keysFound, cluesCount, (int)heroHunger, (int)heroThirst);
-                gu_text2d(46, 75, buf, ABGR(200, 230, 255, 255), 1);
-                char mItems[5][64];
+                gu_window2d(26, 32, 428, 202);
+                snprintf(buf, sizeof(buf), "INVENTARIO Y HOGUERAS | NV.%d HP %d/%d ATK %d", heroLv, heroHp, heroMaxHp, heroAtk);
+                gu_text2d(38, 42, buf, ABGR(255, 225, 95, 255), 1);
+                snprintf(buf, sizeof(buf), "ORO:%d MON:%d MADERA:%d PIEDRA:%d HOGUERAS:%d", heroGold, heroCoins, heroWood, heroStone, heroCampfires);
+                gu_text2d(38, 55, buf, ABGR(145, 245, 255, 255), 1);
+                snprintf(buf, sizeof(buf), "LLAVES:%d/3 PISTAS:%d/6 COM:%d%% SED:%d%%", keysFound, cluesCount, (int)heroHunger, (int)heroThirst);
+                gu_text2d(38, 67, buf, ABGR(200, 230, 255, 255), 1);
+                char mItems[6][64];
                 snprintf(mItems[0], 64, "USAR POCION CURATIVA (+60 HP)      [Tienes: %d]", heroPotions);
                 snprintf(mItems[1], 64, "COMER RACION VIAJE (+50%% Com,+20HP) [Tienes: %d]", heroFood);
                 snprintf(mItems[2], 64, "BEBER AGUA FRESCA (+50%% Sed,+15HP)  [Tienes: %d]", heroWater);
                 snprintf(mItems[3], 64, "BEBER ELIXIR ESTAMINA (100%%,+40HP)  [Tienes: %d]", heroElixirs);
-                snprintf(mItems[4], 64, "GUARDAR PARTIDA EN LA CONSOLA");
-                for (int m = 0; m < 5; m++) {
-                    int ry = 95 + m * 19;
-                    if (m == menuCursor) gu_rect2d(44, ry - 3, 392, 15, ABGR(55, 85, 145, 210));
+                snprintf(mItems[4], 64, "CREAR HOGUERA (3 Mad + 2 Piedra)   [Tienes: %d]", heroCampfires);
+                snprintf(mItems[5], 64, "PONER HOGUERA EN SUELO (Descansar y Guardar)");
+                for (int m = 0; m < 6; m++) {
+                    int ry = 87 + m * 19;
+                    if (m == menuCursor) gu_rect2d(36, ry - 3, 408, 15, ABGR(55, 85, 145, 210));
                     snprintf(buf, sizeof(buf), "%s %s", (m == menuCursor) ? ">" : " ", mItems[m]);
-                    unsigned int col = (m == 4) ? ABGR(120, 255, 165, 255) : ABGR(235, 250, 255, 255);
-                    gu_text2d(48, ry, buf, col, 1);
+                    unsigned int col = (m >= 4) ? ABGR(255, 195, 95, 255) : ABGR(235, 250, 255, 255);
+                    gu_text2d(40, ry, buf, col, 1);
                 }
-                gu_text2d(78, 204, "[ARRIBA/ABAJO] ELEGIR   [X] USAR/GUARDAR   [O/START] SALIR", ABGR(145, 240, 255, 255), 1);
+                gu_text2d(72, 214, "[ARRIBA/ABAJO] ELEGIR  [X] USAR/CREAR  [O/START] SALIR", ABGR(145, 240, 255, 255), 1);
             }
             if (ghActive) {
                 gu_window2d(140, 52, 200, 186);
