@@ -1535,13 +1535,6 @@ int main(void) {
                     if (e->timer <= 0) e->state = 0;
                 }
             }
-
-            if ((animFrame % 4) == 0) {
-                unsigned int pcol = (zone == 2) ? ABGR(255, 130, 45, 220) : (zone == 3 ? ABGR(140, 220, 255, 230) : ABGR(255, 240, 120, 220));
-                spawn_part(heroX + frand(-10.0f, 10.0f), heroY + frand(0.3f, 2.8f), heroZ + frand(-10.0f, 10.0f),
-                           frand(-0.015f, 0.015f), frand(0.01f, 0.03f), frand(-0.015f, 0.015f),
-                           80.0f, 0.25f, pcol);
-            }
         }
 
         for (int i = 0; i < MAX_PARTS; i++) {
@@ -1663,7 +1656,7 @@ int main(void) {
 
             /* Twinkling Stars when nightFactor > 0.05 */
             if (nightFactor > 0.05f) {
-                for (int st = 0; st < 40; st++) {
+                for (int st = 0; st < 24; st++) {
                     float az = (float)st * 2.39996f;
                     float el = 0.18f + ((float)((st * 37) % 100) / 100.0f) * 0.72f;
                     float cr = cosf(el) * 70.0f;
@@ -1672,7 +1665,7 @@ int main(void) {
                     float sz = eye.z + sinf(az) * cr;
                     float tw = 0.65f + 0.35f * sinf((float)animFrame * 0.08f + (float)st * 1.7f);
                     int sa = (int)(nightFactor * tw * 245.0f);
-                    float ssz = ((st % 5) == 0) ? 1.55f : 0.95f;
+                    float ssz = ((st % 4) == 0) ? 1.55f : 0.95f;
                     draw_billboard(sx, sy, sz, ssz, ssz, texSoftGlow, ABGR(220, 235, 255, sa), 0, camYaw);
                 }
             }
@@ -1699,9 +1692,9 @@ int main(void) {
             /* Drifting Soft Sky Clouds */
             unsigned int cldCol = (nightFactor > 0.5f) ? ABGR(95, 115, 165, 110) :
                                   ((pA == 0 || pB == 2) ? ABGR(255, 205, 185, 145) : ABGR(245, 250, 255, 155));
-            for (int c = 0; c < 18; c++) {
-                float ca = (float)c * 0.349f + (float)animFrame * 0.0005f;
-                float dist = 36.0f + (float)((c * 13) % 28);
+            for (int c = 0; c < 10; c++) {
+                float ca = (float)c * 0.6283f + (float)animFrame * 0.0005f;
+                float dist = 38.0f + (float)((c * 13) % 26);
                 float cx = eye.x + cosf(ca) * dist;
                 float cz = eye.z + sinf(ca) * dist;
                 float cy = baseY + 18.0f + (float)(c % 4) * 3.5f;
