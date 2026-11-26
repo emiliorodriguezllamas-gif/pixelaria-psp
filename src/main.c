@@ -333,7 +333,7 @@ typedef struct {
 } Particle3D;
 
 #define MAX_PLATS 160
-#define MAX_PROPS 640
+#define MAX_PROPS 800
 #define MAX_ENEMIES 120
 #define MAX_NPCS 12
 #define MAX_PARTS 140
@@ -543,20 +543,15 @@ static void build_overworld(void) {
     nPlats = 0; nProps = 0; nEnemies = 0; nNpcs = 0;
     worldMode = 0;
 
-    /* 1. PUEBLO DEL ALBA & LLANURAS CENTRALES (x=-60..60, z=-60..60) */
-    add_plat(0.0f, 0.0f, 0.0f, 120.0f, 120.0f, 4.0f, 0, 0);
-    add_plat(0.0f, 0.10f, 0.0f, 34.0f, 34.0f, 0.3f, 1, 0); /* Town Stone Ground */
-    add_plat(0.0f, 0.25f, 0.0f, 10.0f, 10.0f, 0.25f, 4, 0); /* Central Crystal Plaza */
+    /* 1. GRANDES LLANURAS CENTRALES (x=-220..+220, z=-220..+220, 440x440 continuas!) */
+    add_plat(0.0f, 0.00f, 0.0f, 440.0f, 440.0f, 4.0f, 0, 0);
+    add_plat(0.0f, 0.10f, 0.0f,  34.0f,  34.0f, 0.3f, 1, 0); /* Pueblo del Alba */
+    add_plat(0.0f, 0.25f, 0.0f,  10.0f,  10.0f, 0.25f, 4, 0); /* Plaza del Cristal */
     add_prop(0.0f, 0.25f, 0.0f, 0.7f, 2.5f, 4, 0); /* Sanctuary Crystal (SAVE) */
-    add_prop(0.0f, 0.25f, 0.0f, 3.2f, 0.0f, 10, 3); /* Astral Rune Sigil under Crystal */
-    for (int i = 0; i < 16; i++) {
-        float ang = (float)i * 0.3927f;
-        float r = (i & 1) ? 26.0f : 38.0f;
-        add_prop(cosf(ang) * r, 0.0f, sinf(ang) * r, 1.8f, 0.0f, 10, (i % 3 == 0) ? 1 : 0);
-    }
+    add_prop(0.0f, 0.25f, 0.0f, 3.2f, 0.0f, 10, 3);
     for (int i = 0; i < 8; i++) {
         float ang = (float)i * 0.7854f;
-        add_prop(cosf(ang) * 11.5f, 0.10f, sinf(ang) * 11.5f, 1.5f, 0.0f, 10, 1); /* Town Cobbles */
+        add_prop(cosf(ang) * 11.5f, 0.10f, sinf(ang) * 11.5f, 1.5f, 0.0f, 10, 1);
     }
     add_prop(-11.0f, 0.10f, -9.5f, 2.2f, 3.0f, 5, 0);
     add_prop( 11.0f, 0.10f, -9.5f, 2.2f, 3.0f, 5, 1);
@@ -564,172 +559,171 @@ static void build_overworld(void) {
     add_prop( 11.0f, 0.10f,  9.5f, 2.2f, 3.0f, 5, 3);
     add_prop(-13.5f, 0.10f,  0.0f, 1.1f, 3.2f, 1, 0);
     add_prop( 13.5f, 0.10f,  0.0f, 1.1f, 3.2f, 1, 0);
-    add_prop( 12.5f, 0.10f, 12.5f, 0.6f, 0.9f, 3, 0); /* Starter Chest */
-    add_prop(-6.0f,  0.10f,  6.0f, 0.55f, 1.8f, 8, 0); /* Clue 0 */
-    add_npc(-3.4f, 0.25f,  2.8f, 0, 0, "Alcalde Eldon", "ALCALDE: Encuentra las 3 Llaves en los Templos del Norte, Oeste y Este!");
+    add_prop( 12.5f, 0.10f, 12.5f, 0.6f, 0.9f, 3, 0);
+    add_prop(-6.0f,  0.10f,  6.0f, 0.55f, 1.8f, 8, 0);
+    add_npc(-3.4f, 0.25f,  2.8f, 0, 0, "Alcalde Eldon", "ALCALDE: Encuentra las 3 Llaves!");
     add_npc(-7.0f, 0.10f, -7.0f, 1, 1, "Herrero Kael",  "KAEL: Forjar Espada!");
     add_npc( 7.0f, 0.10f, -7.0f, 2, 2, "Alquimista Lyra","LYRA: Tienda de Supervivencia!");
-    add_npc( 3.4f, 0.25f,  2.8f, 3, 3, "Sabio Orin",    "ORIN: Usa /\\ cerca de los Obeliscos para iluminarlos!");
-    for (int i = 0; i < 8; i++) {
-        float ang = (float)i * 0.7854f + 0.38f;
-        add_prop(cosf(ang) * 44.0f, 0.0f, sinf(ang) * 44.0f, 1.2f, 3.8f, 1, 0);
-        add_prop(cosf(ang) * 44.0f + 2.0f, 0.0f, sinf(ang) * 44.0f + 1.5f, 1.8f, 0.0f, 10, 0);
-    }
-    /* Town Gate Lanterns (4 cardinal exits of Pueblo del Alba) */
+    add_npc( 3.4f, 0.25f,  2.8f, 3, 3, "Sabio Orin",    "ORIN: Ilumina los Obeliscos!");
+
+    /* Town Gate Lanterns & Waymarkers along the 4 open-world trails */
     add_prop(-16.0f, 0.10f, -4.5f, 0.4f, 1.8f, 11, 0); add_prop(-16.0f, 0.10f,  4.5f, 0.4f, 1.8f, 11, 0);
     add_prop( 16.0f, 0.10f, -4.5f, 0.4f, 1.8f, 11, 0); add_prop( 16.0f, 0.10f,  4.5f, 0.4f, 1.8f, 11, 0);
     add_prop(-4.5f, 0.10f, -16.0f, 0.4f, 1.8f, 11, 0); add_prop( 4.5f, 0.10f, -16.0f, 0.4f, 1.8f, 11, 0);
     add_prop(-4.5f, 0.10f,  16.0f, 0.4f, 1.8f, 11, 0); add_prop( 4.5f, 0.10f,  16.0f, 0.4f, 1.8f, 11, 0);
-    /* Realistic Frontier Patrols outside Pueblo del Alba safe zone */
-    add_camp(-44.0f, 0.0f, -34.0f, 0, 2, 0, -1);
-    add_camp( 44.0f, 0.0f,  34.0f, 0, 2, 0, -1);
-    add_camp( 44.0f, 0.0f, -40.0f, 0, 3, 0, -1);
-    add_camp(-44.0f, 0.0f,  40.0f, 0, 3, 0, -1);
+    for (int i = 1; i <= 4; i++) {
+        float d = 40.0f + (float)i * 40.0f;
+        add_prop(-d, 0.0f, -8.0f, 0.4f, 1.8f, 11, 0); add_prop( d, 0.0f,  8.0f, 0.4f, 1.8f, 11, 2);
+        add_prop(-8.0f, 0.0f, -d, 0.4f, 1.8f, 11, 1); add_prop( 8.0f, 0.0f,  d, 0.4f, 1.8f, 11, 0);
+    }
 
-    /* 2. CAMINO DEL OESTE -> LLANURAS DEL VIENTO -> BOSQUE ESMERALDA (x=-58..-480) */
-    add_plat(-100.0f, -0.05f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
-    for (int i = 0; i < 3; i++) {
-        float rx = -72.0f - (float)i * 28.0f;
-        add_prop(rx, -0.05f, -7.2f, 0.4f, 1.8f, 11, 0);
-        add_prop(rx, -0.05f,  7.2f, 0.4f, 1.8f, 11, 0);
-        add_prop(rx, -0.05f,  0.0f, 2.2f, 0.0f, 10, 1);
-    }
-    add_camp(-105.0f, -0.05f, 2.0f, 0, 3, 0, -1);
-    add_plat(-180.0f, 0.0f, 0.0f, 84.0f, 44.0f, 3.0f, 0, 1); /* Torre de Vigia Oeste */
-    add_prop(-165.0f, 0.0f, 16.0f, 1.2f, 3.6f, 1, 0);
-    add_prop(-195.0f, 0.0f, 16.0f, 1.2f, 3.6f, 1, 0);
-    add_prop(-180.0f, 0.0f,  8.0f, 2.5f, 0.0f, 10, 0);
-    add_camp(-182.0f, 0.0f, -10.0f, 1, 3, 1, 12);
-    add_plat(-260.0f, -0.05f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
-    for (int i = 0; i < 3; i++) {
-        float rx = -232.0f - (float)i * 28.0f;
-        add_prop(rx, -0.05f, -7.2f, 0.4f, 1.8f, 11, 1);
-        add_prop(rx, -0.05f,  7.2f, 0.4f, 1.8f, 11, 1);
-    }
-    add_camp(-265.0f, -0.05f, -2.0f, 1, 3, 0, -1);
-    add_plat(-390.0f, 0.0f, 0.0f, 180.0f, 180.0f, 4.0f, 0, 1); /* BOSQUE ESMERALDA GIGANTE */
-    for (int i = 0; i < 24; i++) {
-        float tx = -315.0f - (float)((i * 29) % 145);
-        float tz = -78.0f + (float)((i * 47) % 156);
-        if (fabsf(tz) < 12.0f && tx > -340.0f) tz += 18.0f;
-        add_prop(tx, 0.0f, tz, 1.2f, 3.6f + (float)(i % 3) * 0.4f, 1, 0);
-        add_prop(tx + 2.2f, 0.0f, tz + 1.8f, 1.8f, 0.0f, 10, (i & 1) ? 2 : 0); /* Mushrooms & Wildflowers */
-    }
-    add_prop(-390.0f, 0.0f,  0.0f, 0.7f, 3.2f, 2, 0); /* Obelisk 0 */
-    add_prop(-390.0f, 0.0f,  0.0f, 3.2f, 0.0f, 10, 3); /* Rune Sigil under Obelisk 0 */
-    add_prop(-455.0f, 0.0f,  58.0f, 0.6f, 0.9f, 3, 1); /* Chest 1 */
-    add_prop(-455.0f, 0.0f, -58.0f, 0.6f, 0.9f, 3, 2); /* Chest 2 */
-    add_prop(-345.0f, 0.0f,  35.0f, 0.55f, 1.8f, 8, 1); /* Clue 1 */
-    add_prop(-468.0f, 0.0f,  0.0f, 1.2f, 3.6f, 6, 0); /* DUNGEON 0 PORTAL: Templo del Bosque */
-    add_prop(-462.0f, 0.0f, -5.0f, 0.4f, 1.8f, 11, 1);
-    add_prop(-462.0f, 0.0f,  5.0f, 0.4f, 1.8f, 11, 1);
-    add_camp(-355.0f, 0.0f, -52.0f, 1, 4, 1, -1);
-    add_camp(-365.0f, 0.0f,  56.0f, 1, 4, 1, -1);
-    add_camp(-435.0f, 0.0f, -42.0f, 1, 4, 0, -1);
+    /* Rolling Hills, Tree Groves & Wildflower Meadows across the 440x440 Central Plains */
+    add_plat(-110.0f, 0.35f, -110.0f, 64.0f, 64.0f, 3.0f, 0, 0);
+    add_plat( 110.0f, 0.35f, -110.0f, 64.0f, 64.0f, 3.0f, 0, 0);
+    add_plat(-110.0f, 0.35f,  110.0f, 64.0f, 64.0f, 3.0f, 0, 0);
+    add_plat( 110.0f, 0.35f,  110.0f, 64.0f, 64.0f, 3.0f, 0, 0);
+    add_plat(-180.0f, 0.35f,    0.0f, 48.0f, 48.0f, 3.0f, 0, 1); /* Torre de Vigia Oeste */
+    add_prop(-165.0f, 0.35f,   16.0f, 1.2f, 3.6f, 1, 0);
+    add_camp(-182.0f, 0.35f,  -10.0f, 1, 3, 1, 12);
+    add_plat(   0.0f, 0.35f,  180.0f, 48.0f, 48.0f, 3.0f, 0, 0); /* Torre del Sur */
+    add_camp(   0.0f, 0.35f,  180.0f, 1, 4, 1, 15);
 
-    /* 3. CAMINO DEL NORTE -> PASO DE LA GARGANTA -> LAGO DE LOS ECOS (z=-58..-410) */
-    add_plat(0.0f, 0.35f, -100.0f, 18.0f, 88.0f, 3.5f, 1, 1);
-    for (int i = 0; i < 3; i++) {
-        float rz = -72.0f - (float)i * 28.0f;
-        add_prop(-7.2f, 0.35f, rz, 0.4f, 1.8f, 11, 1);
-        add_prop( 7.2f, 0.35f, rz, 0.4f, 1.8f, 11, 1);
-        add_prop( 0.0f, 0.35f, rz, 2.2f, 0.0f, 10, 1);
+    for (int i = 0; i < 36; i++) {
+        float px = -195.0f + (float)((i * 67) % 390);
+        float pz = -195.0f + (float)((i * 113) % 390);
+        if (fabsf(px) < 42.0f && fabsf(pz) < 42.0f) px += (px >= 0 ? 55.0f : -55.0f);
+        if (fabsf(px + 110.0f) < 34.0f && fabsf(pz + 110.0f) < 34.0f) continue;
+        if (fabsf(px - 110.0f) < 34.0f && fabsf(pz + 110.0f) < 34.0f) continue;
+        if (fabsf(px + 110.0f) < 34.0f && fabsf(pz - 110.0f) < 34.0f) continue;
+        if (fabsf(px - 110.0f) < 34.0f && fabsf(pz - 110.0f) < 34.0f) continue;
+        if (fabsf(px + 180.0f) < 26.0f && fabsf(pz) < 26.0f) continue;
+        if (fabsf(px) < 26.0f && fabsf(pz - 180.0f) < 26.0f) continue;
+        add_prop(px, 0.0f, pz, 1.2f, 3.6f + (float)(i % 3) * 0.4f, 1, 0);
+        add_prop(px + 2.2f, 0.0f, pz + 1.6f, 1.9f, 0.0f, 10, (i % 3 == 0) ? 2 : 0);
     }
-    add_camp(0.0f, 0.35f, -105.0f, 1, 3, 0, -1);
-    add_plat(0.0f, 0.70f, -180.0f, 48.0f, 84.0f, 4.0f, 1, 1); /* Paso de la Garganta */
-    add_prop(-18.0f, 0.70f, -155.0f, 0.7f, 3.8f, 0, 0);
-    add_prop( 18.0f, 0.70f, -155.0f, 0.7f, 3.8f, 0, 0);
-    add_prop(-18.0f, 0.70f, -205.0f, 0.7f, 3.8f, 0, 0);
-    add_prop( 18.0f, 0.70f, -205.0f, 0.7f, 3.8f, 0, 0);
-    add_camp(0.0f, 0.70f, -182.0f, 1, 4, 0, 13);
-    add_plat(0.0f, 1.05f, -255.0f, 18.0f, 78.0f, 4.0f, 1, 1);
-    add_prop(-7.2f, 1.05f, -240.0f, 0.4f, 1.8f, 11, 1);
-    add_prop( 7.2f, 1.05f, -240.0f, 0.4f, 1.8f, 11, 1);
-    add_plat(0.0f, 1.40f, -340.0f, 160.0f, 130.0f, 4.5f, 1, 1); /* LAGO DE LOS ECOS & ALDEA LACUSTRE */
-    add_prop(-22.0f, 1.40f, -305.0f, 2.0f, 2.8f, 5, 4);
-    add_prop( 22.0f, 1.40f, -305.0f, 2.0f, 2.8f, 5, 5);
-    add_prop(  0.0f, 1.40f, -315.0f, 0.7f, 2.5f, 4, 1); /* Lake Crystal (Heal only) */
-    add_prop(  0.0f, 1.40f, -315.0f, 3.0f, 0.0f, 10, 3); /* Lake Sigil */
-    add_prop(-12.0f, 1.40f, -285.0f, 0.4f, 1.8f, 11, 1);
-    add_prop( 12.0f, 1.40f, -285.0f, 0.4f, 1.8f, 11, 1);
-    add_prop( 14.0f, 1.40f, -298.0f, 1.0f, 3.0f, 9, 0); /* Paid Return Portal */
-    add_prop(-48.0f, 1.40f, -365.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
-    add_prop(-48.0f, 1.40f, -365.0f, 2.6f, 0.0f, 10, 3);
-    add_prop( 52.0f, 1.40f, -370.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
-    add_prop( 26.0f, 1.40f, -335.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
-    add_prop(  0.0f, 1.40f, -395.0f, 1.2f, 3.6f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
-    add_npc(-14.0f, 1.40f, -298.0f, 2, 4, "Mercader Nilo", "NILO: Tienda de Supervivencia!");
-    add_camp(-54.0f, 1.40f, -345.0f, 1, 4, 1, -1);
-    add_camp( 54.0f, 1.40f, -355.0f, 2, 4, 0, -1);
+    add_camp(-110.0f, 0.35f, -110.0f, 0, 3, 0, -1);
+    add_camp( 110.0f, 0.35f, -110.0f, 0, 3, 0, -1);
+    add_camp(-110.0f, 0.35f,  110.0f, 0, 3, 0, -1);
+    add_camp( 110.0f, 0.35f,  110.0f, 1, 3, 0, -1);
+    add_camp( -65.0f, 0.00f,  -45.0f, 0, 2, 0, -1);
+    add_camp(  65.0f, 0.00f,   45.0f, 0, 2, 0, -1);
 
-    /* 4. CAMINO DEL ESTE -> DESFILADERO -> CANON CARMESI (x=+58..+480) */
-    add_plat(100.0f, 0.35f, 0.0f, 88.0f, 18.0f, 3.5f, 2, 2);
-    for (int i = 0; i < 3; i++) {
-        float rx = 72.0f + (float)i * 28.0f;
-        add_prop(rx, 0.35f, -7.2f, 0.4f, 1.8f, 11, 2);
-        add_prop(rx, 0.35f,  7.2f, 0.4f, 1.8f, 11, 2);
+    /* 2. GRAN BOSQUE ESMERALDA (West: x=-560..-220, z=-220..+220, 340x440) */
+    add_plat(-390.0f, 0.00f, 0.0f, 340.0f, 440.0f, 4.0f, 0, 1);
+    for (int i = 0; i < 65; i++) {
+        float tx = -240.0f - (float)((i * 53) % 300);
+        float tz = -200.0f + (float)((i * 89) % 400);
+        if (fabsf(tx + 390.0f) < 10.0f && fabsf(tz) < 10.0f) tz += 18.0f;
+        if (fabsf(tx + 468.0f) < 12.0f && fabsf(tz) < 12.0f) tz += 18.0f;
+        add_prop(tx, 0.0f, tz, 1.25f, 3.8f + (float)(i % 3) * 0.45f, 1, 0);
+        if ((i & 1) == 0) add_prop(tx + 2.0f, 0.0f, tz + 1.8f, 1.8f, 0.0f, 10, (i % 4 == 0) ? 2 : 0);
     }
-    add_camp(105.0f, 0.35f, 0.0f, 1, 3, 0, -1);
-    add_plat(180.0f, 0.70f, 0.0f, 84.0f, 48.0f, 4.0f, 2, 2); /* Ruinas del Desfiladero */
-    add_prop(165.0f, 0.70f, -16.0f, 0.7f, 4.0f, 0, 0);
-    add_prop(195.0f, 0.70f,  16.0f, 0.7f, 4.0f, 0, 0);
-    add_camp(182.0f, 0.70f, -6.0f, 2, 4, 0, 14);
-    add_plat(260.0f, 1.05f, 0.0f, 88.0f, 18.0f, 4.0f, 2, 2);
-    add_prop(255.0f, 1.05f, -7.2f, 0.4f, 1.8f, 11, 2);
-    add_prop(255.0f, 1.05f,  7.2f, 0.4f, 1.8f, 11, 2);
-    add_plat(390.0f, 1.40f, 0.0f, 180.0f, 160.0f, 4.5f, 2, 2); /* CANON CARMESI & CAMPAMENTO */
-    add_prop(325.0f, 1.40f, -22.0f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
-    add_prop(336.0f, 1.40f, -12.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal */
-    add_prop(390.0f, 1.40f, -52.0f, 0.7f, 3.2f, 2, 2); /* Obelisk 2 */
-    add_prop(390.0f, 1.40f, -52.0f, 2.8f, 0.0f, 10, 3);
-    add_prop(455.0f, 1.40f,  55.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
-    add_prop(468.0f, 1.40f,   0.0f, 1.2f, 3.6f, 6, 2); /* DUNGEON 2 PORTAL: Forja de Obsidiana */
-    add_prop(462.0f, 1.40f,  -5.0f, 0.4f, 1.8f, 11, 2);
-    add_prop(462.0f, 1.40f,   5.0f, 0.4f, 1.8f, 11, 2);
-    add_npc(325.0f, 1.40f, -12.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada!");
-    add_camp(395.0f, 1.40f, -48.0f, 2, 4, 1, -1);
-    add_camp(410.0f, 1.40f,  48.0f, 2, 4, 1, -1);
-    add_camp(445.0f, 1.40f, -18.0f, 2, 3, 0, -1);
+    add_prop(-390.0f, 0.0f,   0.0f, 0.7f, 3.2f, 2, 0); /* Obelisk 0 */
+    add_prop(-390.0f, 0.0f,   0.0f, 3.2f, 0.0f, 10, 3);
+    add_prop(-455.0f, 0.0f,  90.0f, 0.6f, 0.9f, 3, 1); /* Chest 1 */
+    add_prop(-455.0f, 0.0f, -90.0f, 0.6f, 0.9f, 3, 2); /* Chest 2 */
+    add_prop(-345.0f, 0.0f,  45.0f, 0.55f, 1.8f, 8, 1); /* Clue 1 */
+    add_prop(-468.0f, 0.0f,   0.0f, 1.2f, 3.6f, 6, 0); /* DUNGEON 0 PORTAL */
+    add_prop(-462.0f, 0.0f,  -5.0f, 0.4f, 1.8f, 11, 1);
+    add_prop(-462.0f, 0.0f,   5.0f, 0.4f, 1.8f, 11, 1);
+    add_camp(-320.0f, 0.0f, -110.0f, 1, 4, 1, -1);
+    add_camp(-340.0f, 0.0f,  120.0f, 1, 4, 1, -1);
+    add_camp(-440.0f, 0.0f,  -65.0f, 1, 4, 0, -1);
+    add_camp(-495.0f, 0.0f,   55.0f, 1, 4, 0, -1);
 
-    /* 5. ASCENSO ALPINO -> CIUDADELA ASTRAL (z=-400..-580) */
-    add_plat(0.0f, 1.80f, -435.0f, 16.0f, 70.0f, 4.5f, 4, 3);
-    for (int i = 0; i < 3; i++) {
-        float az = -415.0f - (float)i * 22.0f;
-        add_prop(-6.5f, 1.80f, az, 0.4f, 1.8f, 11, 1);
-        add_prop( 6.5f, 1.80f, az, 0.4f, 1.8f, 11, 1);
+    /* 3. TIERRAS DEL NORTE & LAGO DE LOS ECOS (North: x=-220..+220, z=-480..-220, 440x260) */
+    add_plat(0.0f, 0.35f, -350.0f, 440.0f, 260.0f, 4.5f, 1, 1);
+    add_prop(-22.0f, 0.35f, -305.0f, 2.0f, 2.8f, 5, 4);
+    add_prop( 22.0f, 0.35f, -305.0f, 2.0f, 2.8f, 5, 5);
+    add_prop(  0.0f, 0.35f, -315.0f, 0.7f, 2.5f, 4, 1); /* Lake Crystal */
+    add_prop(  0.0f, 0.35f, -315.0f, 3.0f, 0.0f, 10, 3);
+    add_prop(-12.0f, 0.35f, -285.0f, 0.4f, 1.8f, 11, 1);
+    add_prop( 12.0f, 0.35f, -285.0f, 0.4f, 1.8f, 11, 1);
+    add_prop( 14.0f, 0.35f, -298.0f, 1.0f, 3.0f, 9, 0); /* Paid Return Portal */
+    add_prop(-68.0f, 0.35f, -375.0f, 0.7f, 3.0f, 2, 1); /* Obelisk 1 */
+    add_prop(-68.0f, 0.35f, -375.0f, 2.6f, 0.0f, 10, 3);
+    add_prop( 82.0f, 0.35f, -380.0f, 0.6f, 0.9f, 3, 3); /* Chest 3 */
+    add_prop( 26.0f, 0.35f, -335.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
+    add_prop(  0.0f, 0.35f, -410.0f, 1.2f, 3.6f, 6, 1); /* DUNGEON 1 PORTAL */
+    add_npc(-14.0f, 0.35f, -298.0f, 2, 4, "Mercader Nilo", "NILO: Tienda de Supervivencia!");
+    for (int i = 0; i < 16; i++) {
+        float lx = -195.0f + (float)((i * 71) % 390);
+        float lz = -460.0f + (float)((i * 59) % 210);
+        if (fabsf(lx) < 42.0f && fabsf(lz + 330.0f) < 65.0f) lx += (lx >= 0 ? 60.0f : -60.0f);
+        add_prop(lx, 0.35f, lz, 1.2f, 3.7f, 1, 0);
     }
-    add_plat(0.0f, 2.20f, -520.0f, 120.0f, 110.0f, 5.0f, 4, 3); /* CIUDADELA ASTRAL */
-    add_prop(-28.0f, 2.20f, -490.0f, 0.7f, 4.4f, 2, 3); /* Obelisk 3 */
-    add_prop( 28.0f, 2.20f, -490.0f, 0.7f, 4.4f, 2, 4); /* Obelisk 4 */
-    add_prop(-28.0f, 2.20f, -550.0f, 0.7f, 4.4f, 0, 0);
-    add_prop( 28.0f, 2.20f, -550.0f, 0.7f, 4.4f, 0, 0);
-    add_prop(  0.0f, 2.20f, -560.0f, 0.7f, 2.8f, 4, 2); /* Astral Crystal */
-    add_prop(  0.0f, 2.20f, -530.0f, 4.2f, 0.0f, 10, 3); /* Astral Dragon Sigil */
-    add_prop(-28.0f, 2.20f, -490.0f, 2.4f, 0.0f, 10, 3);
-    add_prop( 28.0f, 2.20f, -490.0f, 2.4f, 0.0f, 10, 3);
-    add_prop(  0.0f, 2.20f, -495.0f, 0.6f, 0.9f, 3, 5); /* Chest 5 */
-    add_enemy( 0.0f, 2.20f, -530.0f, 2, 1, 2); /* Final Sky Dragon Boss */
+    add_camp(-115.0f, 0.35f, -345.0f, 1, 4, 1, 13);
+    add_camp( 115.0f, 0.35f, -355.0f, 2, 4, 0, -1);
 
-    /* 6. FRONTERA SUR & BASTION ANTIGUO (z=+58..+440) */
-    add_plat(0.0f, -0.05f, 105.0f, 18.0f, 96.0f, 3.0f, 1, 0);
-    for (int i = 0; i < 3; i++) {
-        float sz = 75.0f + (float)i * 30.0f;
-        add_prop(-7.2f, -0.05f, sz, 0.4f, 1.8f, 11, 0);
-        add_prop( 7.2f, -0.05f, sz, 0.4f, 1.8f, 11, 0);
+    /* 4. CANON CARMESI & TIERRAS ROJAS (East: x=+220..+560, z=-220..+220, 340x440) */
+    add_plat(390.0f, 0.35f, 0.0f, 340.0f, 440.0f, 4.5f, 2, 2);
+    add_prop(325.0f, 0.35f, -22.0f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
+    add_prop(336.0f, 0.35f, -12.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal */
+    add_prop(390.0f, 0.35f, -82.0f, 0.7f, 3.2f, 2, 2); /* Obelisk 2 */
+    add_prop(390.0f, 0.35f, -82.0f, 2.8f, 0.0f, 10, 3);
+    add_prop(465.0f, 0.35f,  95.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
+    add_prop(468.0f, 0.35f,   0.0f, 1.2f, 3.6f, 6, 2); /* DUNGEON 2 PORTAL */
+    add_prop(462.0f, 0.35f,  -5.0f, 0.4f, 1.8f, 11, 2);
+    add_prop(462.0f, 0.35f,   5.0f, 0.4f, 1.8f, 11, 2);
+    add_npc(325.0f, 0.35f, -12.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada!");
+    for (int i = 0; i < 16; i++) {
+        float rx = 250.0f + (float)((i * 53) % 280);
+        float rz = -190.0f + (float)((i * 89) % 380);
+        if (fabsf(rx - 325.0f) < 30.0f && fabsf(rz + 12.0f) < 30.0f) continue;
+        add_prop(rx, 0.35f, rz, 0.7f, 4.0f, 0, 0);
     }
-    add_camp(0.0f, -0.05f, 110.0f, 0, 3, 0, -1);
-    add_plat(0.0f, 0.0f, 195.0f, 52.0f, 88.0f, 3.0f, 0, 0); /* Torre del Sur */
-    add_prop(-18.0f, 0.0f, 175.0f, 1.2f, 3.6f, 1, 0);
-    add_prop( 18.0f, 0.0f, 215.0f, 1.2f, 3.6f, 1, 0);
-    add_prop(  0.0f, 0.0f, 175.0f, 2.2f, 0.0f, 10, 0);
-    add_camp(0.0f, 0.0f, 195.0f, 1, 4, 1, 15);
-    add_plat(0.0f, -0.05f, 280.0f, 18.0f, 88.0f, 3.0f, 1, 0);
-    add_plat(0.0f, 0.35f, 375.0f, 150.0f, 130.0f, 3.5f, 1, 2); /* BASTION DEL SUR */
+    add_camp(395.0f, 0.35f, -120.0f, 2, 4, 1, 14);
+    add_camp(410.0f, 0.35f,  120.0f, 2, 4, 1, -1);
+    add_camp(480.0f, 0.35f,  -55.0f, 2, 4, 0, -1);
+
+    /* 5. ESTEPAS DEL SUR & BASTION ANTIGUO (South: x=-220..+220, z=+220..+480, 440x260) */
+    add_plat(0.0f, 0.00f, 350.0f, 440.0f, 260.0f, 4.0f, 0, 0);
+    add_plat(0.0f, 0.35f, 375.0f, 130.0f, 110.0f, 3.5f, 1, 2); /* BASTION DEL SUR */
     add_prop(0.0f, 0.35f, 375.0f, 0.7f, 3.4f, 2, 5); /* Obelisk 5 */
     add_prop(0.0f, 0.35f, 375.0f, 3.2f, 0.0f, 10, 3);
     add_prop(24.0f, 0.35f, 340.0f, 1.0f, 3.0f, 9, 2); /* Paid Return Portal */
-    add_camp(-46.0f, 0.35f, 375.0f, 2, 4, 1, -1);
-    add_camp( 46.0f, 0.35f, 375.0f, 2, 4, 1, -1);
+    for (int i = 0; i < 18; i++) {
+        float sx = -195.0f + (float)((i * 61) % 390);
+        float sz =  240.0f + (float)((i * 47) % 210);
+        if (fabsf(sx) < 70.0f && fabsf(sz - 375.0f) < 60.0f) continue;
+        add_prop(sx, 0.0f, sz, 1.2f, 3.6f, 1, 0);
+        add_prop(sx + 2.0f, 0.0f, sz + 1.5f, 1.8f, 0.0f, 10, 0);
+    }
+    add_camp(-120.0f, 0.00f, 350.0f, 1, 4, 1, -1);
+    add_camp( 120.0f, 0.00f, 350.0f, 2, 4, 1, -1);
+
+    /* 6. CUATRO REGIONES DIAGONALES (Cero vacio en todo el continente!) */
+    add_plat(-390.0f, 0.35f, -350.0f, 340.0f, 260.0f, 4.5f, 0, 1); /* Bosque Brumoso NW */
+    for (int i = 0; i < 20; i++) {
+        float bx = -245.0f - (float)((i * 43) % 280);
+        float bz = -245.0f - (float)((i * 61) % 210);
+        add_prop(bx, 0.35f, bz, 1.25f, 3.9f, 1, 0);
+    }
+    add_camp(-380.0f, 0.35f, -340.0f, 1, 4, 1, -1);
+    add_plat( 390.0f, 0.35f, -350.0f, 340.0f, 260.0f, 4.5f, 2, 2); /* Paramos de Obsidiana NE */
+    add_camp( 380.0f, 0.35f, -340.0f, 2, 4, 0, -1);
+    add_plat(-390.0f, 0.00f,  350.0f, 340.0f, 260.0f, 4.0f, 0, 0); /* Praderas SW */
+    for (int i = 0; i < 14; i++) {
+        float wx = -245.0f - (float)((i * 59) % 280);
+        float wz =  245.0f + (float)((i * 47) % 210);
+        add_prop(wx, 0.0f, wz, 1.2f, 3.7f, 1, 0);
+    }
+    add_camp(-380.0f, 0.0f, 340.0f, 1, 4, 1, -1);
+    add_plat( 390.0f, 0.35f,  350.0f, 340.0f, 260.0f, 4.5f, 2, 2); /* Tierras Aridas SE */
+    add_camp( 380.0f, 0.35f, 340.0f, 2, 4, 0, -1);
+
+    /* 7. CIUDADELA ASTRAL (Lejano Norte: z=-590..-480) */
+    add_plat(0.0f, 0.75f, -535.0f, 160.0f, 110.0f, 5.0f, 4, 3);
+    add_prop(-28.0f, 0.75f, -505.0f, 0.7f, 4.4f, 2, 3); /* Obelisk 3 */
+    add_prop( 28.0f, 0.75f, -505.0f, 0.7f, 4.4f, 2, 4); /* Obelisk 4 */
+    add_prop(-28.0f, 0.75f, -560.0f, 0.7f, 4.4f, 0, 0);
+    add_prop( 28.0f, 0.75f, -560.0f, 0.7f, 4.4f, 0, 0);
+    add_prop(  0.0f, 0.75f, -575.0f, 0.7f, 2.8f, 4, 2); /* Astral Crystal */
+    add_prop(  0.0f, 0.75f, -540.0f, 4.2f, 0.0f, 10, 3); /* Astral Dragon Sigil */
+    add_prop(-28.0f, 0.75f, -505.0f, 2.4f, 0.0f, 10, 3);
+    add_prop( 28.0f, 0.75f, -505.0f, 2.4f, 0.0f, 10, 3);
+    add_prop(  0.0f, 0.75f, -500.0f, 0.6f, 0.9f, 3, 5); /* Chest 5 */
+    add_enemy( 0.0f, 0.75f, -540.0f, 2, 1, 2); /* Final Sky Dragon Boss */
 }
 
 static void build_dungeon(int dId) {
@@ -787,8 +781,8 @@ static int is_walkable(float nx, float nz, float *outY) {
     float bestY = -100.0f;
     for (int i = 0; i < nPlats; i++) {
         Platform *p = &plats[i];
-        if (nx >= p->x - p->w * 0.5f && nx <= p->x + p->w * 0.5f &&
-            nz >= p->z - p->d * 0.5f && nz <= p->z + p->d * 0.5f) {
+        if (nx >= p->x - p->w * 0.5f - 0.05f && nx <= p->x + p->w * 0.5f + 0.05f &&
+            nz >= p->z - p->d * 0.5f - 0.05f && nz <= p->z + p->d * 0.5f + 0.05f) {
             if (!found || p->y > bestY) { bestY = p->y; found = 1; }
         }
     }
