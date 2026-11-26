@@ -466,7 +466,8 @@ static int clueFound[6];
 static int cluesCount = 0, trueEnding = 0;
 static int qState[4] = { 0, 0, 0, 0 }; /* 0:Eldon->Nilo, 1:Kael->Vulcan, 2:Lyra, 3:Orin */
 static int qKillsForest = 0, qKillsLake = 0, qKillsCanyon = 0;
-static int heroWood = 0, heroStone = 0, qGather = 0;
+static int heroWood = 0, heroStone = 0, qGather = 0, treesChopped = 0, rocksMined = 0;
+static int harvestT = 0, harvestMaxT = 45, harvestIdx = -1;
 
 static int get_npc_marker(int nid) {
     /* 1=Yellow ! (New), 2=Silver ? (Active), 3=Gold ? (Turn-in Ready) */
@@ -572,7 +573,7 @@ static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, fireOpen 
 
 typedef struct {
     unsigned int magic;
-    int lv, xp, gold, coins, potions, food, water, elixirs, campfires, wood, stone, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
+    int lv, xp, gold, coins, potions, food, water, elixirs, campfires, wood, stone, trees, rocks, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
     float hunger, thirst, sleep, clockHour, maxStam;
     int chests[16], obelisks[12], dngs[3], clueArr[6], qSt[4], qF, qL, qC;
 } SaveData;
@@ -582,7 +583,7 @@ static void save_game(void) {
     sd.magic = 0xAE7E2026u;
     sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.coins = heroCoins;
     sd.potions = heroPotions; sd.food = heroFood; sd.water = heroWater; sd.elixirs = heroElixirs;
-    sd.campfires = heroCampfires; sd.wood = heroWood; sd.stone = heroStone; sd.qG = qGather;
+    sd.campfires = heroCampfires; sd.wood = heroWood; sd.stone = heroStone; sd.trees = treesChopped; sd.rocks = rocksMined; sd.qG = qGather;
     sd.hunger = heroHunger; sd.thirst = heroThirst; sd.sleep = heroSleep; sd.clockHour = gameClockHour; sd.maxStam = heroMaxStam;
     sd.atk = heroAtk; sd.maxHp = heroMaxHp; sd.forge = forgeCount; sd.furor = furorCharge;
     sd.clues = cluesCount; sd.runes = runesLit; sd.keys = keysFound; sd.relics = heroRelics;
@@ -606,7 +607,7 @@ static int load_game(void) {
     if (rd != (int)sizeof(sd) || sd.magic != 0xAE7E2026u) return 0;
     heroLv = sd.lv; heroXp = sd.xp; heroGold = sd.gold; heroCoins = sd.coins;
     heroPotions = sd.potions; heroFood = sd.food; heroWater = sd.water; heroElixirs = sd.elixirs;
-    heroCampfires = sd.campfires; heroWood = sd.wood; heroStone = sd.stone; qGather = sd.qG;
+    heroCampfires = sd.campfires; heroWood = sd.wood; heroStone = sd.stone; treesChopped = sd.trees; rocksMined = sd.rocks; qGather = sd.qG;
     heroHunger = sd.hunger; heroThirst = sd.thirst; heroSleep = sd.sleep; gameClockHour = sd.clockHour;
     heroMaxStam = (sd.maxStam >= 35.0f && sd.maxStam <= 100.0f) ? sd.maxStam : 100.0f;
     heroStam = heroMaxStam;
@@ -1008,6 +1009,7 @@ static void build_dungeon(int dId) {
 }
 
 static int harvest_nearby(void) {
+    if (harvestT > 0) return 1;
     int best = -1; float bestD2 = 10.5f;
     for (int i = 0; i < nProps; i++) {
         if (props[i].active) continue;
@@ -1017,26 +1019,19 @@ static int harvest_nearby(void) {
         if (d2 < bestD2) { bestD2 = d2; best = i; }
     }
     if (best < 0) return 0;
-    props[best].active = 1;
     int isTree = (props[best].kind == 1);
-    int amt = ((isTree && heroX < -220.0f) || (!isTree && heroX > 220.0f)) ? 2 : 1;
-    if (isTree) {
-        heroWood += amt;
-        snprintf(dialogMsg, sizeof(dialogMsg), "TALADO! +%d Madera (Total %d)", amt, heroWood);
-        play_sfx(310.0f, 900);
-    } else {
-        heroStone += amt;
-        snprintf(dialogMsg, sizeof(dialogMsg), "PICADO! +%d Piedra (Total %d)", amt, heroStone);
-        play_sfx(640.0f, 800);
-    }
-    heroXp += 4;
-    dialogT = 95;
-    camShake = 0.22f;
+    float bonusPct = (float)((isTree ? treesChopped : rocksMined) / 10) * 0.1f;
+    int dur = (int)(45.0f / (1.0f + bonusPct * 0.01f) + 0.5f);
+    if (dur < 10) dur = 10;
+    harvestIdx = best;
+    harvestMaxT = dur;
+    harvestT = dur;
+    play_sfx(isTree ? 310.0f : 640.0f, 650);
     unsigned int pcol = isTree ? ABGR(175, 130, 75, 255) : ABGR(185, 195, 205, 255);
-    for (int s = 0; s < 8; s++)
+    for (int s = 0; s < 5; s++)
         spawn_part(props[best].x, props[best].y + 0.8f, props[best].z,
-                   frand(-0.08f, 0.08f), frand(0.05f, 0.14f), frand(-0.08f, 0.08f),
-                   20.0f, 0.36f, pcol);
+                   frand(-0.07f, 0.07f), frand(0.04f, 0.12f), frand(-0.07f, 0.07f),
+                   16.0f, 0.32f, pcol);
     return 1;
 }
 
@@ -1402,7 +1397,8 @@ int main(void) {
                 heroPotions = 2; heroFood = 1; heroWater = 1; heroElixirs = 1; heroCampfires = 0;
                 heroHunger = 100.0f; heroThirst = 100.0f; heroSleep = 100.0f; gameClockHour = 8.0f;
                 heroMaxStam = 100.0f; heroStam = 100.0f;
-                heroWood = 0; heroStone = 0; qGather = 0;
+                heroWood = 0; heroStone = 0; treesChopped = 0; rocksMined = 0; qGather = 0;
+                harvestT = 0; harvestIdx = -1;
                 shopOpen = 0; menuOpen = 0; fireOpen = 0; guideOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
                 furorCharge = 40; cluesCount = 0; runesLit = 0; keysFound = 0;
@@ -1691,6 +1687,47 @@ int main(void) {
             if (bannerT > 0) bannerT--;
             if (dialogT > 0) dialogT--;
             if (atkT > 0) atkT--;
+            if (harvestT > 0) {
+                if (harvestIdx < 0 || harvestIdx >= nProps || props[harvestIdx].active || dashT > 0) {
+                    harvestT = 0; harvestIdx = -1;
+                } else {
+                    float hdx = props[harvestIdx].x - heroX, hdz = props[harvestIdx].z - heroZ;
+                    if (hdx * hdx + hdz * hdz > 16.0f) {
+                        harvestT = 0; harvestIdx = -1;
+                    } else {
+                        harvestT--;
+                        if ((harvestT % 14) == 7) play_sfx(props[harvestIdx].kind == 1 ? 300.0f : 610.0f, 450);
+                        if (harvestT == 0) {
+                            props[harvestIdx].active = 1;
+                            int isTree = (props[harvestIdx].kind == 1);
+                            int amt = ((isTree && heroX < -220.0f) || (!isTree && heroX > 220.0f)) ? 2 : 1;
+                            if (isTree) {
+                                heroWood += amt;
+                                treesChopped++;
+                                if ((treesChopped % 10) == 0)
+                                    snprintf(dialogMsg, sizeof(dialogMsg), "TALA +0.1%% VELOCIDAD! (Total +%.1f%% | Mad:%d)", (float)(treesChopped / 10) * 0.1f, heroWood);
+                                else
+                                    snprintf(dialogMsg, sizeof(dialogMsg), "TALADO! +%d Madera (Total %d)", amt, heroWood);
+                                play_sfx(340.0f, 950);
+                            } else {
+                                heroStone += amt;
+                                rocksMined++;
+                                if ((rocksMined % 10) == 0)
+                                    snprintf(dialogMsg, sizeof(dialogMsg), "MINERIA +0.1%% VELOCIDAD! (Total +%.1f%% | Pied:%d)", (float)(rocksMined / 10) * 0.1f, heroStone);
+                                else
+                                    snprintf(dialogMsg, sizeof(dialogMsg), "PICADO! +%d Piedra (Total %d)", amt, heroStone);
+                                play_sfx(680.0f, 850);
+                            }
+                            heroXp += 4; dialogT = 105; camShake = 0.22f;
+                            unsigned int pcol = isTree ? ABGR(175, 130, 75, 255) : ABGR(185, 195, 205, 255);
+                            for (int s = 0; s < 8; s++)
+                                spawn_part(props[harvestIdx].x, props[harvestIdx].y + 0.8f, props[harvestIdx].z,
+                                           frand(-0.08f, 0.08f), frand(0.05f, 0.14f), frand(-0.08f, 0.08f), 20.0f, 0.36f, pcol);
+                            harvestIdx = -1;
+                        }
+                    }
+                }
+            }
             if (heavyT > 0) heavyT--;
             if (pulseT > 0) pulseT--;
             if (invulnT > 0) invulnT--;
@@ -3020,6 +3057,16 @@ int main(void) {
             gu_window2d(6, 246, 468, 20);
             gu_text2d(12, 252, "X:ATACAR/TALAR []:DASH /\\:PULSO O:INTERACT SELECT:DIARIO START:INV/GUARDAR", ABGR(200, 225, 255, 255), 1);
 
+            if (harvestT > 0 && harvestIdx >= 0 && harvestIdx < nProps) {
+                int isT = (props[harvestIdx].kind == 1);
+                float spPct = (float)((isT ? treesChopped : rocksMined) / 10) * 0.1f;
+                int prog = ((harvestMaxT - harvestT) * 140) / (harvestMaxT > 0 ? harvestMaxT : 1);
+                gu_window2d(160, 174, 160, 26);
+                snprintf(buf, sizeof(buf), "%s (+%.1f%%)", isT ? "TALANDO..." : "PICANDO...", spPct);
+                gu_text2d(172, 179, buf, ABGR(255, 230, 110, 255), 1);
+                gu_rect2d(170, 190, 140, 5, ABGR(20, 24, 40, 255));
+                gu_rect2d(170, 190, prog, 5, isT ? ABGR(120, 235, 110, 255) : ABGR(145, 215, 255, 255));
+            }
             if (bannerT > 0) {
                 gu_window2d(108, 8, 224, 24);
                 gu_text2d(116, 16, bannerMsg, ABGR(255, 230, 110, 255), 1);
@@ -3065,6 +3112,8 @@ int main(void) {
                 gu_text2d(38, 45, buf, ABGR(145, 245, 255, 255), 1);
                 snprintf(buf, sizeof(buf), "LLAVES:%d/3 PISTAS:%d/6 COM:%d%% SED:%d%% SUENO:%d%%", keysFound, cluesCount, (int)heroHunger, (int)heroThirst, (int)heroSleep);
                 gu_text2d(38, 57, buf, ABGR(200, 230, 255, 255), 1);
+                snprintf(buf, sizeof(buf), "VEL.TALA:+%.1f%% (%d) | VEL.MINA:+%.1f%% (%d)", (float)(treesChopped / 10) * 0.1f, treesChopped, (float)(rocksMined / 10) * 0.1f, rocksMined);
+                gu_text2d(38, 67, buf, ABGR(160, 255, 185, 255), 1);
                 char mItems[7][64];
                 snprintf(mItems[0], 64, "USAR POCION CURATIVA (+60 HP)      [Tienes: %d]", heroPotions);
                 snprintf(mItems[1], 64, "COMER RACION VIAJE (+50%% Com,+20HP) [Tienes: %d]", heroFood);
