@@ -332,8 +332,8 @@ typedef struct {
 } Particle3D;
 
 #define MAX_PLATS 160
-#define MAX_PROPS 360
-#define MAX_ENEMIES 72
+#define MAX_PROPS 480
+#define MAX_ENEMIES 120
 #define MAX_NPCS 12
 #define MAX_PARTS 140
 
@@ -523,6 +523,20 @@ static void spawn_part(float x, float y, float z, float vx, float vy, float vz, 
     }
 }
 
+static void add_camp(float cx, float cy, float cz, int tier, int count, int hasHouse, int chestId) {
+    if (hasHouse) add_prop(cx, cy, cz, 2.0f, 2.8f, 5, 9);
+    else add_prop(cx, cy, cz, 0.65f, 2.2f, 0, 0); /* Campfire / Ruin marker */
+    add_prop(cx - 3.8f, cy, cz - 3.2f, 0.55f, 2.6f, 0, 0);
+    add_prop(cx + 3.8f, cy, cz + 3.2f, 0.55f, 2.6f, 0, 0);
+    if (chestId >= 0) add_prop(cx + 2.2f, cy, cz - 2.0f, 0.6f, 0.9f, 3, chestId);
+    for (int i = 0; i < count; i++) {
+        float ang = ((float)i / (float)count) * 6.28318f + 0.4f;
+        float rad = 4.8f + (float)(i & 1) * 1.6f;
+        int k = (tier + (i == 0 && tier > 0 ? 0 : 0)) % 3;
+        add_enemy(cx + cosf(ang) * rad, cy, cz + sinf(ang) * rad, k, 0, 0);
+    }
+}
+
 static void build_overworld(void) {
     nPlats = 0; nProps = 0; nEnemies = 0; nNpcs = 0;
     worldMode = 0;
@@ -548,15 +562,19 @@ static void build_overworld(void) {
         float ang = (float)i * 0.7854f + 0.38f;
         add_prop(cosf(ang) * 44.0f, 0.0f, sinf(ang) * 44.0f, 1.2f, 3.8f, 1, 0);
     }
+    /* Realistic Frontier Patrols outside Pueblo del Alba safe zone */
+    add_camp(-44.0f, 0.0f, -34.0f, 0, 2, 0, -1);
+    add_camp( 44.0f, 0.0f,  34.0f, 0, 2, 0, -1);
+    add_camp( 44.0f, 0.0f, -40.0f, 0, 3, 0, -1);
+    add_camp(-44.0f, 0.0f,  40.0f, 0, 3, 0, -1);
 
     /* 2. CAMINO DEL OESTE -> LLANURAS DEL VIENTO -> BOSQUE ESMERALDA (x=-58..-480) */
     add_plat(-100.0f, 0.0f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
+    add_camp(-105.0f, 0.0f, 2.0f, 0, 3, 0, -1);
     add_plat(-180.0f, 0.0f, 0.0f, 84.0f, 44.0f, 3.0f, 0, 1); /* Torre de Vigia Oeste */
-    add_prop(-180.0f, 0.0f, -14.0f, 2.0f, 3.0f, 5, 7);
-    add_prop(-188.0f, 0.0f, -14.0f, 0.6f, 0.9f, 3, 12); /* Watchtower Chest */
-    add_enemy(-172.0f, 0.0f, 10.0f, 0, 0, 0);
-    add_enemy(-186.0f, 0.0f,  8.0f, 1, 0, 0);
+    add_camp(-182.0f, 0.0f, -10.0f, 1, 3, 1, 12);
     add_plat(-260.0f, 0.0f, 0.0f, 88.0f, 18.0f, 3.0f, 1, 1);
+    add_camp(-265.0f, 0.0f, -2.0f, 1, 3, 0, -1);
     add_plat(-390.0f, 0.0f, 0.0f, 180.0f, 180.0f, 4.0f, 0, 1); /* BOSQUE ESMERALDA GIGANTE */
     for (int i = 0; i < 18; i++) {
         float tx = -320.0f - (float)((i * 29) % 135);
@@ -569,20 +587,15 @@ static void build_overworld(void) {
     add_prop(-455.0f, 0.0f, -58.0f, 0.6f, 0.9f, 3, 2); /* Chest 2 */
     add_prop(-345.0f, 0.0f,  35.0f, 0.55f, 1.8f, 8, 1); /* Clue 1 */
     add_prop(-468.0f, 0.0f,  0.0f, 1.2f, 3.6f, 6, 0); /* DUNGEON 0 PORTAL: Templo del Bosque */
-    add_enemy(-340.0f, 0.0f, -24.0f, 0, 0, 0);
-    add_enemy(-365.0f, 0.0f,  28.0f, 0, 0, 0);
-    add_enemy(-410.0f, 0.0f, -35.0f, 1, 0, 0);
-    add_enemy(-425.0f, 0.0f,  32.0f, 1, 0, 0);
-    add_enemy(-445.0f, 0.0f,  -8.0f, 1, 0, 0);
+    add_camp(-355.0f, 0.0f, -52.0f, 1, 4, 1, -1);
+    add_camp(-365.0f, 0.0f,  56.0f, 1, 4, 1, -1);
+    add_camp(-435.0f, 0.0f, -42.0f, 1, 4, 0, -1);
 
     /* 3. CAMINO DEL NORTE -> PASO DE LA GARGANTA -> LAGO DE LOS ECOS (z=-58..-410) */
     add_plat(0.0f, 0.5f, -100.0f, 18.0f, 88.0f, 3.5f, 1, 1);
+    add_camp(0.0f, 0.5f, -105.0f, 1, 3, 0, -1);
     add_plat(0.0f, 1.0f, -180.0f, 48.0f, 84.0f, 4.0f, 1, 1); /* Paso de la Garganta */
-    add_prop(-16.0f, 1.0f, -175.0f, 0.6f, 3.4f, 0, 0);
-    add_prop( 16.0f, 1.0f, -185.0f, 0.6f, 3.4f, 0, 0);
-    add_prop( 18.0f, 1.0f, -180.0f, 0.6f, 0.9f, 3, 13);
-    add_enemy(-10.0f, 1.0f, -180.0f, 1, 0, 0);
-    add_enemy( 10.0f, 1.0f, -190.0f, 1, 0, 0);
+    add_camp(0.0f, 1.0f, -182.0f, 1, 4, 0, 13);
     add_plat(0.0f, 1.5f, -255.0f, 18.0f, 78.0f, 4.0f, 1, 1);
     add_plat(0.0f, 2.0f, -340.0f, 160.0f, 130.0f, 4.5f, 1, 1); /* LAGO DE LOS ECOS & ALDEA LACUSTRE */
     add_prop(-22.0f, 2.0f, -305.0f, 2.0f, 2.8f, 5, 4);
@@ -594,34 +607,25 @@ static void build_overworld(void) {
     add_prop( 26.0f, 2.0f, -335.0f, 0.55f, 1.8f, 8, 3); /* Clue 3 */
     add_prop(  0.0f, 2.0f, -395.0f, 1.2f, 3.6f, 6, 1); /* DUNGEON 1 PORTAL: Ruinas del Agua */
     add_npc(-14.0f, 2.0f, -298.0f, 2, 4, "Mercader Nilo", "NILO: Tienda de Supervivencia!");
-    add_enemy(-32.0f, 2.0f, -345.0f, 1, 0, 0);
-    add_enemy( 34.0f, 2.0f, -352.0f, 1, 0, 0);
-    add_enemy(-18.0f, 2.0f, -375.0f, 2, 0, 0);
-    add_enemy( 22.0f, 2.0f, -378.0f, 1, 0, 0);
+    add_camp(-54.0f, 2.0f, -345.0f, 1, 4, 1, -1);
+    add_camp( 54.0f, 2.0f, -355.0f, 2, 4, 0, -1);
 
     /* 4. CAMINO DEL ESTE -> DESFILADERO -> CANON CARMESI (x=+58..+480) */
     add_plat(100.0f, 0.5f, 0.0f, 88.0f, 18.0f, 3.5f, 2, 2);
+    add_camp(105.0f, 0.5f, 0.0f, 1, 3, 0, -1);
     add_plat(180.0f, 1.0f, 0.0f, 84.0f, 48.0f, 4.0f, 2, 2); /* Ruinas del Desfiladero */
-    add_prop(175.0f, 1.0f, -16.0f, 0.6f, 3.4f, 0, 0);
-    add_prop(185.0f, 1.0f,  16.0f, 0.6f, 3.4f, 0, 0);
-    add_prop(182.0f, 1.0f, -18.0f, 0.6f, 0.9f, 3, 14);
-    add_enemy(175.0f, 1.0f,  8.0f, 1, 0, 0);
-    add_enemy(192.0f, 1.0f, -9.0f, 2, 0, 0);
+    add_camp(182.0f, 1.0f, -6.0f, 2, 4, 0, 14);
     add_plat(260.0f, 1.5f, 0.0f, 88.0f, 18.0f, 4.0f, 2, 2);
     add_plat(390.0f, 2.0f, 0.0f, 180.0f, 160.0f, 4.5f, 2, 2); /* CANON CARMESI & CAMPAMENTO */
     add_prop(325.0f, 2.0f, -22.0f, 2.0f, 2.8f, 5, 6); /* Mining Outpost */
     add_prop(336.0f, 2.0f, -12.0f, 1.0f, 3.0f, 9, 1); /* Paid Return Portal */
-    add_prop(355.0f, 2.0f,  45.0f, 0.6f, 3.4f, 0, 0);
-    add_prop(430.0f, 2.0f, -45.0f, 0.6f, 3.4f, 0, 0);
-    add_prop(430.0f, 2.0f,  45.0f, 0.6f, 3.4f, 0, 0);
     add_prop(390.0f, 2.0f, -52.0f, 0.7f, 3.2f, 2, 2); /* Obelisk 2 */
     add_prop(455.0f, 2.0f,  55.0f, 0.6f, 0.9f, 3, 4); /* Chest 4 */
     add_prop(468.0f, 2.0f,   0.0f, 1.2f, 3.6f, 6, 2); /* DUNGEON 2 PORTAL: Forja de Obsidiana */
     add_npc(325.0f, 2.0f, -12.0f, 1, 5, "Forjador Vulcan", "VULCAN: Forjar Espada!");
-    add_enemy(365.0f, 2.0f,  25.0f, 2, 0, 0);
-    add_enemy(405.0f, 2.0f, -28.0f, 2, 0, 0);
-    add_enemy(420.0f, 2.0f,  30.0f, 1, 0, 0);
-    add_enemy(445.0f, 2.0f, -14.0f, 2, 0, 0);
+    add_camp(395.0f, 2.0f, -48.0f, 2, 4, 1, -1);
+    add_camp(410.0f, 2.0f,  48.0f, 2, 4, 1, -1);
+    add_camp(445.0f, 2.0f, -18.0f, 2, 3, 0, -1);
 
     /* 5. ASCENSO ALPINO -> CIUDADELA ASTRAL (z=-400..-580) */
     add_plat(0.0f, 3.0f, -435.0f, 16.0f, 70.0f, 4.5f, 4, 3);
@@ -636,20 +640,15 @@ static void build_overworld(void) {
 
     /* 6. FRONTERA SUR & BASTION ANTIGUO (z=+58..+440) */
     add_plat(0.0f, 0.0f, 105.0f, 18.0f, 96.0f, 3.0f, 1, 0);
+    add_camp(0.0f, 0.0f, 110.0f, 0, 3, 0, -1);
     add_plat(0.0f, 0.0f, 195.0f, 52.0f, 88.0f, 3.0f, 0, 0); /* Torre del Sur */
-    add_prop(-16.0f, 0.0f, 190.0f, 2.0f, 3.0f, 5, 8);
-    add_prop( 18.0f, 0.0f, 200.0f, 0.6f, 0.9f, 3, 15);
-    add_enemy(-8.0f, 0.0f, 195.0f, 0, 0, 0);
-    add_enemy(12.0f, 0.0f, 205.0f, 1, 0, 0);
+    add_camp(0.0f, 0.0f, 195.0f, 1, 4, 1, 15);
     add_plat(0.0f, 0.0f, 280.0f, 18.0f, 88.0f, 3.0f, 1, 0);
     add_plat(0.0f, 0.5f, 375.0f, 150.0f, 130.0f, 3.5f, 1, 2); /* BASTION DEL SUR */
     add_prop(0.0f, 0.5f, 375.0f, 0.7f, 3.4f, 2, 5); /* Obelisk 5 */
-    add_prop(-22.0f, 0.5f, 355.0f, 0.6f, 3.6f, 0, 0);
-    add_prop( 22.0f, 0.5f, 355.0f, 0.6f, 3.6f, 0, 0);
-    add_prop( 24.0f, 0.5f, 340.0f, 1.0f, 3.0f, 9, 2); /* Paid Return Portal */
-    add_enemy(-30.0f, 0.5f, 385.0f, 1, 0, 0);
-    add_enemy( 30.0f, 0.5f, 385.0f, 2, 0, 0);
-    add_enemy(  0.0f, 0.5f, 410.0f, 2, 0, 0);
+    add_prop(24.0f, 0.5f, 340.0f, 1.0f, 3.0f, 9, 2); /* Paid Return Portal */
+    add_camp(-46.0f, 0.5f, 375.0f, 2, 4, 1, -1);
+    add_camp( 46.0f, 0.5f, 375.0f, 2, 4, 1, -1);
 }
 
 static void build_dungeon(int dId) {
@@ -1533,6 +1532,7 @@ int main(void) {
                 }
                 if (e->flash > 0) e->flash--;
                 float dx = heroX - e->x, dz = heroZ - e->z;
+                if (dx * dx + dz * dz > 2500.0f) continue;
                 float d = sqrtf(dx * dx + dz * dz);
                 float trigDist = e->isBoss ? 3.8f : 2.5f;
 
