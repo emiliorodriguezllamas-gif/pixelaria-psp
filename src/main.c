@@ -393,12 +393,12 @@ static const char *clueTitles[6] = {
     "PISTA 6/6: VOLUNTAD DE VAELEN"
 };
 static const char *clueText[6][3] = {
-    { "Hace mil anos, Aetheria no flotaba por magia...", "Sino por el Canto de tres Corazones de Cristal.", "Busca los otros fragmentos por las islas." },
-    { "Vi al Arconte Vaelen llorar ante este templo.", "Me dijo: 'El Dragon no es un monstruo...", "Es el Guardian que sostiene el cielo sobre nosotros.'" },
-    { "La primera grieta no vino del abismo inferior.", "Alguien rompio los Sellos Astrales desde dentro", "intentando robar el poder de la inmortalidad." },
-    { "Los pescadores oyeron un latido bajo el agua.", "La corrupcion del Dragon no nace de la maldad,", "sino de una herida oscura que nadie ha curado." },
-    { "Vaelen intento fusionar su alma con la Forja", "para reescribir el pacto antiguo del cielo...", "Pero la Sombra devoro su mente y silencio el mundo." },
-    { "Si lees esto, Portador del Wisp, escuchame:", "NO mates al Dragon Astral con la espada.", "Con las 3 Llaves, pulsa /\\ ante el para PURIFICARLO!" }
+    { "Hace mil anos, Aetheria era un solo continente...", "Sostenido por tres Corazones de Cristal en los Templos.", "Sigue los 4 caminos para descubrir las demas tablillas." },
+    { "Vi al Arconte Vaelen cruzar la Torre de Vigia Oeste.", "Me dijo: 'El Dragon no es un monstruo...", "Es el Guardian que sostiene el cielo sobre nosotros.'" },
+    { "La grieta no vino de las fronteras del Sur.", "Alguien rompio los Sellos Astrales desde dentro", "intentando robar el poder de la inmortalidad." },
+    { "En Aldea Lacustre oyeron un latido bajo el agua.", "La corrupcion del Dragon no nace de la maldad,", "sino de una herida oscura que nadie ha curado." },
+    { "Vaelen cruzo el Desfiladero hasta la Forja Carmesi", "para reescribir el pacto antiguo del cielo...", "Pero la Sombra devoro su mente y silencio el mundo." },
+    { "Si lees esto, Portador del Wisp, escuchame:", "NO mates al Dragon en la Ciudadela Astral.", "Con las 3 Llaves, pulsa /\\ ante el para PURIFICARLO!" }
 };
 
 static void show_story(const char *t, const char *l1, const char *l2, const char *l3) {
@@ -1073,15 +1073,22 @@ int main(void) {
         } else {
             int zone = get_current_zone();
             curZoneAudio = zone;
-            if (worldMode == 0 && zone != prevZone) {
-                prevZone = zone;
-                static const char *zNames[4] = {
-                    "PUEBLO DEL ALBA - REFUGIO CELESTE",
-                    "BOSQUE Y LAGO DE LOS ECOS",
-                    "CANON CARMESI - FORJA ANTIGUA",
-                    "CIUDADELA ASTRAL - CIMA DEL CIELO"
+            int reg = zone;
+            if (worldMode == 0) {
+                if (heroZ > 150.0f) reg = 4;
+                else if (heroX < -140.0f) reg = 5;
+            }
+            if (worldMode == 0 && reg != prevZone) {
+                prevZone = reg;
+                static const char *rNames[6] = {
+                    "PUEBLO DEL ALBA - LLANURAS CENTRALES",
+                    "CAMINO DEL NORTE - LAGO DE LOS ECOS",
+                    "CANON CARMESI - TIERRAS DEL ESTE",
+                    "CIUDADELA ASTRAL - CIMA DEL NORTE",
+                    "FRONTERA SUR - BASTION ANTIGUO",
+                    "CAMINO DEL OESTE - BOSQUE ESMERALDA"
                 };
-                snprintf(bannerMsg, sizeof(bannerMsg), "%s", zNames[zone]);
+                snprintf(bannerMsg, sizeof(bannerMsg), "%s", rNames[reg]);
                 bannerT = 140;
             }
             if (bannerT > 0) bannerT--;
@@ -1177,13 +1184,13 @@ int main(void) {
                     snprintf(jl2, sizeof(jl2), "MISION CUMPLIDA: El Dragon ha sido purificado!");
                     snprintf(jl3, sizeof(jl3), "Aetheria vuelve a elevarse libre por los cielos.");
                 } else if (keysFound < 3) {
-                    snprintf(jl2, sizeof(jl2), "Explora los portales (O) del Oeste, Norte y Este.");
-                    snprintf(jl3, sizeof(jl3), "Lee las Tablillas (O) para saber la verdad de Vaelen.");
+                    snprintf(jl2, sizeof(jl2), "Recorre los caminos del Oeste, Norte y Este.");
+                    snprintf(jl3, sizeof(jl3), "Lleva raciones; explora campamentos y Tablillas.");
                 } else if (cluesCount >= 6) {
-                    snprintf(jl2, sizeof(jl2), "VERDAD REVELADA: Sube a la Ciudadela del Norte.");
+                    snprintf(jl2, sizeof(jl2), "VERDAD REVELADA: Sube el Ascenso Alpino (Norte).");
                     snprintf(jl3, sizeof(jl3), "Pulsa /\\ ante el Dragon para PURIFICARLO!");
                 } else {
-                    snprintf(jl2, sizeof(jl2), "Tienes las 3 Llaves! Sube a la Ciudadela del Norte.");
+                    snprintf(jl2, sizeof(jl2), "Tienes las 3 Llaves! Sube a la Ciudadela (Norte).");
                     snprintf(jl3, sizeof(jl3), "O busca las pistas restantes (%d/6) antes de luchar.", cluesCount);
                 }
                 show_story("DIARIO DE INVESTIGACION", jl1, jl2, jl3);
@@ -1380,14 +1387,14 @@ int main(void) {
                         if (nid == 0) { /* Alcalde Eldon */
                             if (qState[0] == 0) {
                                 qState[0] = 1;
-                                show_story("MISION: SUMINISTROS DEL LAGO (Eldon)",
-                                    "Mi hermano desaparecio cuando el Lago se oscurecio...",
-                                    "Lleva mi Sello al Mercader NILO en la Aldea del Norte.",
-                                    "El sabe que paso bajo las aguas. (Recompensa: 45 Oro)");
+                                show_story("MISION: RUTA DEL NORTE (Eldon)",
+                                    "Los campamentos cortaron el Paso de la Garganta...",
+                                    "Lleva mi Sello a NILO en Aldea Lacustre (Norte).",
+                                    "Compra raciones antes de partir! (+45 Oro, +20 Mon)");
                             } else if (cluesCount >= 4) {
-                                show_story("ALCALDE ELDON", "Vimos a Vaelen llevar un diapason negro al Templo...", "Si lo que dicen las tablillas es cierto, el Dragon", "es nuestro protector. Ten cuidado en la cima!");
+                                show_story("ALCALDE ELDON", "Vimos a Vaelen cruzar las llanuras hacia el Norte...", "Si lo que dicen las tablillas es cierto, el Dragon", "es nuestro protector. Ten cuidado en la Ciudadela!");
                             } else {
-                                show_story("ALCALDE ELDON", "Las islas se hunden desde que la Campana callo.", "Lleva mi Sello a NILO al Norte y busca las 3 Llaves.", "Lee tambien las 6 Tablillas antiguas!");
+                                show_story("ALCALDE ELDON", "El continente tiembla desde que la Campana callo.", "Lleva mi Sello a NILO (Norte) y busca las 3 Llaves.", "El Bastion del Sur tambien guarda reliquias!");
                             }
                             play_sfx(780.0f, 1100);
                         } else if (nid == 4) { /* Mercader Nilo (Aldea Lacustre) */
@@ -1414,9 +1421,9 @@ int main(void) {
                             if (qState[1] == 0) {
                                 qState[1] = 1;
                                 show_story("MISION: LA CARTA DEL APRENDIZ (Kael)",
-                                    "Mi maestro VULCAN marcho al Canon Carmesi del Este",
-                                    "buscando Acero Estelar, y no hemos vuelto a verlo.",
-                                    "Llevale esta carta! (Pasa el puente del Este)");
+                                    "Mi maestro VULCAN cruzo el Desfiladero del Este",
+                                    "hacia el Canon Carmesi, rodeado de campamentos.",
+                                    "Llevale esta carta por el Camino del Este!");
                                 play_sfx(780.0f, 1100);
                             } else if (heroGold >= forge_cost()) {
                                 heroGold -= forge_cost(); forgeCount++; heroAtk += 4;
@@ -1453,10 +1460,10 @@ int main(void) {
                         } else if (nid == 2) { /* Alquimista Lyra */
                             if (qState[2] == 0) {
                                 qState[2] = 1;
-                                show_story("MISION: ESENCIA DEL BOSQUE (Lyra)",
-                                    "Las luciernagas del Bosque del Oeste estan mutando!",
-                                    "Derrota 2 monstruos alli e ilumina el Obelisco (/\\)",
-                                    "para devolver la calma al bosque. (+3 Poc, +2 Rac)");
+                                show_story("MISION: SOMBRAS DEL BOSQUE (Lyra)",
+                                    "Saquearon la Torre de Vigia y el Bosque Esmeralda!",
+                                    "Cruza el Camino del Oeste, vence 2 enemigos alli",
+                                    "e ilumina su Obelisco (/\\). (+3 Poc, +2 Rac, +25M)");
                                 play_sfx(780.0f, 1100);
                             } else if (qState[2] == 2) {
                                 qState[2] = 3; heroPotions += 3; heroFood += 2; heroCoins += 25; heroMaxHp += 15; heroHp = heroMaxHp;
