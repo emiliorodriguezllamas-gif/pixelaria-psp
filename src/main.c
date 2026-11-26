@@ -5,6 +5,7 @@
 #include <pspgum.h>
 #include <pspaudio.h>
 #include <psppower.h>
+#include <psprtc.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,7 +65,13 @@ typedef struct {
     short x, y, z;
 } VtxCol2D;
 
+typedef struct {
+    unsigned int color;
+    float x, y, z;
+} VtxCol3D;
+
 #define VTYPE_3D     (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
+#define VTYPE_COL3D  (GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D)
 #define VTYPE_2D     (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D)
 #define VTYPE_COL2D  (GU_COLOR_8888 | GU_VERTEX_16BIT | GU_TRANSFORM_2D)
 
@@ -656,6 +663,15 @@ static int is_walkable(float nx, float nz, float *outY) {
     }
     if (found) *outY = bestY;
     return found;
+}
+
+static unsigned int lerp_abgr(unsigned int a, unsigned int b, float t) {
+    int ar = a & 0xFF, ag = (a >> 8) & 0xFF, ab = (a >> 16) & 0xFF;
+    int br = b & 0xFF, bg = (b >> 8) & 0xFF, bb = (b >> 16) & 0xFF;
+    int rr = ar + (int)((br - ar) * t);
+    int rg = ag + (int)((bg - ag) * t);
+    int rb = ab + (int)((bb - ab) * t);
+    return ABGR(rr, rg, rb, 255);
 }
 
 static unsigned int shade_vtx(float vx, float vy, float vz, unsigned int baseCol) {
@@ -1537,25 +1553,63 @@ int main(void) {
 
         /* ==================== HARDWARE GU 3D RENDER ==================== */
         int curZone = get_current_zone();
-        static const unsigned int skyCols[4] = {
-            ABGR(38, 108, 178, 255),
-            ABGR(26, 76, 132, 255),
-            ABGR(96, 38, 68, 255),
-            ABGR(14, 16, 48, 255)
+        pspTime pspNow;
+        int curHour = 12, curMin = 0;
+        if (sceRtcGetCurrentClockLocalTime(&pspNow) >= 0) {
+            curHour = pspNow.hour;
+            curMin = pspNow.minutes;
+        }
+        float dayHour = (float)curHour + (float)curMin / 60.0f;
+
+        /* Time-of-day palette interpolation: Dawn, Day, Sunset, Night */
+        static const unsigned int cHor[4] = {
+            ABGR(255, 168, 108, 255), /* 0: Dawn */
+            ABGR(140, 210, 252, 255), /* 1: Day */
+            ABGR(255, 122,  72, 255), /* 2: Sunset */
+            ABGR( 18,  28,  64, 255)  /* 3: Night */
         };
-        static const unsigned int fogCols[4] = {
-            0xFFB26C26u, 0xFF844C1Au, 0xFF442660u, 0xFF30100Eu
+        static const unsigned int cMid[4] = {
+            ABGR(165, 118, 172, 255),
+            ABGR( 62, 148, 232, 255),
+            ABGR(146,  64, 132, 255),
+            ABGR( 10,  16,  44, 255)
         };
+        static const unsigned int cZen[4] = {
+            ABGR( 46,  72, 142, 255),
+            ABGR( 22,  76, 174, 255),
+            ABGR( 26,  30,  84, 255),
+            ABGR(  4,   7,  22, 255)
+        };
+        int pA = 3, pB = 3; float pt = 0.0f;
+        if (dayHour >= 5.0f && dayHour < 8.0f) {
+            pA = 3; pB = 0; pt = (dayHour - 5.0f) / 3.0f;
+        } else if (dayHour >= 8.0f && dayHour < 10.5f) {
+            pA = 0; pB = 1; pt = (dayHour - 8.0f) / 2.5f;
+        } else if (dayHour >= 10.5f && dayHour < 16.5f) {
+            pA = 1; pB = 1; pt = 0.0f;
+        } else if (dayHour >= 16.5f && dayHour < 19.5f) {
+            pA = 1; pB = 2; pt = (dayHour - 16.5f) / 3.0f;
+        } else if (dayHour >= 19.5f && dayHour < 21.5f) {
+            pA = 2; pB = 3; pt = (dayHour - 19.5f) / 2.0f;
+        } else {
+            pA = 3; pB = 3; pt = 0.0f;
+        }
+        unsigned int skyHor = lerp_abgr(cHor[pA], cHor[pB], pt);
+        unsigned int skyMid = lerp_abgr(cMid[pA], cMid[pB], pt);
+        unsigned int skyZen = lerp_abgr(cZen[pA], cZen[pB], pt);
+        /* Subtle zone atmosphere blend (crimson canyon / astral citadel) */
+        if (curZone == 2) skyHor = lerp_abgr(skyHor, ABGR(180, 78, 86, 255), 0.28f);
+        else if (curZone == 3) skyZen = lerp_abgr(skyZen, ABGR(16, 14, 48, 255), 0.35f);
+
+        float nightFactor = 0.0f;
+        if (dayHour < 5.5f || dayHour >= 20.5f) nightFactor = 1.0f;
+        else if (dayHour < 8.0f) nightFactor = 1.0f - (dayHour - 5.5f) / 2.5f;
+        else if (dayHour >= 18.0f) nightFactor = (dayHour - 18.0f) / 2.5f;
 
         sceGuStart(GU_DIRECT, gulist);
-        sceGuClearColor(worldMode == 1 ? ABGR(12, 10, 24, 255) : skyCols[curZone]);
+        sceGuClearColor(worldMode == 1 ? ABGR(12, 10, 24, 255) : skyHor);
         sceGuClearDepth(0);
         sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
-
-        sceGuEnable(GU_DEPTH_TEST);
-        sceGuEnable(GU_CLIP_PLANES);
-        sceGuEnable(GU_FOG);
-        sceGuFog(22.0f, 68.0f, worldMode == 1 ? 0xFF180A0Cu : fogCols[curZone]);
 
         sceGumMatrixMode(GU_PROJECTION);
         sceGumLoadIdentity();
@@ -1573,6 +1627,94 @@ int main(void) {
         sceGumMatrixMode(GU_MODEL);
         sceGumLoadIdentity();
 
+        /* Beautiful Gradient Sky Dome + Sun/Moon + Stars + Clouds (Overworld) */
+        if (worldMode == 0) {
+            sceGuDisable(GU_DEPTH_TEST);
+            sceGuDisable(GU_FOG);
+            sceGuDisable(GU_TEXTURE_2D);
+
+            const int segs = 16;
+            const float radH = 78.0f, radM = 68.0f;
+            float baseY = eye.y - 6.0f;
+            VtxCol3D *sv = (VtxCol3D *)sceGuGetMemory(segs * 12 * sizeof(VtxCol3D));
+            int sk = 0;
+            for (int i = 0; i < segs; i++) {
+                float a0 = ((float)i / (float)segs) * 6.283185f;
+                float a1 = ((float)(i + 1) / (float)segs) * 6.283185f;
+                float c0 = cosf(a0), s0 = sinf(a0), c1 = cosf(a1), s1 = sinf(a1);
+                float x0h = eye.x + c0 * radH, z0h = eye.z + s0 * radH;
+                float x1h = eye.x + c1 * radH, z1h = eye.z + s1 * radH;
+                float x0m = eye.x + c0 * radM, z0m = eye.z + s0 * radM;
+                float x1m = eye.x + c1 * radM, z1m = eye.z + s1 * radM;
+                float yH = baseY + 2.0f, yM = baseY + 24.0f, yZ = baseY + 58.0f;
+                /* Horizon -> Mid band */
+                sv[sk++] = (VtxCol3D){ skyHor, x0h, yH, z0h };
+                sv[sk++] = (VtxCol3D){ skyHor, x1h, yH, z1h };
+                sv[sk++] = (VtxCol3D){ skyMid, x1m, yM, z1m };
+                sv[sk++] = (VtxCol3D){ skyHor, x0h, yH, z0h };
+                sv[sk++] = (VtxCol3D){ skyMid, x1m, yM, z1m };
+                sv[sk++] = (VtxCol3D){ skyMid, x0m, yM, z0m };
+                /* Mid -> Zenith cap */
+                sv[sk++] = (VtxCol3D){ skyMid, x0m, yM, z0m };
+                sv[sk++] = (VtxCol3D){ skyMid, x1m, yM, z1m };
+                sv[sk++] = (VtxCol3D){ skyZen, eye.x, yZ, eye.z };
+            }
+            sceGumDrawArray(GU_TRIANGLES, VTYPE_COL3D, sk, 0, sv);
+
+            /* Twinkling Stars when nightFactor > 0.05 */
+            if (nightFactor > 0.05f) {
+                for (int st = 0; st < 40; st++) {
+                    float az = (float)st * 2.39996f;
+                    float el = 0.18f + ((float)((st * 37) % 100) / 100.0f) * 0.72f;
+                    float cr = cosf(el) * 70.0f;
+                    float sx = eye.x + cosf(az) * cr;
+                    float sy = baseY + 4.0f + sinf(el) * 52.0f;
+                    float sz = eye.z + sinf(az) * cr;
+                    float tw = 0.65f + 0.35f * sinf((float)animFrame * 0.08f + (float)st * 1.7f);
+                    int sa = (int)(nightFactor * tw * 245.0f);
+                    float ssz = ((st % 5) == 0) ? 1.55f : 0.95f;
+                    draw_billboard(sx, sy, sz, ssz, ssz, texSoftGlow, ABGR(220, 235, 255, sa), 0, camYaw);
+                }
+            }
+
+            /* Sun & Moon orbiting by console clock */
+            float sunAng = ((dayHour - 6.0f) / 12.0f) * 3.141592f;
+            float sunSin = sinf(sunAng), sunCos = cosf(sunAng);
+            if (sunSin > -0.15f) {
+                float sx = eye.x + sunCos * 64.0f;
+                float sy = baseY + 6.0f + sunSin * 46.0f;
+                float sz = eye.z - 22.0f;
+                draw_billboard(sx, sy, sz, 11.5f, 11.5f, texSoftGlow, ABGR(255, 210, 110, 145), 0, camYaw);
+                draw_billboard(sx, sy, sz, 5.2f, 5.2f, texSoftGlow, ABGR(255, 248, 200, 255), 0, camYaw);
+            }
+            float moonSin = -sunSin, moonCos = -sunCos;
+            if (moonSin > -0.15f) {
+                float mx = eye.x + moonCos * 64.0f;
+                float my = baseY + 6.0f + moonSin * 46.0f;
+                float mz = eye.z - 22.0f;
+                draw_billboard(mx, my, mz, 9.0f, 9.0f, texSoftGlow, ABGR(140, 185, 255, 130), 0, camYaw);
+                draw_billboard(mx, my, mz, 4.2f, 4.2f, texSoftGlow, ABGR(230, 242, 255, 250), 0, camYaw);
+            }
+
+            /* Drifting Soft Sky Clouds */
+            unsigned int cldCol = (nightFactor > 0.5f) ? ABGR(95, 115, 165, 110) :
+                                  ((pA == 0 || pB == 2) ? ABGR(255, 205, 185, 145) : ABGR(245, 250, 255, 155));
+            for (int c = 0; c < 18; c++) {
+                float ca = (float)c * 0.349f + (float)animFrame * 0.0005f;
+                float dist = 36.0f + (float)((c * 13) % 28);
+                float cx = eye.x + cosf(ca) * dist;
+                float cz = eye.z + sinf(ca) * dist;
+                float cy = baseY + 18.0f + (float)(c % 4) * 3.5f;
+                float cw = 12.0f + (float)(c % 3) * 4.0f;
+                draw_billboard(cx, cy, cz, cw, cw * 0.42f, texSoftGlow, cldCol, 0, camYaw);
+            }
+        }
+
+        sceGuEnable(GU_DEPTH_TEST);
+        sceGuEnable(GU_CLIP_PLANES);
+        sceGuEnable(GU_FOG);
+        sceGuFog(22.0f, 72.0f, worldMode == 1 ? 0xFF180A0Cu : skyHor);
+
         /* Sky-Sea below Islands (Overworld only) */
         if (worldMode == 0) {
             float wOff = (float)(animFrame % 256) / 256.0f;
@@ -1583,7 +1725,8 @@ int main(void) {
             sceGuTexFilter(GU_LINEAR, GU_LINEAR);
             sceGuTexWrap(GU_REPEAT, GU_REPEAT);
             Vtx3D *wv = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
-            unsigned int wc = ABGR(190, 225, 255, 190);
+            unsigned int wc = lerp_abgr(ABGR(190, 225, 255, 255), skyHor, 0.35f);
+            wc = (wc & 0x00FFFFFFu) | (190u << 24);
             wv[0] = (Vtx3D){ 0 + wOff,  0 + wOff,  wc, heroX - 60, -3.5f, heroZ - 60 };
             wv[1] = (Vtx3D){ 16 + wOff, 0 + wOff,  wc, heroX + 60, -3.5f, heroZ - 60 };
             wv[2] = (Vtx3D){ 16 + wOff, 16 + wOff, wc, heroX + 60, -3.5f, heroZ + 60 };
@@ -1769,6 +1912,10 @@ int main(void) {
             gu_window2d(336, 6, 64, 20);
             snprintf(buf, sizeof(buf), "FPS:%2d", curFps);
             gu_text2d(344, 12, buf, curFps >= 55 ? ABGR(110, 255, 140, 255) : ABGR(255, 225, 90, 255), 1);
+
+            gu_window2d(336, 28, 64, 20);
+            snprintf(buf, sizeof(buf), "%02d:%02d", curHour, curMin);
+            gu_text2d(349, 34, buf, (nightFactor > 0.5f) ? ABGR(160, 205, 255, 255) : ABGR(255, 230, 120, 255), 1);
 
             gu_window2d(6, 246, 468, 20);
             gu_text2d(12, 252, "X:ESPADA []:DASH /\\:PULSO O:TIENDA/ENTRAR SELECT:DIARIO START:USAR", ABGR(200, 225, 255, 255), 1);
