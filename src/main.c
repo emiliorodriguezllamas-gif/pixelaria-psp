@@ -1301,7 +1301,7 @@ int main(void) {
             float mag = sqrtf(ax * ax + ay * ay);
             if (mag > 1.0f) { ax /= mag; ay /= mag; }
 
-            float spd = 0.34f;
+            float spd = 0.17f;
             float fwdX = -sinf(camYaw), fwdZ = -cosf(camYaw);
             float rgtX =  cosf(camYaw), rgtZ = -sinf(camYaw);
             float mvX = (rgtX * ax + fwdX * (-ay));
@@ -1309,7 +1309,7 @@ int main(void) {
 
             if (dashT > 0) {
                 dashT--;
-                mvX = dashDx * 0.58f; mvZ = dashDz * 0.58f;
+                mvX = dashDx * 0.30f; mvZ = dashDz * 0.30f;
                 if ((animFrame & 1) == 0)
                     spawn_part(heroX, heroY + 0.6f, heroZ, 0, 0.02f, 0, 14.0f, 0.45f, ABGR(130, 235, 255, 210));
             } else {
