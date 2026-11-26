@@ -313,9 +313,9 @@ typedef struct {
 } Npc3D;
 
 typedef struct {
-    float x, y, z;
+    float x, y, z, homeX, homeY, homeZ;
     int hp, maxHp, kind, alive, flash, cd, isBoss, bossId;
-    int state, timer; /* 0=chase, 1=windup(telegraph), 2=recovery */
+    int state, timer, respawnT; /* 0=chase, 1=windup(telegraph), 2=recovery */
     float atkX, atkZ, atkRad;
 } Enemy3D;
 
@@ -404,7 +404,8 @@ static void show_story(const char *t, const char *l1, const char *l2, const char
 static float heroX = 0.0f, heroY = 0.0f, heroZ = 6.0f, heroYaw = 3.14159f;
 static float saveOvX = 0.0f, saveOvY = 0.0f, saveOvZ = 6.0f;
 static float camYaw = 0.0f;
-static int heroFlip = 0, heroHp = 130, heroMaxHp = 130, heroAtk = 22;
+static int heroFlip = 0, heroHp = 100, heroMaxHp = 100, heroAtk = 12, forgeCount = 0;
+static int forge_cost(void) { return 40 + 35 * forgeCount + 15 * forgeCount * forgeCount; }
 static float heroStam = 100.0f, heroMaxStam = 100.0f;
 static int stamDelay = 0, heavyT = 0;
 
@@ -418,7 +419,7 @@ static int ghActive = 0, ghSpawned = 0, ghSpawnT = 0, ghHits = 0;
 static float ghMult = 1.5f;
 static char ghJudge[32] = "";
 static int ghJudgeT = 0;
-static int heroGold = 40, heroPotions = 2, heroLv = 1, heroXp = 0;
+static int heroGold = 25, heroPotions = 2, heroLv = 1, heroXp = 0;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
 static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
 static float dashDx = 0.0f, dashDz = 0.0f;
@@ -449,8 +450,10 @@ static void add_npc(float x, float y, float z, int role, int nid, const char *na
 
 static void add_enemy(float x, float y, float z, int kind, int isBoss, int bossId) {
     if (nEnemies >= MAX_ENEMIES) return;
-    int hp = isBoss ? (180 + bossId * 110) : (45 + kind * 28);
-    enemies[nEnemies++] = (Enemy3D){ x, y, z, hp, hp, kind, 1, 0, 0, isBoss, bossId, 0, 0, x, z, isBoss ? 3.2f : 1.9f };
+    static const int mobHpTbl[3]  = { 85, 210, 460 };
+    static const int bossHpTbl[3] = { 650, 1250, 2600 };
+    int hp = isBoss ? bossHpTbl[bossId % 3] : mobHpTbl[kind % 3];
+    enemies[nEnemies++] = (Enemy3D){ x, y, z, x, y, z, hp, hp, kind, 1, 0, 0, isBoss, bossId, 0, 0, 0, x, z, isBoss ? 3.2f : 2.0f };
 }
 
 static void spawn_part(float x, float y, float z, float vx, float vy, float vz, float life, float sz, unsigned int col) {
@@ -1013,19 +1016,24 @@ int main(void) {
                                        22.0f, 0.35f, ABGR(255, 120, 80, 255));
                         if (enemies[i].hp <= 0) {
                             enemies[i].alive = 0;
+                            if (!enemies[i].isBoss) enemies[i].respawnT = 600;
                             furorCharge += 34; if (furorCharge > 100) furorCharge = 100;
                             if (enemies[i].x < -18.0f) { qKillsForest++; if (qState[2] == 1 && qKillsForest >= 2 && obeliskLit[0]) qState[2] = 2; }
                             if (enemies[i].z < -18.0f && enemies[i].x > -18.0f) { qKillsLake++; if (qState[0] == 2 && qKillsLake >= 2) qState[0] = 3; }
                             if (enemies[i].x > 18.0f) { qKillsCanyon++; if (qState[1] == 2 && qKillsCanyon >= 2) qState[1] = 3; }
-                            int goldDrop = enemies[i].isBoss ? 50 : (12 + enemies[i].kind * 6);
-                            int xpGain = enemies[i].isBoss ? 80 : (20 + enemies[i].kind * 10);
+                            static const int mobGold[3] = { 10, 22, 40 };
+                            static const int mobXp[3]   = { 14, 30, 55 };
+                            int goldDrop = enemies[i].isBoss ? (80 + enemies[i].bossId * 50) : mobGold[enemies[i].kind % 3];
+                            int xpGain = enemies[i].isBoss ? (160 + enemies[i].bossId * 120) : mobXp[enemies[i].kind % 3];
                             heroGold += goldDrop;
                             heroXp += xpGain;
-                            if (heroXp >= heroLv * 50) {
-                                heroXp -= heroLv * 50;
+                            if (!enemies[i].isBoss && (xr() % 5) == 0) { heroPotions++; }
+                            int xpNeed = 80 * heroLv * heroLv;
+                            if (heroXp >= xpNeed) {
+                                heroXp -= xpNeed;
                                 heroLv++;
-                                heroMaxHp += 15; heroHp = heroMaxHp; heroAtk += 4;
-                                snprintf(dialogMsg, sizeof(dialogMsg), "SUBES A NIVEL %d! +15 HP y +4 ATK", heroLv);
+                                heroMaxHp += 12; heroHp = heroMaxHp; heroAtk += 3;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "SUBES A NIVEL %d! +12 HP y +3 ATK", heroLv);
                                 dialogT = 150;
                             }
                             if (enemies[i].isBoss) {
@@ -1159,12 +1167,12 @@ int main(void) {
                                     "buscando Acero Estelar, y no hemos vuelto a verlo.",
                                     "Llevale esta carta! (Pasa el puente del Este)");
                                 play_sfx(780.0f, 1100);
-                            } else if (heroGold >= 30) {
-                                heroGold -= 30; heroAtk += 6;
-                                snprintf(dialogMsg, sizeof(dialogMsg), "KAEL: Espada forjada! (+6 ATK, Total %d)", heroAtk);
+                            } else if (heroGold >= forge_cost()) {
+                                heroGold -= forge_cost(); forgeCount++; heroAtk += 4;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "KAEL: Espada forjada! (+4 ATK, Total %d, Prox %dg)", heroAtk, forge_cost());
                                 play_sfx(1050.0f, 1600);
                             } else {
-                                snprintf(dialogMsg, sizeof(dialogMsg), "KAEL: Lleva mi carta a VULCAN al Este, o forja (+6 ATK, 30g).");
+                                snprintf(dialogMsg, sizeof(dialogMsg), "KAEL: Lleva carta a VULCAN o forja (+4 ATK por %dg).", forge_cost());
                                 play_sfx(740.0f, 900);
                             }
                         } else if (nid == 5) { /* Forjador Vulcan (Canon Carmesi) */
@@ -1183,12 +1191,12 @@ int main(void) {
                                     "Vi a Vaelen entrar en la Forja de Obsidiana...",
                                     "Si consigues las 3 Llaves, busca la verdad!");
                                 play_sfx(1150.0f, 2000);
-                            } else if (heroGold >= 30) {
-                                heroGold -= 30; heroAtk += 6;
-                                snprintf(dialogMsg, sizeof(dialogMsg), "VULCAN: Filo templado! (+6 ATK, Total %d)", heroAtk);
+                            } else if (heroGold >= forge_cost()) {
+                                heroGold -= forge_cost(); forgeCount++; heroAtk += 4;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "VULCAN: Filo templado! (+4 ATK, Total %d, Prox %dg)", heroAtk, forge_cost());
                                 play_sfx(1050.0f, 1600);
                             } else {
-                                snprintf(dialogMsg, sizeof(dialogMsg), "VULCAN: Forjar (+6 ATK, 30g) | Canon: %d/2 enemigos", qKillsCanyon);
+                                snprintf(dialogMsg, sizeof(dialogMsg), "VULCAN: Forjar (+4 ATK, %dg) | Canon: %d/2 enemigos", forge_cost(), qKillsCanyon);
                                 play_sfx(740.0f, 900);
                             }
                         } else if (nid == 2) { /* Alquimista Lyra */
@@ -1278,10 +1286,24 @@ int main(void) {
                 }
             }
 
-            /* Update Enemies (Dark Souls State Machine: Chase -> Telegraph Windup -> Strike -> Recovery) */
+            /* Update Enemies (Respawn for Farming + Dark Souls Telegraph AI) */
             for (int i = 0; i < nEnemies; i++) {
                 Enemy3D *e = &enemies[i];
-                if (!e->alive) continue;
+                if (!e->alive) {
+                    if (!e->isBoss && e->respawnT > 0) {
+                        e->respawnT--;
+                        if (e->respawnT == 0) {
+                            float hx = heroX - e->homeX, hz = heroZ - e->homeZ;
+                            if (hx * hx + hz * hz > 100.0f) {
+                                e->x = e->homeX; e->y = e->homeY; e->z = e->homeZ;
+                                e->hp = e->maxHp; e->alive = 1; e->state = 0; e->flash = 0;
+                            } else {
+                                e->respawnT = 120;
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if (e->flash > 0) e->flash--;
                 float dx = heroX - e->x, dz = heroZ - e->z;
                 float d = sqrtf(dx * dx + dz * dz);
@@ -1310,15 +1332,19 @@ int main(void) {
                                        20.0f, 0.42f, ABGR(255, 65, 55, 255));
                         float hdx = heroX - e->atkX, hdz = heroZ - e->atkZ;
                         if (sqrtf(hdx * hdx + hdz * hdz) <= e->atkRad && invulnT == 0) {
-                            int dmg = e->isBoss ? (22 + e->bossId * 6) : (12 + e->kind * 4);
+                            static const int mobDmg[3]  = { 18, 32, 52 };
+                            static const int bossDmg[3] = { 48, 70, 105 };
+                            int dmg = e->isBoss ? bossDmg[e->bossId % 3] : mobDmg[e->kind % 3];
                             heroHp -= dmg;
                             heroFlash = 10; invulnT = 28;
                             play_sfx(150.0f, 1200);
                             if (heroHp <= 0) {
                                 if (worldMode == 1) build_overworld();
+                                int lostG = heroGold / 4;
+                                heroGold -= lostG;
                                 heroHp = heroMaxHp; heroX = 0.0f; heroY = 0.0f; heroZ = 4.0f;
-                                snprintf(dialogMsg, sizeof(dialogMsg), "EL SANTUARIO DEL ALBA TE HA RESCATADO!");
-                                dialogT = 160;
+                                snprintf(dialogMsg, sizeof(dialogMsg), "CAIDO! Pierdes %d Oro y vuelves al Santuario!", lostG);
+                                dialogT = 180;
                             }
                         } else {
                             play_sfx(220.0f, 700);
