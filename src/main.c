@@ -568,7 +568,7 @@ static int dashT = 0, atkT = 0, pulseT = 0, invulnT = 0, heroFlash = 0;
 static float dashDx = 0.0f, dashDz = 0.0f;
 static int worldMode = 0; /* 0=Overworld, 1=Dungeon */
 static int curDungeon = 0, dngRunes = 0, hasSave = 0;
-static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, hungerTick = 0;
+static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, fireOpen = 0, fireCursor = 0, hungerTick = 0;
 
 typedef struct {
     unsigned int magic;
@@ -1351,7 +1351,7 @@ int main(void) {
                 heroPotions = 2; heroFood = 1; heroWater = 1; heroElixirs = 1; heroCampfires = 0;
                 heroHunger = 100.0f; heroThirst = 100.0f; heroSleep = 100.0f; gameClockHour = 8.0f;
                 heroWood = 0; heroStone = 0; qGather = 0;
-                shopOpen = 0; hungerTick = 0;
+                shopOpen = 0; menuOpen = 0; fireOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
                 furorCharge = 40; cluesCount = 0; runesLit = 0; keysFound = 0;
                 heroRelics = 0; trueEnding = 0;
@@ -1482,6 +1482,26 @@ int main(void) {
                         play_sfx(200.0f, 600);
                     }
                     dialogT = 140;
+                }
+            }
+        } else if (fireOpen) {
+            if (pressed & (PSP_CTRL_UP | PSP_CTRL_DOWN)) { fireCursor ^= 1; play_sfx(520.0f, 400); }
+            if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { fireOpen = 0; play_sfx(420.0f, 500); }
+            if (pressed & PSP_CTRL_CROSS) {
+                if (fireCursor == 0) {
+                    gameClockHour = 7.0f;
+                    heroSleep = 100.0f;
+                    heroHp = heroMaxHp; heroStam = heroMaxStam;
+                    for (int s = 0; s < 14; s++)
+                        spawn_part(heroX, heroY + 0.6f, heroZ, frand(-0.08f, 0.08f), frand(0.06f, 0.16f), frand(-0.08f, 0.08f), 30.0f, 0.45f, ABGR(255, 195, 70, 255));
+                    fireOpen = 0;
+                    snprintf(dialogMsg, sizeof(dialogMsg), "HAS DORMIDO HASTA LAS 07:00! Sueno, HP y Estamina al 100%%.");
+                    dialogT = 150; play_sfx(960.0f, 1500);
+                } else {
+                    save_game();
+                    fireOpen = 0;
+                    snprintf(dialogMsg, sizeof(dialogMsg), "PARTIDA GUARDADA EN LA HOGUERA! (NV.%d)", heroLv);
+                    dialogT = 150; play_sfx(1040.0f, 1600);
                 }
             }
         } else if (ghActive) {
@@ -2040,14 +2060,8 @@ int main(void) {
                             snprintf(dialogMsg, sizeof(dialogMsg), "VIDA Y ESTAMINA RESTAURADAS! (Pon una Hoguera para guardar)");
                             dialogT = 150; play_sfx(880.0f, 1400); acted = 1;
                         } else if (props[i].kind == 15) {
-                            gameClockHour = 7.0f;
-                            heroSleep = 100.0f;
-                            heroHp = heroMaxHp; heroStam = heroMaxStam;
-                            for (int s = 0; s < 14; s++)
-                                spawn_part(props[i].x, props[i].y + 0.6f, props[i].z, frand(-0.08f, 0.08f), frand(0.06f, 0.16f), frand(-0.08f, 0.08f), 30.0f, 0.45f, ABGR(255, 195, 70, 255));
-                            save_game();
-                            snprintf(dialogMsg, sizeof(dialogMsg), "DESCANSAS Y PERNOCTAS (07:00) - SUENO 100%% - PARTIDA GUARDADA!");
-                            dialogT = 170; play_sfx(1040.0f, 1800); acted = 1;
+                            fireOpen = 1; fireCursor = 0;
+                            play_sfx(780.0f, 800); acted = 1;
                         } else if (props[i].kind == 9) {
                             if (heroGold >= 25) {
                                 heroGold -= 25;
@@ -2943,6 +2957,22 @@ int main(void) {
                     gu_text2d(40, ry, buf, col, 1);
                 }
                 gu_text2d(72, 214, "[ARRIBA/ABAJO] ELEGIR  [X] USAR/CREAR  [O/START] SALIR", ABGR(145, 240, 255, 255), 1);
+            }
+            if (fireOpen) {
+                gu_window2d(64, 84, 352, 102);
+                snprintf(buf, sizeof(buf), "HOGUERA DEL VIAJERO  |  SUENO: %d%%  (%02d:%02d)", (int)heroSleep, curHour, curMin);
+                gu_text2d(78, 96, buf, ABGR(255, 195, 95, 255), 1);
+                const char *fOpts[2] = {
+                    "DORMIR Y PERNOCTAR (Amanecer 07:00, Sueno/HP 100%)",
+                    "GUARDAR PARTIDA EN LA CONSOLA"
+                };
+                for (int f = 0; f < 2; f++) {
+                    int ry = 120 + f * 22;
+                    if (f == fireCursor) gu_rect2d(74, ry - 3, 332, 16, ABGR(55, 85, 145, 210));
+                    snprintf(buf, sizeof(buf), "%s %s", (f == fireCursor) ? ">" : " ", fOpts[f]);
+                    gu_text2d(78, ry, buf, f == 0 ? ABGR(195, 175, 255, 255) : ABGR(120, 255, 165, 255), 1);
+                }
+                gu_text2d(92, 168, "[ARRIBA/ABAJO] ELEGIR   [X] CONFIRMAR   [O] SALIR", ABGR(145, 240, 255, 255), 1);
             }
             if (ghActive) {
                 gu_window2d(140, 52, 200, 186);
