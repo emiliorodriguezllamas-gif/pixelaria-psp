@@ -89,6 +89,7 @@ static unsigned int __attribute__((aligned(16))) texNpc[64 * 64];
 static unsigned int __attribute__((aligned(16))) texMob[3][64 * 64];
 static unsigned int __attribute__((aligned(16))) texBoss[3][64 * 64];
 static unsigned int __attribute__((aligned(16))) texSoftGlow[64 * 64];
+static unsigned int __attribute__((aligned(16))) texAnimal[4][32 * 32];
 static unsigned int __attribute__((aligned(16))) texFont[128 * 64];
 
 static void upscale_spr_to_64(const unsigned int *src, int sw, int sh, unsigned int *dst) {
@@ -101,6 +102,11 @@ static void upscale_spr_to_64(const unsigned int *src, int sw, int sh, unsigned 
             else dst[y * 64 + x] = c | 0xFF000000u;
         }
     }
+}
+
+static void pxA(int id, int x0, int y0, int x1, int y1, unsigned int c) {
+    for (int y = y0; y <= y1; y++) for (int x = x0; x <= x1; x++)
+        if (x >= 0 && x < 32 && y >= 0 && y < 32) texAnimal[id][y * 32 + x] = c;
 }
 
 static void build_textures(void) {
@@ -158,6 +164,47 @@ static void build_textures(void) {
     memcpy(texBoss[2], boss_dragon, 64 * 64 * 4);
 
     memset(texFont, 0, sizeof(texFont));
+    /* Build 4 crisp 32x32 pixel-art wildlife sprites: 0=Rabbit, 1=Fox, 2=Deer, 3=Bird */
+    memset(texAnimal, 0, sizeof(texAnimal));
+    /* 0: Rabbit (White/Cream with long ears) */
+    pxA(0, 10, 16, 21, 26, ABGR(245, 240, 232, 255));
+    pxA(0, 18, 12, 25, 19, ABGR(250, 245, 238, 255));
+    pxA(0, 19,  4, 21, 12, ABGR(240, 230, 225, 255));
+    pxA(0, 22,  5, 24, 12, ABGR(240, 200, 205, 255));
+    pxA(0,  7, 21, 10, 25, ABGR(255, 255, 255, 255));
+    pxA(0, 23, 14, 24, 15, ABGR( 35,  25,  30, 255));
+    pxA(0, 11, 27, 14, 29, ABGR(220, 210, 200, 255));
+    pxA(0, 18, 27, 21, 29, ABGR(220, 210, 200, 255));
+    /* 1: Fox (Vibrant Orange with white chest & tail tip) */
+    pxA(1,  9, 15, 22, 23, ABGR(235, 105,  35, 255));
+    pxA(1, 19, 10, 27, 17, ABGR(245, 115,  40, 255));
+    pxA(1, 20,  6, 22, 10, ABGR(215,  85,  25, 255));
+    pxA(1, 24,  6, 26, 10, ABGR( 40,  25,  20, 255));
+    pxA(1, 20, 16, 24, 21, ABGR(250, 245, 235, 255));
+    pxA(1,  3, 16,  9, 21, ABGR(235, 105,  35, 255));
+    pxA(1,  2, 17,  5, 20, ABGR(255, 250, 245, 255));
+    pxA(1, 25, 12, 26, 13, ABGR( 25,  20,  20, 255));
+    pxA(1, 10, 24, 12, 29, ABGR( 45,  30,  25, 255));
+    pxA(1, 19, 24, 21, 29, ABGR( 45,  30,  25, 255));
+    /* 2: Deer (Warm Brown Stag with Antlers) */
+    pxA(2,  7, 14, 22, 22, ABGR(165, 105,  55, 255));
+    pxA(2, 11, 19, 19, 22, ABGR(225, 205, 175, 255));
+    pxA(2, 20,  8, 25, 16, ABGR(175, 115,  65, 255));
+    pxA(2, 22,  7, 29, 11, ABGR(185, 125,  72, 255));
+    pxA(2, 21,  2, 22,  7, ABGR(215, 195, 155, 255));
+    pxA(2, 24,  1, 25,  7, ABGR(215, 195, 155, 255));
+    pxA(2, 19,  3, 26,  4, ABGR(215, 195, 155, 255));
+    pxA(2, 26,  8, 27,  9, ABGR( 25,  20,  20, 255));
+    pxA(2,  8, 23, 10, 30, ABGR(135,  80,  40, 255));
+    pxA(2, 19, 23, 21, 30, ABGR(135,  80,  40, 255));
+    /* 3: Bird (Sky-blue & Gold Songbird with Wings) */
+    pxA(3, 10, 14, 21, 22, ABGR( 75, 175, 245, 255));
+    pxA(3, 12, 18, 20, 22, ABGR(245, 215, 110, 255));
+    pxA(3, 18, 10, 24, 16, ABGR( 85, 190, 255, 255));
+    pxA(3, 24, 12, 28, 14, ABGR(255, 190,  45, 255));
+    pxA(3,  6, 13, 11, 17, ABGR( 55, 140, 215, 255));
+    pxA(3, 11,  8, 18, 14, ABGR(135, 220, 255, 255));
+    pxA(3, 21, 11, 22, 12, ABGR( 20,  20,  30, 255));
     for (int ch = 0; ch < 96; ch++) {
         int gx = (ch % 16) * 8;
         int gy = (ch / 16) * 8;
@@ -332,11 +379,17 @@ typedef struct {
     unsigned int col;
 } Particle3D;
 
+typedef struct {
+    float x, y, z, vx, vy, vz, groundY;
+    int kind, active, state, timer, flip; /* 0=Rabbit, 1=Fox, 2=Deer, 3=Bird */
+} Animal3D;
+
 #define MAX_PLATS 160
 #define MAX_PROPS 2600
 #define MAX_ENEMIES 120
 #define MAX_NPCS 12
 #define MAX_PARTS 140
+#define MAX_ANIMALS 24
 
 static Platform plats[MAX_PLATS];
 static int nPlats = 0;
@@ -347,6 +400,7 @@ static int nEnemies = 0;
 static Npc3D npcs[MAX_NPCS];
 static int nNpcs = 0;
 static Particle3D parts[MAX_PARTS];
+static Animal3D animals[MAX_ANIMALS];
 
 /* Persistent Adventure State */
 static int chestOpened[16];
@@ -961,6 +1015,28 @@ static void draw_billboard(float x, float y, float z, float w, float h, const un
     (void)camAngle;
     bind_tex64(tex, 0, 0);
 
+    float rx = curCamCos * (w * 0.5f), rz = -curCamSin * (w * 0.5f);
+    float u0 = flipX ? 1.0f : 0.0f, u1 = flipX ? 0.0f : 1.0f;
+    Vtx3D *v = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
+    v[0] = (Vtx3D){ u0, 0.0f, col, x - rx, y + h, z - rz };
+    v[1] = (Vtx3D){ u1, 0.0f, col, x + rx, y + h, z + rz };
+    v[2] = (Vtx3D){ u1, 1.0f, col, x + rx, y,     z + rz };
+    v[3] = (Vtx3D){ u0, 0.0f, col, x - rx, y + h, z - rz };
+    v[4] = (Vtx3D){ u1, 1.0f, col, x + rx, y,     z + rz };
+    v[5] = (Vtx3D){ u0, 1.0f, col, x - rx, y,     z - rz };
+    sceGumDrawArray(GU_TRIANGLES, VTYPE_3D, 6, 0, v);
+}
+
+static void draw_billboard32(float x, float y, float z, float w, float h, const unsigned int *tex, unsigned int col, int flipX) {
+    sceGuEnable(GU_TEXTURE_2D);
+    if (curTex != tex) {
+        curTex = tex;
+        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+        sceGuTexImage(0, 32, 32, 32, tex);
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    }
     float rx = curCamCos * (w * 0.5f), rz = -curCamSin * (w * 0.5f);
     float u0 = flipX ? 1.0f : 0.0f, u1 = flipX ? 0.0f : 1.0f;
     Vtx3D *v = (Vtx3D *)sceGuGetMemory(6 * sizeof(Vtx3D));
@@ -1801,6 +1877,73 @@ int main(void) {
             }
         }
 
+        /* Ambient Open-World Wildlife AI (Rabbits, Foxes, Deer, Flying Birds) */
+        if (worldMode == 0 && !inTitle && !storyOpen && !shopOpen && !ghActive) {
+            for (int i = 0; i < MAX_ANIMALS; i++) {
+                Animal3D *a = &animals[i];
+                if (a->active) {
+                    float dx = a->x - heroX, dz = a->z - heroZ;
+                    float d2 = dx * dx + dz * dz;
+                    if (d2 > 3400.0f) { a->active = 0; continue; }
+                    if (a->kind == 3 && a->state == 1) {
+                        /* Bird flying up & away until very high, then vanish! */
+                        a->x += a->vx; a->z += a->vz;
+                        a->y += a->vy;
+                        a->vy += 0.004f;
+                        if (a->y > a->groundY + 26.0f) a->active = 0;
+                    } else {
+                        float fleeR2 = (a->kind == 2) ? 144.0f : 85.0f;
+                        if (d2 < fleeR2 && d2 > 0.01f) {
+                            float invD = 1.0f / sqrtf(d2);
+                            float fx = dx * invD, fz = dz * invD;
+                            if (a->kind == 3) {
+                                a->state = 1;
+                                a->vx = fx * 0.16f; a->vz = fz * 0.16f; a->vy = 0.18f;
+                            } else {
+                                float fSpd = (a->kind == 0) ? 0.22f : ((a->kind == 1) ? 0.25f : 0.26f);
+                                a->vx = fx * fSpd; a->vz = fz * fSpd;
+                                if (a->kind == 0 && a->y <= a->groundY + 0.01f) a->vy = 0.17f;
+                            }
+                        } else {
+                            a->timer--;
+                            if (a->timer <= 0) {
+                                a->timer = 35 + (int)(xr() % 55);
+                                float ang = frand(0.0f, 6.28318f);
+                                float wSpd = (a->kind == 0) ? 0.06f : 0.04f;
+                                a->vx = cosf(ang) * wSpd; a->vz = sinf(ang) * wSpd;
+                                if (a->kind == 0 && (xr() & 1) && a->y <= a->groundY + 0.01f) a->vy = 0.12f;
+                                if (a->kind == 3 && (xr() & 3) == 0 && a->y <= a->groundY + 0.01f) a->vy = 0.09f;
+                            }
+                        }
+                        float gy = a->groundY;
+                        if (is_walkable(a->x + a->vx, a->z + a->vz, &gy)) {
+                            a->x += a->vx; a->z += a->vz; a->groundY = gy;
+                        } else {
+                            a->vx = -a->vx; a->vz = -a->vz;
+                        }
+                        a->y += a->vy;
+                        a->vy -= 0.016f;
+                        if (a->y <= a->groundY) { a->y = a->groundY; a->vy = 0.0f; }
+                        a->flip = (a->vx < 0.0f) ? 1 : 0;
+                    }
+                } else {
+                    float ang = frand(0.0f, 6.28318f);
+                    float dist = frand(20.0f, 44.0f);
+                    float sx = heroX + cosf(ang) * dist, sz = heroZ + sinf(ang) * dist;
+                    if (sx * sx + sz * sz > 784.0f) {
+                        float gy = 0.0f; int gt = 0;
+                        if (get_ground_info(sx, sz, &gy, &gt) && gt == 0) {
+                            a->x = sx; a->z = sz; a->y = gy; a->groundY = gy;
+                            a->vx = 0; a->vy = 0; a->vz = 0;
+                            a->kind = i & 3;
+                            a->state = 0; a->timer = 20 + (i * 7) % 40;
+                            a->active = 1;
+                        }
+                    }
+                }
+            }
+        }
+
         /* ==================== HARDWARE GU 3D RENDER ==================== */
         int curZone = get_current_zone();
         ScePspDateTime pspNow;
@@ -2152,6 +2295,20 @@ int main(void) {
             unsigned int ec = e->flash > 0 ? ABGR(255, 90, 90, 255) : (e->state == 1 ? ABGR(255, 195, 140, 255) : ABGR(255, 255, 255, 255));
             const unsigned int *et = e->isBoss ? texBoss[e->bossId % 3] : texMob[e->kind % 3];
             draw_billboard(e->x, e->y, e->z, sz, sz, et, ec, (e->x > heroX) ? 1 : 0, camYaw);
+        }
+
+        /* Wildlife Animals (Rabbits, Foxes, Deer, Flying Birds) */
+        if (worldMode == 0) {
+            static const float aSz[4] = { 0.85f, 1.15f, 1.55f, 0.75f };
+            for (int i = 0; i < MAX_ANIMALS; i++) {
+                Animal3D *a = &animals[i];
+                if (!a->active) continue;
+                float dx = a->x - heroX, dz = a->z - heroZ;
+                if (dx * dx + dz * dz > 2400.0f) continue;
+                float s = aSz[a->kind & 3];
+                float flap = (a->kind == 3 && a->state == 1) ? fabsf(sinf((float)animFrame * 0.45f)) * 0.25f : 0.0f;
+                draw_billboard32(a->x, a->y + flap, a->z, s, s, texAnimal[a->kind & 3], ABGR(255, 255, 255, 255), a->flip);
+            }
         }
 
         /* Hero Aim Hit-Zone Telegraph + Hero + Lumen Wisp */
