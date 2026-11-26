@@ -534,8 +534,8 @@ static int ghActive = 0, ghSpawned = 0, ghSpawnT = 0, ghHits = 0;
 static float ghMult = 1.5f;
 static char ghJudge[32] = "";
 static int ghJudgeT = 0;
-static int heroGold = 25, heroCoins = 30, heroPotions = 2, heroFood = 2, heroElixirs = 1, heroLv = 1, heroXp = 0;
-static float heroHunger = 100.0f;
+static int heroGold = 25, heroCoins = 30, heroPotions = 2, heroFood = 2, heroWater = 2, heroElixirs = 1, heroLv = 1, heroXp = 0;
+static float heroHunger = 100.0f, heroThirst = 100.0f;
 static int heroRelics = 0, runesLit = 0, keysFound = 0;
 typedef struct {
     float x, y, z, vy;
@@ -564,8 +564,8 @@ static int shopOpen = 0, shopCursor = 0, menuOpen = 0, menuCursor = 0, hungerTic
 
 typedef struct {
     unsigned int magic;
-    int lv, xp, gold, coins, potions, food, elixirs, wood, stone, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
-    float hunger;
+    int lv, xp, gold, coins, potions, food, water, elixirs, wood, stone, qG, atk, maxHp, forge, furor, clues, runes, keys, relics, ending;
+    float hunger, thirst;
     int chests[16], obelisks[12], dngs[3], clueArr[6], qSt[4], qF, qL, qC;
 } SaveData;
 
@@ -573,9 +573,9 @@ static void save_game(void) {
     SaveData sd;
     sd.magic = 0xAE7E2026u;
     sd.lv = heroLv; sd.xp = heroXp; sd.gold = heroGold; sd.coins = heroCoins;
-    sd.potions = heroPotions; sd.food = heroFood; sd.elixirs = heroElixirs;
+    sd.potions = heroPotions; sd.food = heroFood; sd.water = heroWater; sd.elixirs = heroElixirs;
     sd.wood = heroWood; sd.stone = heroStone; sd.qG = qGather;
-    sd.hunger = heroHunger;
+    sd.hunger = heroHunger; sd.thirst = heroThirst;
     sd.atk = heroAtk; sd.maxHp = heroMaxHp; sd.forge = forgeCount; sd.furor = furorCharge;
     sd.clues = cluesCount; sd.runes = runesLit; sd.keys = keysFound; sd.relics = heroRelics;
     sd.ending = trueEnding;
@@ -597,9 +597,9 @@ static int load_game(void) {
     sceIoClose(fd);
     if (rd != (int)sizeof(sd) || sd.magic != 0xAE7E2026u) return 0;
     heroLv = sd.lv; heroXp = sd.xp; heroGold = sd.gold; heroCoins = sd.coins;
-    heroPotions = sd.potions; heroFood = sd.food; heroElixirs = sd.elixirs;
+    heroPotions = sd.potions; heroFood = sd.food; heroWater = sd.water; heroElixirs = sd.elixirs;
     heroWood = sd.wood; heroStone = sd.stone; qGather = sd.qG;
-    heroHunger = sd.hunger;
+    heroHunger = sd.hunger; heroThirst = sd.thirst;
     heroAtk = sd.atk; heroMaxHp = sd.maxHp; heroHp = heroMaxHp; forgeCount = sd.forge;
     furorCharge = sd.furor; cluesCount = sd.clues; runesLit = sd.runes; keysFound = sd.keys;
     heroRelics = sd.relics; trueEnding = sd.ending;
@@ -1266,7 +1266,8 @@ int main(void) {
             } else if (pressed & PSP_CTRL_START) {
                 inTitle = 0;
                 heroLv = 1; heroXp = 0; heroGold = 25; heroCoins = 30;
-                heroPotions = 2; heroFood = 2; heroElixirs = 1; heroHunger = 100.0f;
+                heroPotions = 2; heroFood = 2; heroWater = 2; heroElixirs = 1;
+                heroHunger = 100.0f; heroThirst = 100.0f;
                 heroWood = 0; heroStone = 0; qGather = 0;
                 shopOpen = 0; hungerTick = 0;
                 heroAtk = 12; heroMaxHp = 100; heroHp = 100; forgeCount = 0;
@@ -1291,21 +1292,21 @@ int main(void) {
                 play_sfx(520.0f, 600);
             }
         } else if (shopOpen) {
-            if (pressed & PSP_CTRL_UP) { shopCursor = (shopCursor + 3) & 3; play_sfx(520.0f, 400); }
-            if (pressed & PSP_CTRL_DOWN) { shopCursor = (shopCursor + 1) & 3; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_UP) { shopCursor = (shopCursor + 4) % 5; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { shopCursor = (shopCursor + 1) % 5; play_sfx(520.0f, 400); }
             if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { shopOpen = 0; play_sfx(420.0f, 500); }
             if (pressed & PSP_CTRL_CROSS) {
-                static const int sPrices[4] = { 10, 18, 22, 35 };
+                static const int sPrices[5] = { 10, 8, 18, 22, 35 };
                 int p = sPrices[shopCursor];
                 if (heroCoins >= p) {
                     heroCoins -= p;
                     if (shopCursor == 0) { heroFood++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: RACION DE VIAJE (Tienes %d)", heroFood); }
-                    else if (shopCursor == 1) { heroPotions++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: POCION CURATIVA (Tienes %d)", heroPotions); }
-                    else if (shopCursor == 2) { heroElixirs++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: ELIXIR ESTAMINA (Tienes %d)", heroElixirs); }
+                    else if (shopCursor == 1) { heroWater++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: CANTIMPLORA AGUA (Tienes %d)", heroWater); }
+                    else if (shopCursor == 2) { heroPotions++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: POCION CURATIVA (Tienes %d)", heroPotions); }
+                    else if (shopCursor == 3) { heroElixirs++; snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: ELIXIR ESTAMINA (Tienes %d)", heroElixirs); }
                     else {
-                        heroFood += 2; heroPotions++; heroHunger += 25.0f;
-                        if (heroHunger > 100.0f) heroHunger = 100.0f;
-                        snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: PACK SUPERVIVENCIA (+2 Raciones, +1 Pocion)");
+                        heroFood += 2; heroWater += 2; heroPotions++;
+                        snprintf(dialogMsg, sizeof(dialogMsg), "COMPRADO: PACK (+2 Rac, +2 Agua, +1 Pocion)");
                     }
                     dialogT = 120;
                     play_sfx(960.0f, 1300);
@@ -1316,8 +1317,8 @@ int main(void) {
                 }
             }
         } else if (menuOpen) {
-            if (pressed & PSP_CTRL_UP) { menuCursor = (menuCursor + 3) & 3; play_sfx(520.0f, 400); }
-            if (pressed & PSP_CTRL_DOWN) { menuCursor = (menuCursor + 1) & 3; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_UP) { menuCursor = (menuCursor + 4) % 5; play_sfx(520.0f, 400); }
+            if (pressed & PSP_CTRL_DOWN) { menuCursor = (menuCursor + 1) % 5; play_sfx(520.0f, 400); }
             if (pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) { menuOpen = 0; play_sfx(420.0f, 500); }
             if (pressed & PSP_CTRL_CROSS) {
                 if (menuCursor == 0) {
@@ -1344,6 +1345,18 @@ int main(void) {
                     }
                     dialogT = 110;
                 } else if (menuCursor == 2) {
+                    if (heroWater > 0) {
+                        heroWater--;
+                        heroThirst += 50.0f; if (heroThirst > 100.0f) heroThirst = 100.0f;
+                        heroHp += 15; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
+                        snprintf(dialogMsg, sizeof(dialogMsg), "AGUA BEBIDA! +50%% Sed +15 HP (Quedan %d)", heroWater);
+                        play_sfx(820.0f, 1000);
+                    } else {
+                        snprintf(dialogMsg, sizeof(dialogMsg), "No tienes Agua!");
+                        play_sfx(200.0f, 600);
+                    }
+                    dialogT = 110;
+                } else if (menuCursor == 3) {
                     if (heroElixirs > 0) {
                         heroElixirs--;
                         heroStam = heroMaxStam;
@@ -1494,22 +1507,20 @@ int main(void) {
             if (heroFlash > 0) heroFlash--;
             if (stamDelay > 0) stamDelay--;
             else if (heroStam < heroMaxStam) {
-                float stamRegen = (heroHunger < 25.0f) ? 0.40f : 0.85f;
+                float stamRegen = (heroHunger < 25.0f || heroThirst < 25.0f) ? 0.40f : 0.85f;
                 heroStam += stamRegen;
                 if (heroStam > heroMaxStam) heroStam = heroMaxStam;
             }
-            /* Survival hunger drain + auto-ration + starvation */
-            heroHunger -= (dashT > 0 || atkT > 0 || heavyT > 0) ? 0.025f : 0.014f;
-            if (heroHunger <= 25.0f && heroFood > 0) {
-                heroFood--;
-                heroHunger += 50.0f; if (heroHunger > 100.0f) heroHunger = 100.0f;
-                heroHp += 20; if (heroHp > heroMaxHp) heroHp = heroMaxHp;
-                snprintf(dialogMsg, sizeof(dialogMsg), "RACION AUTOMATICA! +50%% Comida +20 HP (Quedan %d)", heroFood);
-                dialogT = 110;
-                play_sfx(780.0f, 900);
-            }
+            /* Manual survival hunger & thirst drain (consume from START inventory!) */
+            heroHunger -= (dashT > 0 || atkT > 0 || heavyT > 0) ? 0.024f : 0.013f;
+            heroThirst -= (dashT > 0 || atkT > 0 || heavyT > 0) ? 0.028f : 0.016f;
             if (heroHunger < 0.0f) heroHunger = 0.0f;
-            if (heroHunger <= 0.0f) {
+            if (heroThirst < 0.0f) heroThirst = 0.0f;
+            if ((heroHunger <= 20.0f || heroThirst <= 20.0f) && dialogT == 0 && (animFrame % 240) == 0) {
+                snprintf(dialogMsg, sizeof(dialogMsg), "TIENES HAMBRE/SED! Pulsa START para comer o beber.");
+                dialogT = 90;
+            }
+            if (heroHunger <= 0.0f || heroThirst <= 0.0f) {
                 hungerTick++;
                 if (hungerTick >= 120) {
                     hungerTick = 0;
@@ -2565,37 +2576,43 @@ int main(void) {
             }
         } else {
             /* Compact Vertical Left-Edge HUD (unobstructed center view!) */
-            gu_window2d(6, 6, 72, 162);
+            gu_window2d(6, 6, 84, 162);
             char buf[80];
             snprintf(buf, sizeof(buf), "NV.%d", heroLv);
             gu_text2d(14, 10, buf, ABGR(140, 255, 175, 255), 1);
 
-            /* 4 Vertical Bars: HP, Stamina, Furor, Food */
+            /* 5 Vertical Bars: HP, Stamina, Furor, Food, Water */
             const int barY = 22, barH = 60, barW = 8;
             int hpFill = (heroHp * barH) / (heroMaxHp > 0 ? heroMaxHp : 1);
             if (hpFill < 0) hpFill = 0; if (hpFill > barH) hpFill = barH;
-            gu_rect2d(13, barY, barW, barH, ABGR(20, 24, 40, 255));
-            gu_rect2d(14, barY + barH - hpFill, barW - 2, hpFill, ABGR(70, 235, 125, 255));
-            gu_text2d(11, barY + barH + 3, "HP", ABGR(120, 255, 155, 255), 1);
+            gu_rect2d(12, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(13, barY + barH - hpFill, barW - 2, hpFill, ABGR(70, 235, 125, 255));
+            gu_text2d(10, barY + barH + 3, "HP", ABGR(120, 255, 155, 255), 1);
 
             int stFill = (int)((heroStam * (float)barH) / heroMaxStam);
             if (stFill < 0) stFill = 0; if (stFill > barH) stFill = barH;
-            gu_rect2d(27, barY, barW, barH, ABGR(20, 24, 40, 255));
-            gu_rect2d(28, barY + barH - stFill, barW - 2, stFill, ABGR(215, 235, 75, 255));
-            gu_text2d(25, barY + barH + 3, "ST", ABGR(215, 235, 110, 255), 1);
+            gu_rect2d(26, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(27, barY + barH - stFill, barW - 2, stFill, ABGR(215, 235, 75, 255));
+            gu_text2d(24, barY + barH + 3, "ST", ABGR(215, 235, 110, 255), 1);
 
             int frFill = (furorCharge * barH) / 100;
             if (frFill < 0) frFill = 0; if (frFill > barH) frFill = barH;
-            gu_rect2d(41, barY, barW, barH, ABGR(20, 24, 40, 255));
-            gu_rect2d(42, barY + barH - frFill, barW - 2, frFill, furorCharge >= 100 ? ABGR(255, 110, 235, 255) : ABGR(120, 195, 255, 255));
-            gu_text2d(39, barY + barH + 3, (furorCharge >= 100 && !ghActive && (animFrame & 16)) ? "LR" : "FR",
+            gu_rect2d(40, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(41, barY + barH - frFill, barW - 2, frFill, furorCharge >= 100 ? ABGR(255, 110, 235, 255) : ABGR(120, 195, 255, 255));
+            gu_text2d(38, barY + barH + 3, (furorCharge >= 100 && !ghActive && (animFrame & 16)) ? "LR" : "FR",
                       furorCharge >= 100 ? ABGR(255, 235, 80, 255) : ABGR(160, 210, 255, 255), 1);
 
             int cmFill = (int)((heroHunger * (float)barH) / 100.0f);
             if (cmFill < 0) cmFill = 0; if (cmFill > barH) cmFill = barH;
-            gu_rect2d(55, barY, barW, barH, ABGR(20, 24, 40, 255));
-            gu_rect2d(56, barY + barH - cmFill, barW - 2, cmFill, (heroHunger < 25.0f) ? ABGR(255, 85, 85, 255) : ABGR(255, 195, 80, 255));
-            gu_text2d(53, barY + barH + 3, "CM", (heroHunger < 25.0f) ? ABGR(255, 95, 95, 255) : ABGR(255, 220, 120, 255), 1);
+            gu_rect2d(54, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(55, barY + barH - cmFill, barW - 2, cmFill, (heroHunger < 25.0f) ? ABGR(255, 85, 85, 255) : ABGR(255, 195, 80, 255));
+            gu_text2d(52, barY + barH + 3, "CM", (heroHunger < 25.0f) ? ABGR(255, 95, 95, 255) : ABGR(255, 220, 120, 255), 1);
+
+            int agFill = (int)((heroThirst * (float)barH) / 100.0f);
+            if (agFill < 0) agFill = 0; if (agFill > barH) agFill = barH;
+            gu_rect2d(68, barY, barW, barH, ABGR(20, 24, 40, 255));
+            gu_rect2d(69, barY + barH - agFill, barW - 2, agFill, (heroThirst < 25.0f) ? ABGR(255, 85, 85, 255) : ABGR(80, 195, 255, 255));
+            gu_text2d(66, barY + barH + 3, "AG", (heroThirst < 25.0f) ? ABGR(255, 95, 95, 255) : ABGR(120, 220, 255, 255), 1);
 
             snprintf(buf, sizeof(buf), "O:%d", heroGold);
             gu_text2d(12, 98, buf, ABGR(255, 225, 110, 255), 1);
@@ -2669,46 +2686,48 @@ int main(void) {
                 gu_text2d(150, 176, "[ PULSA X o O PARA CONTINUAR ]", ABGR(255, 225, 110, 255), 1);
             }
             if (shopOpen) {
-                static const char *sNames[4] = {
+                static const char *sNames[5] = {
                     "RACION DE VIAJE   (+50% Comida, +20 HP)",
+                    "CANTIMPLORA AGUA  (+50% Sed, +15 HP)",
                     "POCION CURATIVA   (+60 HP)",
                     "ELIXIR ESTAMINA   (Estamina 100%, +40 HP)",
-                    "PACK SUPERVIVENCIA(+2 Rac, +1 Poc, +25% Com)"
+                    "PACK SUPERVIVENCIA(+2 Rac, +2 Agua, +1 Poc)"
                 };
-                static const int sPrices[4] = { 10, 18, 22, 35 };
-                gu_window2d(34, 68, 412, 130);
+                static const int sPrices[5] = { 10, 8, 18, 22, 35 };
+                gu_window2d(34, 58, 412, 150);
                 snprintf(buf, sizeof(buf), "TIENDA DE SUPERVIVENCIA   |   MONEDAS: %d", heroCoins);
-                gu_text2d(48, 80, buf, ABGR(255, 225, 95, 255), 1);
-                for (int s = 0; s < 4; s++) {
-                    int ry = 102 + s * 19;
+                gu_text2d(48, 70, buf, ABGR(255, 225, 95, 255), 1);
+                for (int s = 0; s < 5; s++) {
+                    int ry = 92 + s * 19;
                     if (s == shopCursor) gu_rect2d(44, ry - 3, 392, 15, ABGR(55, 85, 145, 210));
                     snprintf(buf, sizeof(buf), "%s %-40s %2dM", (s == shopCursor) ? ">" : " ", sNames[s], sPrices[s]);
                     unsigned int col = (heroCoins >= sPrices[s]) ? ABGR(235, 250, 255, 255) : ABGR(160, 120, 120, 255);
                     gu_text2d(48, ry, buf, col, 1);
                 }
-                gu_text2d(92, 182, "[ARRIBA/ABAJO] ELEGIR   [X] COMPRAR   [O] SALIR", ABGR(145, 240, 255, 255), 1);
+                gu_text2d(92, 192, "[ARRIBA/ABAJO] ELEGIR   [X] COMPRAR   [O] SALIR", ABGR(145, 240, 255, 255), 1);
             }
             if (menuOpen) {
-                gu_window2d(34, 46, 412, 166);
+                gu_window2d(34, 40, 412, 184);
                 snprintf(buf, sizeof(buf), "INVENTARIO Y GUARDADO  |  NV.%d  HP %d/%d  ATK %d", heroLv, heroHp, heroMaxHp, heroAtk);
-                gu_text2d(46, 56, buf, ABGR(255, 225, 95, 255), 1);
+                gu_text2d(46, 50, buf, ABGR(255, 225, 95, 255), 1);
                 snprintf(buf, sizeof(buf), "ORO:%d  MONEDAS:%d  MADERA:%d  PIEDRA:%d", heroGold, heroCoins, heroWood, heroStone);
-                gu_text2d(46, 70, buf, ABGR(145, 245, 255, 255), 1);
-                snprintf(buf, sizeof(buf), "LLAVES:%d/3   PISTAS:%d/6   RELIQUIAS:%d   COM:%d%%", keysFound, cluesCount, heroRelics, (int)heroHunger);
-                gu_text2d(46, 82, buf, ABGR(200, 230, 255, 255), 1);
-                char mItems[4][64];
+                gu_text2d(46, 63, buf, ABGR(145, 245, 255, 255), 1);
+                snprintf(buf, sizeof(buf), "LLAVES:%d/3  PISTAS:%d/6  COM:%d%%  SED:%d%%", keysFound, cluesCount, (int)heroHunger, (int)heroThirst);
+                gu_text2d(46, 75, buf, ABGR(200, 230, 255, 255), 1);
+                char mItems[5][64];
                 snprintf(mItems[0], 64, "USAR POCION CURATIVA (+60 HP)      [Tienes: %d]", heroPotions);
                 snprintf(mItems[1], 64, "COMER RACION VIAJE (+50%% Com,+20HP) [Tienes: %d]", heroFood);
-                snprintf(mItems[2], 64, "BEBER ELIXIR ESTAMINA (100%%,+40HP)  [Tienes: %d]", heroElixirs);
-                snprintf(mItems[3], 64, "GUARDAR PARTIDA EN LA CONSOLA");
-                for (int m = 0; m < 4; m++) {
-                    int ry = 102 + m * 19;
+                snprintf(mItems[2], 64, "BEBER AGUA FRESCA (+50%% Sed,+15HP)  [Tienes: %d]", heroWater);
+                snprintf(mItems[3], 64, "BEBER ELIXIR ESTAMINA (100%%,+40HP)  [Tienes: %d]", heroElixirs);
+                snprintf(mItems[4], 64, "GUARDAR PARTIDA EN LA CONSOLA");
+                for (int m = 0; m < 5; m++) {
+                    int ry = 95 + m * 19;
                     if (m == menuCursor) gu_rect2d(44, ry - 3, 392, 15, ABGR(55, 85, 145, 210));
                     snprintf(buf, sizeof(buf), "%s %s", (m == menuCursor) ? ">" : " ", mItems[m]);
-                    unsigned int col = (m == 3) ? ABGR(120, 255, 165, 255) : ABGR(235, 250, 255, 255);
+                    unsigned int col = (m == 4) ? ABGR(120, 255, 165, 255) : ABGR(235, 250, 255, 255);
                     gu_text2d(48, ry, buf, col, 1);
                 }
-                gu_text2d(78, 192, "[ARRIBA/ABAJO] ELEGIR   [X] USAR/GUARDAR   [O/START] SALIR", ABGR(145, 240, 255, 255), 1);
+                gu_text2d(78, 204, "[ARRIBA/ABAJO] ELEGIR   [X] USAR/GUARDAR   [O/START] SALIR", ABGR(145, 240, 255, 255), 1);
             }
             if (ghActive) {
                 gu_window2d(140, 52, 200, 186);
